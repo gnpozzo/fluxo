@@ -1,0 +1,382 @@
+<script>
+'use strict';
+/* ============================================================
+   module-cc.html — v5.0.0
+   Módulo Cuenta Corriente (gastos compartidos).
+   Extiende BaseModule. Carga lazy con cache sessionStorage.
+   ============================================================ */
+
+// --- SECCIÓN 0: CLASE CCModule ---
+
+class CCModule extends BaseModule {
+
+  get moduleId() { return 'cc'; }
+  get vistaId()  { return 'vista-cc'; }
+
+  get _createEndpoint() { return 'api_createConsumoCC'; }
+  get _updateEndpoint() { return 'api_updateConsumoCC'; }
+  get _deleteEndpoint() { return 'api_deleteConsumoCC'; }
+
+  #table      = null;
+  #kpiYo      = null;
+  #kpiOtro    = null;
+  #kpiNeto    = null;
+  #modal      = null;
+  #categorias = [];
+  #usuarios   = [];
+  #editData   = null;
+
+  // --- SECCIÓN 1: CICLO DE VIDA ---
+
+  init() {
+    this.#modal = new App.Modal('modal-cc');
+    this._buildVista();
+    this._bindListeners();
+    this._subscribeEvents();
+    App.log('CCModule', 'init', 'Módulo CC iniciado');
+  }
+
+  async cargar() {
+    if (App.Store.isModuloLoaded(this.moduleId)) return;
+    const { cuenta, mes } = App.Store;
+    if (!cuenta || !mes) return;
+
+    const { fechaInicio, fechaFin } = this.#calcFechas(mes);
+    this.#mostrarKpiSkeletons();
+    this.#table?.showSkeleton(5);
+
+    try {
+      const data = await App.API.cached('api_getConsumosCC', [cuenta, fechaInicio, fechaFin]);
+      this._render(data);
+      App.Store.markModuloLoaded(this.moduleId);
+    } catch (err) {
+      App.error('CCModule', 'cargar', 'Error', err);
+      App.Toast.error('Error al cargar cuenta corriente: ' + err.message);
+    }
+  }
+
+  // --- SECCIÓN 2: RENDER ---
+
+  _render(data) {
+    if (!data || !data.success) {
+      App.Toast.error(data?.error || 'Error al obtener datos.');
+      return;
+    }
+
+    const { kpis, consumos } = data;
+
+    // Categorías y usuarios desde globales (cargados en boot)
+    if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
+    // usuarios provienen del módulo de admin — se mantiene vacío hasta implementación futura
+
+    this.#kpiYo?.setValue(kpis.gastoYo);
+    this.#kpiOtro?.setValue(kpis.gastoOtro);
+    this.#kpiNeto?.setValue(kpis.saldoNeto, { invertido: kpis.saldoNeto < 0 });
+
+    this.#table?.load(consumos || []);
+    App.log('CCModule', '_render', `${(consumos || []).length} gastos CC`);
+  }
+
+  // --- SECCIÓN 3: BUILD DOM ---
+
+  _buildVista() {
+    const vista = document.getElementById(this.vistaId);
+    if (!vista) return;
+
+    vista.innerHTML = `
+      <div class="kpi-grid" id="cc-kpi-grid"></div>
+      <div class="section-header" style="margin-bottom:var(--space-3)">
+        <div class="acciones-container" id="cc-acciones"></div>
+      </div>
+      <div class="table-card" id="cc-tabla-wrap"></div>
+    `;
+
+    const grid = document.getElementById('cc-kpi-grid');
+    this.#kpiYo   = new App.KpiCard(grid, { titulo: 'Mis gastos',   icono: 'wallet',   colorClass: 'kpi-blue',  onFormat: App.Utils.formatearMoneda });
+    this.#kpiOtro = new App.KpiCard(grid, { titulo: 'Sus gastos',   icono: 'wallet',   colorClass: 'kpi-purple',onFormat: App.Utils.formatearMoneda });
+    this.#kpiNeto = new App.KpiCard(grid, { titulo: 'Saldo neto',   icono: 'investment',colorClass: 'kpi-green', onFormat: App.Utils.formatearMoneda });
+
+    document.getElementById('cc-acciones').innerHTML = `
+      <button id="cc-btn-nuevo" class="btn btn-primary">
+        ${App.Icons.get('add', 'icon-sm')} Nuevo gasto compartido
+      </button>
+    `;
+
+    this.#table = new App.DataTable(
+      document.getElementById('cc-tabla-wrap'),
+      {
+        columns: [
+          { key: 'fecha',           label: 'Fecha',     sortable: true,
+            render: (r) => App.Utils.formatearFecha(r.fecha?.value || r.fecha) },
+          { key: 'pagador',         label: 'Pagador',   sortable: true,
+            render: (r) => App.Utils.escapeHtml(r.pagador || '—') },
+          { key: 'categoria_nombre',label: 'Categoría', sortable: true,
+            render: (r) => App.Utils.escapeHtml(r.categoria_nombre || 'General') },
+          { key: 'descripcion',     label: 'Descripción', searchable: true,
+            render: (r) => this.#renderDescripcion(r) },
+          { key: 'importe_total',   label: 'Total',     sortable: true, align: 'right',
+            render: (r) => App.Utils.formatearMoneda(r.importe_total) },
+          { key: 'mi_parte',        label: 'Mi parte',  align: 'right',
+            render: (r) => `<span class="negativo">${App.Utils.formatearMoneda(r.mi_parte)}</span>` },
+          { key: '_acciones',       label: '', align: 'right', exportable: false,
+            render: (r) => this.#renderAcciones(r) }
+        ],
+        emptyMsg: 'No hay gastos compartidos para este período.',
+        paginated: true,
+        pageSize : 25,
+        onAction : ({ action, row }) => this.#handleAccion(action, row)
+      }
+    );
+  }
+
+  // --- SECCIÓN 4: MODAL ---
+
+  #abrirModalAlta() {
+    this.#editData = null;
+    this.#modal.open({
+      titulo      : 'Nuevo gasto compartido',
+      body        : this.#buildFormHtml(null),
+      confirmLabel: 'Guardar',
+      onConfirm   : (m) => this.#guardar(m)
+    });
+    this.#bindFormListeners();
+  }
+
+  #abrirModalEdicion(row) {
+    this.#editData = row;
+    this.#modal.open({
+      titulo      : 'Editar gasto compartido',
+      body        : this.#buildFormHtml(row),
+      confirmLabel: 'Actualizar',
+      onConfirm   : (m) => this.#guardar(m)
+    });
+    this.#bindFormListeners();
+  }
+
+  #buildFormHtml(data) {
+    const optsC = this.#categorias
+      .filter(c => c.activa)
+      .map(c => `<option value="${c.id_categoria}" ${data?.id_categoria === c.id_categoria ? 'selected':''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
+      .join('');
+
+    const optsU = this.#usuarios
+      .map(u => `<option value="${u.nombre}" ${data?.pagador === u.nombre ? 'selected':''}>${App.Utils.escapeHtml(u.nombre)}</option>`)
+      .join('');
+
+    const rawFecha  = data
+      ? (data.fecha?.value || data.fecha || '').substring(0, 10)
+      : new Date().toISOString().substring(0, 10);
+    const tipoCons  = data?.tipo_consumo || 'COMUN';
+
+    return `
+      <form id="form-cc" class="form-grid">
+        <input type="hidden" name="id_consumo" value="${data?.id_consumo_cc || ''}">
+
+        <div class="form-group">
+          <label>Fecha <span class="required-mark">*</span></label>
+          <input class="input" type="date" name="fecha" value="${rawFecha}" required>
+        </div>
+
+        <div class="form-group">
+          <label>Pagador <span class="required-mark">*</span></label>
+          <select class="input" name="pagador" required>
+            <option value="">-- Seleccionar --</option>
+            ${optsU}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Categoría <span class="required-mark">*</span></label>
+          <select class="input" name="id_categoria" required>
+            <option value="">-- Seleccionar --</option>
+            ${optsC}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Tipo de consumo</label>
+          <select class="input" name="tipo_consumo" id="cc-tipo-consumo">
+            <option value="COMUN"     ${tipoCons === 'COMUN'     ? 'selected':''}>Común</option>
+            <option value="CUOTAS"    ${tipoCons === 'CUOTAS'    ? 'selected':''}>En cuotas</option>
+            <option value="RECURRENTE"${tipoCons === 'RECURRENTE'? 'selected':''}>Recurrente</option>
+          </select>
+        </div>
+
+        <div class="form-group full-width">
+          <label>Descripción <span class="required-mark">*</span></label>
+          <input class="input" type="text" name="descripcion"
+                 value="${App.Utils.escapeHtml(data?.descripcion || '')}" required>
+        </div>
+
+        <div class="form-group">
+          <label>Importe total <span class="required-mark">*</span></label>
+          <input class="input" type="number" name="importe" min="0.01" step="0.01"
+                 value="${data?.importe_total || ''}" required>
+        </div>
+
+        <div id="cc-cuotas-opts" class="form-group ${tipoCons !== 'CUOTAS' ? 'hidden' : ''}">
+          <label>Cuota actual / Total</label>
+          <div style="display:flex;gap:var(--space-2)">
+            <input class="input" type="number" name="cuota_actual" min="1" value="${data?.cuota_actual || 1}" style="width:60px">
+            <input class="input" type="number" name="cuota_total"  min="2" value="${data?.cuota_total  || 12}" style="width:60px">
+          </div>
+        </div>
+
+        <div id="cc-recur-opts" class="form-group ${tipoCons !== 'RECURRENTE' ? 'hidden' : ''}">
+          <label>Períodos</label>
+          <input class="input" type="number" name="periodos" min="2" max="60" value="${data?.periodos || 12}">
+        </div>
+
+        <div class="form-group full-width">
+          <label class="form-switch">
+            <input type="checkbox" class="toggle-switch" name="usa_porcentaje"
+                   id="cc-chk-porc" ${data?.usa_porcentaje ? 'checked' : ''}>
+            <span>Usar porcentaje personalizado</span>
+          </label>
+        </div>
+        <div id="cc-porc-opts" class="form-group full-width ${!data?.usa_porcentaje ? 'hidden' : ''}">
+          <label>Mi porcentaje (%)</label>
+          <input class="input" type="number" name="porcentaje_yo" min="1" max="99" value="${data?.porcentaje_yo || 50}">
+        </div>
+      </form>
+    `;
+  }
+
+  #bindFormListeners() {
+    const tipoSel = document.getElementById('cc-tipo-consumo');
+    tipoSel?.addEventListener('change', () => {
+      document.getElementById('cc-cuotas-opts')?.classList.toggle('hidden', tipoSel.value !== 'CUOTAS');
+      document.getElementById('cc-recur-opts')?.classList.toggle('hidden', tipoSel.value !== 'RECURRENTE');
+    });
+    const chkPorc = document.getElementById('cc-chk-porc');
+    chkPorc?.addEventListener('change', () => {
+      document.getElementById('cc-porc-opts')?.classList.toggle('hidden', !chkPorc.checked);
+    });
+  }
+
+  // --- SECCIÓN 5: CRUD ---
+
+  async #guardar(modal) {
+    const form = modal.getForm();
+    if (!form) return;
+    const fd = new FormData(form);
+    const d  = {};
+    fd.forEach((v, k) => { d[k] = v; });
+
+    if (!d.fecha || !d.pagador || !d.id_categoria || !d.importe || Number(d.importe) <= 0) {
+      App.Toast.warning('Completá todos los campos obligatorios.');
+      return;
+    }
+
+    const payload = {
+      idCuenta      : App.Store.cuenta,
+      fecha         : d.fecha,
+      pagador       : d.pagador,
+      idCategoria   : d.id_categoria,
+      descripcion   : d.descripcion,
+      importe       : Number(d.importe),
+      tipoConsumo   : d.tipo_consumo || 'COMUN',
+      cuotaActual   : Number(d.cuota_actual  || 1),
+      cuotaTotal    : Number(d.cuota_total   || 1),
+      periodos      : Number(d.periodos      || 12),
+      usaPorcentaje : d.usa_porcentaje === 'on',
+      porcentajeYo  : Number(d.porcentaje_yo || 50)
+    };
+
+    modal.setLoading(true);
+    try {
+      if (!this.#editData) {
+        await this._handleCreate(payload, modal);
+      } else {
+        const req = {
+          data    : payload,
+          original: {
+            consumoId   : this.#editData.id_consumo_cc,
+            recurGroupId: this.#editData.recur_group_id || null,
+            fecha       : this.#editData.fecha?.value || this.#editData.fecha
+          },
+          scope: 'SINGLE'
+        };
+        await this._handleUpdate(this.#editData.id_consumo_cc, req, modal);
+      }
+    } catch (_) {
+      modal.setLoading(false);
+    }
+  }
+
+  async #eliminar(row) {
+    const confirmModal = new App.Modal('modal-cc-del-confirm');
+    confirmModal.open({
+      titulo      : 'Eliminar gasto',
+      body        : `<p>¿Eliminar <strong>${App.Utils.escapeHtml(row.descripcion)}</strong>?</p>`,
+      confirmLabel: 'Eliminar',
+      danger      : true,
+      onConfirm   : async () => {
+        try {
+          await this._handleDelete(row.id_consumo_cc);
+          this.destruir();
+          await this.cargar();
+        } catch (_) {}
+      }
+    });
+  }
+
+  // --- SECCIÓN 6: LISTENERS ---
+
+  _bindListeners() {
+    const vista = document.getElementById(this.vistaId);
+    if (vista) {
+      vista.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        if (btn.id === 'cc-btn-nuevo') this.#abrirModalAlta();
+      });
+    }
+  }
+
+  // --- SECCIÓN 7: HELPERS ---
+
+  #renderDescripcion(row) {
+    const badges = [];
+    if (row.tipo_consumo === 'CUOTAS')     badges.push(`<span class="badge badge-recur">Cuota ${row.cuota_actual}/${row.cuota_total}</span>`);
+    if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
+    return `${App.Utils.escapeHtml(row.descripcion)} ${badges.join(' ')}`;
+  }
+
+  #renderAcciones(row) {
+    return `
+      <div style="display:flex;gap:4px;justify-content:flex-end">
+        <button class="btn-accion" data-action="edit" data-id="${row.id_consumo_cc}">
+          ${App.Icons.get('edit', 'icon-sm')}
+        </button>
+        <button class="btn-accion btn-danger" data-action="delete" data-id="${row.id_consumo_cc}">
+          ${App.Icons.get('delete', 'icon-sm')}
+        </button>
+      </div>`;
+  }
+
+  #handleAccion(action, row) {
+    if (action === 'edit')   this.#abrirModalEdicion(row);
+    if (action === 'delete') this.#eliminar(row);
+  }
+
+  #mostrarKpiSkeletons() {
+    this.#kpiYo?.showSkeleton();
+    this.#kpiOtro?.showSkeleton();
+    this.#kpiNeto?.showSkeleton();
+  }
+
+  #calcFechas(mes) {
+    const [y, mo] = mes.split('-').map(Number);
+    const ultimo  = new Date(y, mo, 0).getDate();
+    return {
+      fechaInicio: `${y}-${String(mo).padStart(2, '0')}-01`,
+      fechaFin   : `${y}-${String(mo).padStart(2, '0')}-${ultimo}`
+    };
+  }
+}
+
+// --- REGISTRO ---
+App.Modules.cc = new CCModule();
+App.log('module-cc', 'init', 'CCModule registrado');
+</script>

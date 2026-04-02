@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión Financiera</title>
+    <?!= include('css'); ?>
+  </head>
+  <body>
+
+    <!-- ── Loader overlay ──────────────────────────────────────── -->
+    <div id="loader-overlay" class="loader-overlay hidden">
+      <div class="loader-spinner"></div>
+      <p>Cargando...</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         SIDEBAR — Navegación lateral fija
+         ══════════════════════════════════════════════════════════ -->
+    <aside class="sidebar">
+
+      <!-- Marca -->
+      <div class="sidebar-brand">
+        Sistema de Gestión<br>Financiera
+      </div>
+
+      <!-- Nav principal -->
+      <nav class="sidebar-nav" role="tablist" aria-label="Módulos">
+        <button id="tab-btn-movimientos" class="nav-item active"
+                data-vista="vista-movimientos" role="tab" aria-selected="true">
+          <span class="icon icon-sm" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/>
+            </svg>
+          </span>
+          Movimientos
+        </button>
+
+        <button id="tab-btn-tarjetas" class="nav-item"
+                data-vista="vista-tarjetas" role="tab" aria-selected="false">
+          <span class="icon icon-sm" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+          </span>
+          Tarjetas
+        </button>
+
+        <button id="tab-btn-cc" class="nav-item"
+                data-vista="vista-cc" role="tab" aria-selected="false">
+          <span class="icon icon-sm" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+            </svg>
+          </span>
+          Cta. Corriente
+        </button>
+
+        <button id="tab-btn-ahorro" class="nav-item"
+                data-vista="vista-ahorro" role="tab" aria-selected="false">
+          <span class="icon icon-sm" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+            </svg>
+          </span>
+          Ahorro
+        </button>
+
+        <button id="tab-btn-inversiones" class="nav-item"
+                data-vista="vista-inversiones" role="tab" aria-selected="false">
+          <span class="icon icon-sm" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+            </svg>
+          </span>
+          Inversiones
+        </button>
+      </nav>
+
+      <!-- Footer de versión -->
+      <div class="sidebar-footer">
+        <p id="footer-version">v5.0.0</p>
+      </div>
+    </aside>
+
+    <!-- ══════════════════════════════════════════════════════════
+         MAIN WRAPPER — Topbar + Contenido
+         ══════════════════════════════════════════════════════════ -->
+    <div class="main-wrapper">
+
+      <!-- ── TOPBAR ───────────────────────────────────────────── -->
+      <header class="topbar">
+
+        <!-- Búsqueda global -->
+        <div class="topbar-search">
+          <span class="icon icon-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </span>
+          <input type="text" id="topbar-search-input" placeholder="Buscar..." aria-label="Buscar">
+        </div>
+
+        <div class="topbar-spacer"></div>
+
+        <div class="topbar-actions">
+
+          <!-- Selector de mes -->
+          <input type="month" id="selector-mes" aria-label="Seleccionar mes">
+
+          <!-- Select oculto (fuente de verdad legacy) -->
+          <select id="selector-cuenta" class="hidden" aria-hidden="true"></select>
+
+          <!-- Account Toggle -->
+          <div id="account-switch-ui" class="account-switch-wrapper hidden"
+               role="group" aria-label="Seleccionar cuenta">
+            <span id="label-cuenta-1" class="account-label active">Cuenta 1</span>
+            <label class="account-toggle" aria-label="Cambiar cuenta">
+              <input type="checkbox" id="chk-cuenta-toggle">
+              <span class="slider"></span>
+            </label>
+            <span id="label-cuenta-2" class="account-label">Cuenta 2</span>
+          </div>
+
+          <!-- Tema toggle -->
+          <button id="btn-theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">
+            <span class="icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/>
+              </svg>
+            </span>
+          </button>
+
+          <!-- Usuario (avatar + nombre) -->
+          <div class="topbar-user">
+            <div class="topbar-avatar" id="topbar-avatar" aria-hidden="true">?</div>
+            <span class="topbar-username" id="user-info-container" title="Usuario">—</span>
+          </div>
+
+          <!-- Admin / Configuración -->
+          <button id="btn-admin" title="Configuración" aria-label="Abrir configuración">
+            <span class="icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.75"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33
+                         1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33
+                         l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1
+                         0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65
+                         1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0
+                         0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51
+                         1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </span>
+          </button>
+
+        </div>
+      </header>
+
+      <!-- ── CONTENIDO PRINCIPAL ────────────────────────────── -->
+      <main class="main-content">
+        <div id="vista-movimientos"  class="vista-container active" role="tabpanel"></div>
+        <div id="vista-tarjetas"     class="vista-container"        role="tabpanel"></div>
+        <div id="vista-cc"           class="vista-container"        role="tabpanel"></div>
+        <div id="vista-ahorro"       class="vista-container"        role="tabpanel"></div>
+        <div id="vista-inversiones"  class="vista-container"        role="tabpanel"></div>
+        <div id="vista-admin"        class="vista-container"        role="tabpanel"></div>
+      </main>
+
+    </div><!-- /.main-wrapper -->
+
+    <!-- ================================================================
+         SCRIPTS — Orden de carga obligatorio
+         ================================================================ -->
+
+    <!-- Fase 1: Infraestructura -->
+    <?!= include('app-bootstrap'); ?>
+    <?!= include('app-utils'); ?>
+    <?!= include('app-store'); ?>
+    <?!= include('app-events'); ?>
+    <?!= include('app-api'); ?>
+    <?!= include('app-icons'); ?>
+
+    <!-- Fase 2: Componentes UI -->
+    <?!= include('component-toast'); ?>
+    <?!= include('component-modal'); ?>
+    <?!= include('component-datatable'); ?>
+    <?!= include('component-kpi-card'); ?>
+    <?!= include('component-form-validator'); ?>
+
+    <!-- Fase 3: Prefetch (después de App.API y App.Events) -->
+    <?!= include('app-prefetch'); ?>
+
+    <!-- Fase 4: Módulos -->
+    <?!= include('module-movimientos'); ?>
+    <?!= include('module-tarjetas'); ?>
+    <?!= include('module-cc'); ?>
+    <?!= include('module-ahorro'); ?>
+    <?!= include('module-inversiones'); ?>
+    <?!= include('module-admin'); ?>
+    <?!= include('module-dashboard'); ?>
+
+    <!-- Fase 5: Init (arranca la app — debe ir último) -->
+    <?!= include('app-init'); ?>
+
+    <!-- Script de tema (independiente, no necesita App.*) -->
+    <script>
+    'use strict';
+    (function() {
+      const THEME_KEY = 'app_theme';
+      const btn       = document.getElementById('btn-theme-toggle');
+      const saved     = sessionStorage.getItem(THEME_KEY) || 'light';
+      document.documentElement.setAttribute('data-theme', saved);
+
+      // Actualizar ícono del botón según tema activo
+      function updateThemeIcon(theme) {
+        const iconPath = btn?.querySelector('path');
+        if (!iconPath) return;
+        if (theme === 'dark') {
+          // Ícono sol para dark mode (click → volver a light)
+          iconPath.setAttribute('d', 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7z');
+        } else {
+          // Ícono luna para light mode (click → ir a dark)
+          iconPath.setAttribute('d', 'M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z');
+        }
+      }
+
+      updateThemeIcon(saved);
+
+      btn?.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next    = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        sessionStorage.setItem(THEME_KEY, next);
+        updateThemeIcon(next);
+      });
+    })();
+    </script>
+
+  </body>
+</html>

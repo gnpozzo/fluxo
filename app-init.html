@@ -1,0 +1,301 @@
+<script>
+'use strict';
+/* ============================================================
+   app-init.html — v5.0.0
+   Arranque de la aplicación.
+   - Carga datos iniciales (cuentas, categorías, tarjetas)
+   - Configura el AccountToggle
+   - Inicializa todos los módulos
+   - Activa tab inicial + prefetch paralelo
+   Reemplaza: javascript-main.html
+   ============================================================ */
+
+// --- SECCIÓN 0: CLASE AppInit ---
+
+class AppInit {
+
+  #tabActivo = 'vista-movimientos';
+
+  /** Mapa de tabs: vistaId → módulo en App.Modules */
+  #tabMap = {
+    'vista-movimientos' : 'movimientos',
+    'vista-tarjetas'    : 'tarjetas',
+    'vista-cc'          : 'cc',
+    'vista-ahorro'      : 'ahorro',
+    'vista-inversiones' : 'inversiones'
+  };
+
+  // --- SECCIÓN 1: ARRANQUE ---
+
+  async boot() {
+    App.log('AppInit', 'boot', `v${App.VERSION} — Iniciando`);
+
+    this.#mostrarLoader();
+    this.#setDefaultMes();
+
+    try {
+      // Carga inicial: cuentas + categorías + tarjetas
+      const initialData = await App.API.call('api_getInitialData');
+
+      if (!initialData?.success) {
+        App.Toast.error(initialData?.error || 'Error al cargar datos iniciales.');
+        this.#ocultarLoader();
+        return;
+      }
+
+      // Llenar Store con datos maestros
+      App.Store.setCuentas(initialData.cuentas || []);
+      App.Store.setMeses(initialData.meses   || []);
+
+      // Cachear categorías y tarjetas en los módulos (disponibles en el Store via data)
+      // Los módulos los recibirán en su primera respuesta de backend,
+      // pero los guardamos globalmente para acceso rápido
+      window._appCategorias = initialData.categorias || [];
+      window._appTarjetas   = initialData.tarjetas   || [];
+
+      // Configurar cuenta inicial
+      const cuentaPred = (initialData.cuentas || []).find(c => c.es_predeterminada) || initialData.cuentas?.[0];
+      if (cuentaPred) {
+        App.Store.setCuenta(cuentaPred.id_cuenta_principal);
+      }
+
+      // Configurar selectores del DOM (por compatibilidad con código legacy si hubiera)
+      this.#syncSelectorDom(initialData.cuentas);
+      this.#syncMesDom(initialData.meses);
+
+      // Configurar Account Toggle
+      this.#setupAccountToggle(initialData.cuentas);
+
+      // Actualizar visibilidad de tabs según config de la cuenta
+      this.#actualizarVisibilidadTabs(cuentaPred);
+
+      // Cargar info de usuario en paralelo (no bloquea UI)
+      this.#cargarUsuario();
+
+      // Inicializar todos los módulos
+      this.#initModulos();
+
+      this.#ocultarLoader();
+
+      // Navegar al tab inicial
+      this.#navegarTab('vista-movimientos');
+
+      // Prefetch paralelo en background (sin bloquear UI)
+      App.Prefetch.run({ silent: true }).catch(() => {});
+
+      App.log('AppInit', 'boot', 'Inicialización completada');
+
+    } catch (err) {
+      App.error('AppInit', 'boot', 'Error fatal en boot', err);
+      App.Toast.error('Error al iniciar la aplicación: ' + err.message);
+      this.#ocultarLoader();
+    }
+  }
+
+  // --- SECCIÓN 2: NAVEGACIÓN ---
+
+  #navegarTab(vistaId) {
+    // Ocultar todos los paneles de contenido
+    document.querySelectorAll('.vista-container').forEach(v => v.classList.remove('active'));
+
+    // Desactivar todos los nav items del sidebar (soporta .nav-item y .tab-btn legacy)
+    document.querySelectorAll('.nav-item, .tab-btn').forEach(b => {
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
+
+    // Activar panel de contenido
+    document.getElementById(vistaId)?.classList.add('active');
+
+    // Activar nav item correspondiente
+    const navBtn = document.querySelector(`[data-vista="${vistaId}"]`);
+    if (navBtn) {
+      navBtn.classList.add('active');
+      navBtn.setAttribute('aria-selected', 'true');
+    }
+
+    this.#tabActivo = vistaId;
+    const moduloId  = this.#tabMap[vistaId];
+
+    if (moduloId && App.Modules[moduloId]) {
+      App.Modules[moduloId].cargar();
+    }
+
+    App.Events.emit('ui:tab-changed', { tabId: vistaId });
+    App.log('AppInit', '#navegarTab', vistaId);
+  }
+
+  // --- SECCIÓN 3: ACCOUNT TOGGLE ---
+
+  #setupAccountToggle(cuentas) {
+    if (!cuentas || cuentas.length === 0) return;
+
+    const toggleWrap  = document.getElementById('account-switch-ui');
+    const label1      = document.getElementById('label-cuenta-1');
+    const label2      = document.getElementById('label-cuenta-2');
+    const chkToggle   = document.getElementById('chk-cuenta-toggle');
+
+    if (cuentas.length >= 2 && toggleWrap) {
+      if (label1) label1.textContent = cuentas[0].nombre;
+      if (label2) label2.textContent = cuentas[1].nombre;
+
+      const activaIdx  = cuentas.findIndex(c => c.id_cuenta_principal === App.Store.cuenta);
+      if (chkToggle) {
+        chkToggle.checked = activaIdx > 0;
+        this.#updateToggleLabels(activaIdx, label1, label2);
+
+        chkToggle.addEventListener('change', (e) => {
+          const idx    = e.target.checked ? 1 : 0;
+          const nuevaId = cuentas[idx].id_cuenta_principal;
+          this.#updateToggleLabels(idx, label1, label2);
+          App.Store.setCuenta(nuevaId);
+          this.#syncSelectorDom(cuentas, nuevaId);
+          this.#actualizarVisibilidadTabs(cuentas[idx]);
+        });
+      }
+
+      if (label1) label1.addEventListener('click', () => { if (chkToggle) { chkToggle.checked = false; chkToggle.dispatchEvent(new Event('change')); } });
+      if (label2) label2.addEventListener('click', () => { if (chkToggle) { chkToggle.checked = true;  chkToggle.dispatchEvent(new Event('change')); } });
+
+      toggleWrap.classList.remove('hidden');
+    } else {
+      toggleWrap?.classList.add('hidden');
+    }
+  }
+
+  #updateToggleLabels(idx, label1, label2) {
+    label1?.classList.toggle('active', idx === 0);
+    label2?.classList.toggle('active', idx > 0);
+  }
+
+  // --- SECCIÓN 4: TABS ---
+
+  #actualizarVisibilidadTabs(cuentaObj) {
+    if (!cuentaObj) return;
+    const modulos = [
+      { tab: 'tab-btn-tarjetas',   flag: 'modulo_tarjetas_activo'    },
+      { tab: 'tab-btn-cc',         flag: 'modulo_cc_activo'          },
+      { tab: 'tab-btn-ahorro',     flag: 'modulo_ahorro_activo'      },
+      { tab: 'tab-btn-inversiones',flag: 'modulo_inversiones_activo' }
+    ];
+    modulos.forEach(({ tab, flag }) => {
+      const btn = document.getElementById(tab);
+      if (btn) btn.style.display = cuentaObj[flag] ? '' : 'none';
+    });
+  }
+
+  // --- SECCIÓN 5: INICIALIZAR MÓDULOS ---
+
+  #initModulos() {
+    Object.values(App.Modules).forEach(mod => {
+      if (typeof mod.init === 'function') {
+        try { mod.init(); } catch (e) {
+          App.error('AppInit', '#initModulos', `Error en ${mod.moduleId}`, e);
+        }
+      }
+    });
+
+    // Bind tabs — soporta .nav-item (sidebar nuevo) y .tab-btn (legacy)
+    document.querySelectorAll('[data-vista]').forEach(btn => {
+      btn.addEventListener('click', () => this.#navegarTab(btn.dataset.vista));
+    });
+
+    // Botón Admin (no es tab) - Lo vincula module-admin.html
+    // document.getElementById('btn-admin')
+    //  ?.addEventListener('click', () => App.Modules.admin?.cargar());
+
+    App.log('AppInit', '#initModulos', `${Object.keys(App.Modules).length} módulos inicializados`);
+  }
+
+  // --- SECCIÓN 6: SINCRONIZACIÓN DOM LEGACY ---
+
+  /** Mantiene el <select id="selector-cuenta"> sincronizado por si algún código legacy lo usa */
+  #syncSelectorDom(cuentas, selectedId = null) {
+    const sel = document.getElementById('selector-cuenta');
+    if (!sel) return;
+    sel.innerHTML = '';
+    (cuentas || []).forEach(c => {
+      const opt = new Option(c.nombre, c.id_cuenta_principal);
+      if (selectedId ? c.id_cuenta_principal === selectedId : c.es_predeterminada) {
+        opt.selected = true;
+      }
+      sel.add(opt);
+    });
+  }
+
+  #syncMesDom(meses) {
+    const sel = document.getElementById('selector-mes');
+    if (!sel) return;
+    // El selector de mes ya tiene su valor establecido por #setDefaultMes()
+    // Solo poblamos las opciones si el select necesita lista
+  }
+
+  // --- SECCIÓN 7: HELPERS ---
+
+  #setDefaultMes() {
+    const ahora = new Date();
+    const mes   = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`;
+    const sel   = document.getElementById('selector-mes');
+    if (sel) sel.value = mes;
+    App.Store.setMes(mes);
+
+    // Listener del selector de mes
+    sel?.addEventListener('change', (e) => {
+      App.Store.setMes(e.target.value || null);
+      const tabId = this.#tabActivo;
+      const modId = this.#tabMap[tabId];
+      if (modId && App.Modules[modId]) {
+        App.Modules[modId].cargar();
+      }
+    });
+
+    App.log('AppInit', '#setDefaultMes', mes);
+  }
+
+  async #cargarUsuario() {
+    try {
+      const res = await App.API.call('api_getUserInfo');
+      if (res?.success) {
+        const nombre = res.email.split('@')[0];
+
+        // Nombre en topbar
+        const elNombre = document.getElementById('user-info-container');
+        if (elNombre) {
+          elNombre.textContent = nombre;
+          elNombre.title       = res.email;
+        }
+
+        // Avatar con iniciales
+        const elAvatar = document.getElementById('topbar-avatar');
+        if (elAvatar) {
+          elAvatar.textContent = nombre.charAt(0).toUpperCase();
+          elAvatar.title       = res.email;
+        }
+
+        App.Store.setUsuario({ email: res.email });
+      }
+    } catch (_) {}
+  }
+
+  #mostrarLoader() {
+    document.getElementById('loader-overlay')?.classList.remove('hidden');
+  }
+
+  #ocultarLoader() {
+    document.getElementById('loader-overlay')?.classList.add('hidden');
+  }
+}
+
+// --- ARRANQUE ---
+window.addEventListener('load', () => {
+  new AppInit().boot();
+});
+
+// Actualizar versión en sidebar footer
+window.addEventListener('DOMContentLoaded', () => {
+  const el = document.getElementById('footer-version');
+  if (el) el.textContent = `v${App.VERSION} · ${new Date().getFullYear()}`;
+});
+
+App.log('app-init', 'cargado', `v${App.VERSION}`);
+</script>

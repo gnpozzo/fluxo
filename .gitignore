@@ -1,0 +1,19 @@
+# Versión anterior (código legado)
+Old version/
+
+# Credenciales y configuración local de clasp
+.clasp.json
+.claspignore
+
+# Variables de entorno locales
+.env
+.env.local
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+*.swp
+*~

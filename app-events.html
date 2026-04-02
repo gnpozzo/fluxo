@@ -1,0 +1,124 @@
+<script>
+'use strict';
+/* ============================================================
+   app-events.html — v5.0.0
+   Bus de eventos centralizado (Pub/Sub via CustomEvent).
+   Los módulos NUNCA se llaman entre sí directamente.
+   Se registra en window.App.Events
+   ============================================================ */
+
+// --- SECCIÓN 0: CLASE EventBus ---
+
+class EventBus {
+
+  /** Elemento DOM oculto usado como target de eventos */
+  #bus = document.createElement('div');
+
+  /** Mapa de listeners para poder removerlos: Map<event, Map<fn, wrapper>> */
+  #listeners = new Map();
+
+  constructor() {
+    this.#bus.setAttribute('id', '__app-event-bus__');
+    this.#bus.style.display = 'none';
+    document.body.appendChild(this.#bus);
+    App.log('EventBus', 'constructor', 'Bus de eventos listo');
+  }
+
+  // --- SECCIÓN 1: CATÁLOGO DE EVENTOS ---
+  /*
+    store:cuenta-changed   → { cuenta: string }
+    store:mes-changed      → { mes: string|null }
+    store:cuentas-loaded   → { cuentas: Array }
+    store:meses-loaded     → { meses: Array }
+    modulo:loaded          → { moduloId: string }
+    modulo:error           → { moduloId: string, error: Error }
+    data:invalidate        → { moduloId: string|'all' }
+    ui:tab-changed         → { tabId: string }
+    ui:cuenta-toggle       → { cuentaId: string }
+    form:submit            → { formId: string, data: Object }
+  */
+
+  // --- SECCIÓN 2: API PÚBLICA ---
+
+  /**
+   * Suscribe un handler a un evento.
+   * @param {string} eventName
+   * @param {Function} handler  recibe (detail) donde detail es el payload
+   * @returns {Function} función de unsuscripción (llámala para limpiar)
+   */
+  on(eventName, handler) {
+    const wrapper = (e) => handler(e.detail);
+
+    if (!this.#listeners.has(eventName)) {
+      this.#listeners.set(eventName, new Map());
+    }
+    this.#listeners.get(eventName).set(handler, wrapper);
+    this.#bus.addEventListener(eventName, wrapper);
+
+    App.log('EventBus', 'on', `Suscrito a "${eventName}"`);
+
+    // Retorna función de cleanup
+    return () => this.off(eventName, handler);
+  }
+
+  /**
+   * Desuscribe un handler de un evento.
+   * @param {string} eventName
+   * @param {Function} handler
+   */
+  off(eventName, handler) {
+    const eventMap = this.#listeners.get(eventName);
+    if (!eventMap) return;
+    const wrapper = eventMap.get(handler);
+    if (!wrapper) return;
+    this.#bus.removeEventListener(eventName, wrapper);
+    eventMap.delete(handler);
+    App.log('EventBus', 'off', `Desuscrito de "${eventName}"`);
+  }
+
+  /**
+   * Emite un evento con payload opcional.
+   * @param {string} eventName
+   * @param {*} [detail={}]
+   */
+  emit(eventName, detail = {}) {
+    const event = new CustomEvent(eventName, {
+      detail,
+      bubbles    : false,
+      cancelable : false
+    });
+    this.#bus.dispatchEvent(event);
+    App.log('EventBus', 'emit', `"${eventName}"`, detail);
+  }
+
+  /**
+   * Suscripción de un solo uso: se desuscribe automáticamente tras el primer disparo.
+   * @param {string} eventName
+   * @param {Function} handler
+   */
+  once(eventName, handler) {
+    const unsub = this.on(eventName, (detail) => {
+      handler(detail);
+      unsub();
+    });
+    return unsub;
+  }
+
+  /**
+   * Elimina TODOS los listeners de un evento.
+   * @param {string} eventName
+   */
+  removeAll(eventName) {
+    const eventMap = this.#listeners.get(eventName);
+    if (!eventMap) return;
+    eventMap.forEach((wrapper) => {
+      this.#bus.removeEventListener(eventName, wrapper);
+    });
+    this.#listeners.delete(eventName);
+  }
+}
+
+// --- REGISTRO EN NAMESPACE ---
+App.Events = new EventBus();
+App.log('app-events', 'init', 'App.Events registrado');
+</script>

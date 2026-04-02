@@ -1,0 +1,156 @@
+<script>
+'use strict';
+/* ============================================================
+   app-prefetch.html — v5.0.0
+   Precarga paralela de todos los módulos al iniciar la app.
+   Estrategia: Promise.all → cache sessionStorage → tabs instantáneos.
+   Se registra en window.App.Prefetch
+   ============================================================ */
+
+// --- SECCIÓN 0: HELPERS DE FECHA ---
+
+/**
+ * Calcula fechaInicio y fechaFin a partir de 'YYYY-MM'.
+ * Si mes es null, usa el mes actual.
+ * @param {string|null} mes
+ * @returns {{ fechaInicio: string, fechaFin: string }}
+ */
+function _calcFechas(mes) {
+  const m   = mes || new Date().toISOString().slice(0, 7);
+  const [y, mo] = m.split('-').map(Number);
+  const ultimoDia = new Date(y, mo, 0).getDate();
+  return {
+    fechaInicio : `${y}-${String(mo).padStart(2, '0')}-01`,
+    fechaFin    : `${y}-${String(mo).padStart(2, '0')}-${ultimoDia}`
+  };
+}
+
+// --- SECCIÓN 1: CLASE PrefetchManager ---
+
+class PrefetchManager {
+
+  #running     = false;
+  #completedAt = null;
+
+  constructor() {
+    App.log('PrefetchManager', 'constructor', 'Prefetch manager listo');
+  }
+
+  // --- SECCIÓN 2: MÉTODOS PÚBLICOS ---
+
+  /**
+   * Lanza la precarga de todos los módulos en paralelo.
+   * Cada llamada recibe los parámetros correctos del backend GAS.
+   *
+   * @param {Object} [opts]
+   * @param {boolean} [opts.silent=true]
+   * @param {number}  [opts.ttl]        TTL del cache (default: 5 min)
+   * @returns {Promise<{ok:string[], failed:string[]}>}
+   */
+  async run({ silent = true, ttl } = {}) {
+    if (this.#running) {
+      App.log('PrefetchManager', 'run', 'Prefetch en curso, saltando');
+      return { ok: [], failed: [] };
+    }
+
+    this.#running = true;
+
+    const { cuenta, mes } = App.Store;
+    const { fechaInicio, fechaFin } = _calcFechas(mes);
+
+    // Obtener cuentaObj para el flag requiereAjustes de movimientos
+    const cuentasCache = App.Store.cuentas;
+    const cuentaObj     = cuentasCache.find(c => c.id_cuenta_principal === cuenta);
+    const requiereAjuste = cuentaObj?.requiere_ajuste_cc_tc ?? false;
+
+    const tareas = [
+      {
+        modulo : 'movimientos',
+        fn     : 'api_getDashboardData',
+        args   : [cuenta, fechaInicio, fechaFin, requiereAjuste]
+      },
+      {
+        modulo : 'tarjetas',
+        fn     : 'api_getConsumosTC',
+        args   : [cuenta, fechaInicio, fechaFin]
+      },
+      {
+        modulo : 'cc',
+        fn     : 'api_getConsumosCC',
+        args   : [cuenta, fechaInicio, fechaFin]
+      },
+      {
+        modulo : 'ahorro',
+        fn     : 'api_getAhorros',
+        args   : [cuenta, fechaInicio, fechaFin]
+      },
+      {
+        modulo : 'inversiones',
+        fn     : 'api_getPortfolio',
+        args   : [cuenta]
+      }
+    ];
+
+    App.log('PrefetchManager', 'run', `Prefetch paralelo — ${tareas.length} módulos`);
+    App.Events.emit('prefetch:start', { total: tareas.length });
+
+    const resultados = await Promise.allSettled(
+      tareas.map(({ fn, args }) =>
+        App.API.cached(fn, args, ttl)
+      )
+    );
+
+    const ok     = [];
+    const failed = [];
+
+    resultados.forEach((res, i) => {
+      const { modulo, fn } = tareas[i];
+      if (res.status === 'fulfilled') {
+        ok.push(modulo);
+        App.log('PrefetchManager', 'run', `✓ ${fn}`);
+      } else {
+        failed.push(modulo);
+        if (!silent) App.error('PrefetchManager', 'run', `✗ ${fn}`, res.reason);
+        else App.warn('PrefetchManager', 'run', `✗ ${fn}`, res.reason?.message);
+      }
+    });
+
+    this.#running    = false;
+    this.#completedAt = Date.now();
+
+    App.Events.emit('prefetch:done', { ok, failed });
+    App.log('PrefetchManager', 'run',
+      `Completado — OK: ${ok.length}/${tareas.length}, Fallos: ${failed.length}`);
+
+    return { ok, failed };
+  }
+
+  /**
+   * Invalida cache y relanza prefetch en background.
+   */
+  revalidate() {
+    App.API.invalidateAll();
+    this.run({ silent: true }).catch(() => {});
+  }
+
+  /** @returns {boolean} */
+  get isRunning() { return this.#running; }
+
+  /** @returns {number|null} */
+  get completedAt() { return this.#completedAt; }
+}
+
+// --- REGISTRO EN NAMESPACE ---
+App.Prefetch = new PrefetchManager();
+
+App.Events.on('store:cuenta-changed', () => {
+  App.log('app-prefetch', 'cuenta-changed', 'Relanzando prefetch');
+  App.Prefetch.run({ silent: true });
+});
+App.Events.on('store:mes-changed', () => {
+  App.log('app-prefetch', 'mes-changed', 'Relanzando prefetch');
+  App.Prefetch.run({ silent: true });
+});
+
+App.log('app-prefetch', 'init', 'App.Prefetch registrado');
+</script>

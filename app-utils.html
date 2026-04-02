@@ -1,0 +1,274 @@
+<script>
+'use strict';
+/* ============================================================
+   app-utils.html — v5.0.0
+   Utilidades puras compartidas por todos los módulos.
+   Se registra en window.App.Utils
+   ============================================================ */
+
+// --- SECCIÓN 0: REGISTRO EN NAMESPACE ---
+
+App.Utils = (() => {
+
+  // --- SECCIÓN 1: FORMATEO ---
+
+  /**
+   * Formatea un número como moneda ARS.
+   * @param {number} valor
+   * @param {boolean} [mostrarSimbolo=true]
+   */
+  function formatearMoneda(valor, mostrarSimbolo = true) {
+    if (valor === null || valor === undefined || isNaN(valor)) return '—';
+    const num = Number(valor);
+    const formatted = new Intl.NumberFormat('es-AR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Math.abs(num));
+    const signo = num < 0 ? '-' : '';
+    return mostrarSimbolo ? `${signo}$ ${formatted}` : `${signo}${formatted}`;
+  }
+
+  /**
+   * Formatea un número como moneda USD.
+   * @param {number} valor
+   * @param {boolean} [mostrarSimbolo=true]
+   */
+  function formatearMonedaUSD(valor, mostrarSimbolo = true) {
+    if (valor === null || valor === undefined || isNaN(valor)) return '—';
+    const num = Number(valor);
+    const formatted = new Intl.NumberFormat('es-AR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Math.abs(num));
+    const signo = num < 0 ? '-' : '';
+    return mostrarSimbolo ? `${signo}U$D ${formatted}` : `${signo}${formatted}`;
+  }
+
+  /**
+   * Formatea un número como porcentaje.
+   * @param {number} valor
+   * @param {number} [decimales=2]
+   */
+  function formatearPorcentaje(valor, decimales = 2) {
+    if (valor === null || valor === undefined || isNaN(valor)) return '—';
+    const num = Number(valor);
+    return `${num >= 0 ? '+' : ''}${num.toFixed(decimales)}%`;
+  }
+
+  /**
+   * Formatea una fecha ISO o string a formato legible (dd/mm/aaaa).
+   * @param {string|Date} fecha
+   */
+  function formatearFecha(fecha) {
+    if (!fecha) return '—';
+    try {
+      // Soporta 'YYYY-MM-DD' sin conversión timezone
+      if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+        const [y, m, d] = fecha.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      const d = new Date(fecha);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('es-AR', {
+        day: '2-digit', month: '2-digit', year: 'numeric'
+      });
+    } catch (_) {
+      return '—';
+    }
+  }
+
+  /**
+   * Formatea una fecha ISO a formato mes/año (ej: "Mar 2025").
+   * @param {string} fecha  formato YYYY-MM-DD o YYYY-MM
+   */
+  function formatearMes(fecha) {
+    if (!fecha) return '—';
+    const [y, m] = fecha.split('-');
+    const date = new Date(Number(y), Number(m) - 1, 1);
+    return date.toLocaleDateString('es-AR', { month: 'short', year: 'numeric' });
+  }
+
+  /**
+   * Retorna la clase CSS de variación según si el valor es positivo/negativo.
+   * @param {number} valor
+   * @param {boolean} [invertido=false]  true cuando negativo es bueno (ej: deuda)
+   */
+  function classeVariacion(valor, invertido = false) {
+    if (!valor || valor === 0) return 'neutral';
+    const esPositivo = Number(valor) > 0;
+    return (esPositivo !== invertido) ? 'positivo' : 'negativo';
+  }
+
+  // --- SECCIÓN 2: DOM HELPERS ---
+
+  /**
+   * Escapa caracteres especiales HTML para prevenir XSS.
+   * @param {*} str
+   */
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Crea un elemento DOM con atributos y contenido opcionales.
+   * @param {string} tag
+   * @param {Object} [attrs={}]
+   * @param {string|Node|Array} [children]
+   */
+  function buildElement(tag, attrs = {}, children = null) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'className') { el.className = v; }
+      else if (k === 'dataset') { Object.assign(el.dataset, v); }
+      else if (k.startsWith('on') && typeof v === 'function') {
+        el.addEventListener(k.slice(2).toLowerCase(), v);
+      } else {
+        el.setAttribute(k, v);
+      }
+    }
+    if (children !== null) {
+      const nodes = Array.isArray(children) ? children : [children];
+      nodes.forEach(c => {
+        el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      });
+    }
+    return el;
+  }
+
+  /**
+   * Vacía un contenedor DOM de manera eficiente.
+   * @param {HTMLElement} container
+   */
+  function limpiarContainer(container) {
+    if (!container) return;
+    while (container.firstChild) container.removeChild(container.firstChild);
+  }
+
+  /**
+   * Retorna el primer elemento que coincide con el selector dentro de un scope.
+   * @param {string} selector
+   * @param {HTMLElement|Document} [scope=document]
+   */
+  function qs(selector, scope = document) {
+    return scope.querySelector(selector);
+  }
+
+  /**
+   * Retorna todos los elementos que coinciden con el selector.
+   * @param {string} selector
+   * @param {HTMLElement|Document} [scope=document]
+   */
+  function qsa(selector, scope = document) {
+    return Array.from(scope.querySelectorAll(selector));
+  }
+
+  /**
+   * Agrega o quita una clase CSS según condición.
+   * @param {HTMLElement} el
+   * @param {string} cls
+   * @param {boolean} condition
+   */
+  function toggleClass(el, cls, condition) {
+    if (!el) return;
+    el.classList.toggle(cls, condition);
+  }
+
+  // --- SECCIÓN 3: VALIDACIÓN Y DATOS ---
+
+  /**
+   * Verifica si un valor es un número finito válido.
+   * @param {*} val
+   */
+  function isNumero(val) {
+    return val !== null && val !== undefined && val !== '' && isFinite(Number(val));
+  }
+
+  /**
+   * Clona un objeto simple (sin referencias circulares).
+   * @param {Object} obj
+   */
+  function clonar(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  /**
+   * Agrupa un array de objetos por una clave.
+   * @param {Array} arr
+   * @param {string} key
+   * @returns {Object}
+   */
+  function agruparPor(arr, key) {
+    return arr.reduce((acc, item) => {
+      const k = item[key];
+      if (!acc[k]) acc[k] = [];
+      acc[k].push(item);
+      return acc;
+    }, {});
+  }
+
+  /**
+   * Suma una propiedad numérica de un array de objetos.
+   * @param {Array} arr
+   * @param {string} key
+   */
+  function sumar(arr, key) {
+    return arr.reduce((acc, item) => acc + (Number(item[key]) || 0), 0);
+  }
+
+  /**
+   * Debounce: retrasa la ejecución de una función.
+   * @param {Function} fn
+   * @param {number} delay ms
+   */
+  function debounce(fn, delay) {
+    let timer;
+    return function (...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+
+  /**
+   * Genera un ID único simple (no criptográfico).
+   * @param {string} [prefix='id']
+   */
+  function uid(prefix = 'id') {
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  // --- SECCIÓN 4: API PÚBLICA ---
+
+  App.log('app-utils', 'init', 'App.Utils registrado');
+
+  return Object.freeze({
+    // Formateo
+    formatearMoneda,
+    formatearMonedaUSD,
+    formatearPorcentaje,
+    formatearFecha,
+    formatearMes,
+    classeVariacion,
+    // DOM
+    escapeHtml,
+    buildElement,
+    limpiarContainer,
+    qs,
+    qsa,
+    toggleClass,
+    // Datos
+    isNumero,
+    clonar,
+    agruparPor,
+    sumar,
+    debounce,
+    uid
+  });
+
+})();
+</script>
