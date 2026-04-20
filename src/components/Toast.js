@@ -60,13 +60,15 @@ export class ToastManager {
 
   /** Crea e inyecta el contenedor de toasts en el DOM */
   #mount() {
-    if (document.getElementById('toast-container')) return;
-    const container = document.createElement('div');
-    container.id = 'toast-container';
-    container.setAttribute('role', 'region');
-    container.setAttribute('aria-label', 'Notificaciones');
-    container.setAttribute('aria-live', 'polite');
-    document.body.appendChild(container);
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.setAttribute('role', 'region');
+      container.setAttribute('aria-label', 'Notificaciones');
+      container.setAttribute('aria-live', 'polite');
+      document.body.appendChild(container);
+    }
     this.#container = container;
   }
 
