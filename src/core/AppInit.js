@@ -100,7 +100,9 @@ class AppInit {
       this.#navegarTab('vista-dashboard');
 
       // Prefetch paralelo en background (sin bloquear UI)
-      App.Prefetch.run({ silent: true }).catch(() => {});
+      if (App.Prefetch) {
+         App.Prefetch.run({ silent: true }).catch(() => {});
+      }
 
       App.log('AppInit', 'boot', 'Inicialización completada');
 
