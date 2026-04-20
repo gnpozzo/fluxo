@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    component-kpi-card.html — v5.0.0
@@ -9,7 +8,7 @@
 
 // --- SECCIÓN 0: CLASE KpiCard ---
 
-class KpiCard {
+export class KpiCard {
 
   #container;
   #config;
@@ -129,94 +128,5 @@ class KpiCard {
 }
 
 // Exportar clase al namespace
-App.KpiCard = KpiCard;
+
 App.log('component-kpi-card', 'init', 'App.KpiCard (clase) registrada');
-</script>
-
-<style>
-/* ============================================================
-   KpiCard styles
-   ============================================================ */
-
-.kpi-grid {
-  display               : grid;
-  grid-template-columns : repeat(auto-fit, minmax(220px, 1fr));
-  gap                   : var(--space-4, 1rem);
-  margin-bottom         : var(--space-5, 1.25rem);
-}
-
-.kpi-card {
-  display       : flex;
-  align-items   : center;
-  gap           : var(--space-4, 1rem);
-  padding       : var(--space-5, 1.25rem);
-  border-radius : var(--radius-xl, 1rem);
-  background    : var(--color-surface, #fff);
-  border        : 1px solid var(--color-border-light, #f3f4f6);
-  box-shadow    : 0 4px 15px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
-  transition    : box-shadow 0.2s, transform 0.15s;
-}
-
-.kpi-card.kpi-clickable {
-  cursor : pointer;
-}
-.kpi-card.kpi-clickable:hover {
-  box-shadow : var(--shadow-md, 0 4px 12px rgba(0,0,0,.1));
-  transform  : translateY(-2px);
-}
-
-.kpi-icon-wrap {
-  width         : 48px;
-  height        : 48px;
-  border-radius : var(--radius-lg, 0.75rem);
-  display       : flex;
-  align-items   : center;
-  justify-content: center;
-  flex-shrink   : 0;
-}
-
-/* Variantes de color */
-.kpi-blue   .kpi-icon-wrap { background: #eff6ff; color: #2563eb; }
-.kpi-green  .kpi-icon-wrap { background: #ecfdf5; color: #059669; }
-.kpi-red    .kpi-icon-wrap { background: #fef2f2; color: #dc2626; }
-.kpi-purple .kpi-icon-wrap { background: #f5f3ff; color: #7c3aed; }
-.kpi-amber  .kpi-icon-wrap { background: #fffbeb; color: #d97706; }
-
-.kpi-content {
-  display       : flex;
-  flex-direction: column;
-  gap           : 2px;
-  min-width     : 0;
-}
-
-.kpi-label {
-  font-size   : var(--text-xs, 0.75rem);
-  font-weight : 500;
-  color       : var(--color-text-muted, #6b7280);
-  text-transform : uppercase;
-  letter-spacing : 0.05em;
-}
-
-.kpi-value {
-  font-size   : 1.45rem;
-  font-weight : 700;
-  color       : var(--color-text, #111827);
-  white-space : nowrap;
-  letter-spacing: -0.01em;
-}
-
-.kpi-subtitle {
-  font-size : var(--text-xs, 0.75rem);
-  color     : var(--color-text-muted, #6b7280);
-}
-
-.kpi-variation {
-  font-size   : var(--text-sm, 0.875rem);
-  font-weight : 600;
-}
-.kpi-var-positivo { color: var(--color-success, #059669); }
-.kpi-var-negativo { color: var(--color-error,   #dc2626); }
-.kpi-var-neutral  { color: var(--color-text-muted, #6b7280); }
-
-.kpi-error { color: var(--color-error, #dc2626); font-size: var(--text-sm); }
-</style>

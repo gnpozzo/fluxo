@@ -1,3 +1,13 @@
+
+// [Origen -> api -> API_Admin.js]
+// Migración REST transicional (Las funciones contenían: 'use strict';/** * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Panel de Administración) * v5.0.0...)
+// Se debe migrar cada sub-función usando el supabase-js client tal como en getDashboardData.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Not allowed');
+  return res.status(501).json({ success: false, error: 'Endpoint sin transicionar. Por favor actualizar backend Edge.' });
+}
+/* CODIGO ORIGINAL MANTENIDO POR TRAZABILIDAD:
 'use strict';
 /**
  * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Panel de Administración)
@@ -95,6 +105,18 @@ function api_admin_saveCuentaPrincipal(cuentaData) {
   }
 }
 
+function api_admin_deleteCuentaPrincipal(id) {
+  Logger.log('[API_Admin → api_admin_deleteCuentaPrincipal → inicio] ' + id);
+  try {
+    pgDelete('cuentas_principales', { id_cuenta_principal: PG.eq(id) });
+    Logger.log('[API_Admin → api_admin_deleteCuentaPrincipal → OK] ' + id);
+    return { success: true, message: 'Cuenta eliminada correctamente.' };
+  } catch (e) {
+    Logger.log('[API_Admin → api_admin_deleteCuentaPrincipal → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
 //==================================================================
 // 2. SECCIÓN: TARJETAS
 //==================================================================
@@ -177,6 +199,18 @@ function api_admin_saveTarjeta(tarjetaData) {
 
   } catch (e) {
     Logger.log('[API_Admin → api_admin_saveTarjeta → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+function api_admin_deleteTarjeta(id) {
+  Logger.log('[API_Admin → api_admin_deleteTarjeta → inicio] ' + id);
+  try {
+    pgDelete('tarjetas', { id_tarjeta: PG.eq(id) });
+    Logger.log('[API_Admin → api_admin_deleteTarjeta → OK] ' + id);
+    return { success: true, message: 'Tarjeta eliminada correctamente.' };
+  } catch (e) {
+    Logger.log('[API_Admin → api_admin_deleteTarjeta → ERROR] ' + e.message);
     return { success: false, error: e.message };
   }
 }
@@ -266,26 +300,116 @@ function api_admin_saveCategoria(categoriaData) {
   }
 }
 
+function api_admin_deleteCategoria(id) {
+  Logger.log('[API_Admin → api_admin_deleteCategoria → inicio] ' + id);
+  try {
+    pgDelete('categorias', { id_categoria: PG.eq(id) });
+    Logger.log('[API_Admin → api_admin_deleteCategoria → OK] ' + id);
+    return { success: true, message: 'Categoría eliminada correctamente.' };
+  } catch (e) {
+    Logger.log('[API_Admin → api_admin_deleteCategoria → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
 //==================================================================
 // 4. SECCIÓN: AHORRO Y CTA. CORRIENTE (Pendientes de implementación)
 //==================================================================
 
 function api_admin_getAhorroSubcuentas() {
-  Logger.log('[API_Admin → api_admin_getAhorroSubcuentas → not_implemented]');
-  return { success: true, data: [], not_implemented: true };
+  Logger.log('[API_Admin → api_admin_getAhorroSubcuentas → inicio]');
+  try {
+    const data = pgSelect('ahorro_subcuentas', {}, 'id_subcuenta,nombre,moneda', 'nombre.asc');
+    return { success: true, data: data };
+  } catch(e) {
+    Logger.log('[API_Admin → api_admin_getAhorroSubcuentas → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 function api_admin_saveAhorroSubcuenta(data) {
-  Logger.log('[API_Admin → api_admin_saveAhorroSubcuenta → not_implemented]');
-  return { success: false, error: 'Módulo de subcuentas de ahorro pendiente de implementación.', not_implemented: true };
+  Logger.log('[API_Admin → api_admin_saveAhorroSubcuenta → inicio]');
+  try {
+    validateRequired(data, ['nombre', 'moneda']);
+    let isNew = false;
+    const id = data.id_subcuenta;
+    if (id) {
+      pgUpdate('ahorro_subcuentas', { id_subcuenta: PG.eq(id) }, {
+        nombre: sanitizeString(data.nombre, 100),
+        moneda: data.moneda
+      });
+    } else {
+      isNew = true;
+      data.id_subcuenta = generateUUID();
+      pgInsert('ahorro_subcuentas', {
+        id_subcuenta: data.id_subcuenta,
+        nombre:       sanitizeString(data.nombre, 100),
+        moneda:       data.moneda
+      });
+    }
+    return { success: true, data: data, isNew: isNew };
+  } catch(e) {
+    Logger.log('[API_Admin → api_admin_saveAhorroSubcuenta → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+function api_admin_deleteAhorroSubcuenta(id) {
+  Logger.log('[API_Admin → api_admin_deleteAhorroSubcuenta → inicio] ' + id);
+  try {
+    pgDelete('ahorro_subcuentas', { id_subcuenta: PG.eq(id) });
+    return { success: true, message: 'Subcuenta eliminada correctamente.' };
+  } catch(e) {
+    Logger.log('[API_Admin → api_admin_deleteAhorroSubcuenta → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 function api_admin_getCtaCorrienteUsuarios() {
-  Logger.log('[API_Admin → api_admin_getCtaCorrienteUsuarios → not_implemented]');
-  return { success: true, data: [], not_implemented: true };
+  Logger.log('[API_Admin → api_admin_getCtaCorrienteUsuarios → inicio]');
+  try {
+    const data = pgSelect('cta_corriente_usuarios', {}, 'id_usuario,nombre', 'nombre.asc');
+    return { success: true, data: data };
+  } catch(e) {
+    Logger.log('[API_Admin → api_admin_getCtaCorrienteUsuarios → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 function api_admin_saveCtaCorrienteUsuario(data) {
-  Logger.log('[API_Admin → api_admin_saveCtaCorrienteUsuario → not_implemented]');
-  return { success: false, error: 'Módulo de usuarios de Cuenta Corriente pendiente de implementación.', not_implemented: true };
+  Logger.log('[API_Admin → api_admin_saveCtaCorrienteUsuario → inicio]');
+  try {
+    validateRequired(data, ['nombre']);
+    let isNew = false;
+    const id = data.id_usuario;
+    if (id) {
+      pgUpdate('cta_corriente_usuarios', { id_usuario: PG.eq(id) }, {
+        nombre: data.nombre
+      });
+    } else {
+      isNew = true;
+      data.id_usuario = generateUUID();
+      pgInsert('cta_corriente_usuarios', {
+        id_usuario: data.id_usuario,
+        nombre: data.nombre
+      });
+    }
+    return { success: true, data: data, isNew: isNew };
+  } catch(e) {
+    Logger.log('[API_Admin → api_admin_saveCtaCorrienteUsuario → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
 }
+
+function api_admin_deleteCtaCorrienteUsuario(id) {
+  Logger.log('[API_Admin → api_admin_deleteCtaCorrienteUsuario → inicio] ' + id);
+  try {
+    pgDelete('cta_corriente_usuarios', { id_usuario: PG.eq(id) });
+    return { success: true, message: 'Usuario eliminado correctamente.' };
+  } catch(e) {
+    Logger.log('[API_Admin → api_admin_deleteCtaCorrienteUsuario → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+*/

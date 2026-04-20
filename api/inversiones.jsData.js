@@ -1,3 +1,13 @@
+
+// [Origen -> api -> API_Inversiones.js]
+// Migración REST transicional (Las funciones contenían: 'use strict';/** * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Inversiones) * v5.0.0 * ...)
+// Se debe migrar cada sub-función usando el supabase-js client tal como en getDashboardData.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Not allowed');
+  return res.status(501).json({ success: false, error: 'Endpoint sin transicionar. Por favor actualizar backend Edge.' });
+}
+/* CODIGO ORIGINAL MANTENIDO POR TRAZABILIDAD:
 'use strict';
 /**
  * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Inversiones)
@@ -116,6 +126,41 @@ function api_getDolarCotizaciones() {
 
   } catch (e) {
     Logger.log('[API_Inversiones → api_getDolarCotizaciones → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+function api_getMarketData() {
+  Logger.log('[API_Inversiones → api_getMarketData → inicio]');
+  try {
+    // Cada endpoint de rendimientos.co devuelve { data: [...] }
+    var raw = function(ep) {
+      var r = getRendimientosData(ep);
+      return (r && r.data) ? r.data : (Array.isArray(r) ? r : []);
+    };
+
+    var mundoArr    = raw('/api/mundo');
+    var lecapsArr   = raw('/api/lecaps');
+    var onsArr      = raw('/api/ons');
+    var soberanosArr = raw('/api/soberanos');
+    var cedearsArr  = raw('/api/cedears');
+
+    Logger.log('[API_Inversiones → api_getMarketData → OK] mundo:' + mundoArr.length
+      + ' lecaps:' + lecapsArr.length
+      + ' ons:' + onsArr.length
+      + ' soberanos:' + soberanosArr.length
+      + ' cedears:' + cedearsArr.length);
+
+    return {
+      success: true,
+      mundo:     mundoArr,
+      lecaps:    lecapsArr,
+      ons:       onsArr,
+      soberanos: soberanosArr,
+      cedears:   cedearsArr
+    };
+  } catch (e) {
+    Logger.log('[API_Inversiones → api_getMarketData → ERROR] ' + e.message);
     return { success: false, error: e.message };
   }
 }
@@ -339,3 +384,5 @@ function api_deleteInversion(idOperacion) {
     return { success: false, error: e.message };
   }
 }
+
+*/

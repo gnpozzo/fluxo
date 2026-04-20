@@ -1,3 +1,13 @@
+
+// [Origen -> api -> API_Movimientos.js]
+// Migración REST transicional (Las funciones contenían: 'use strict';/** * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Movimientos) * v5.0.0 * ...)
+// Se debe migrar cada sub-función usando el supabase-js client tal como en getDashboardData.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Not allowed');
+  return res.status(501).json({ success: false, error: 'Endpoint sin transicionar. Por favor actualizar backend Edge.' });
+}
+/* CODIGO ORIGINAL MANTENIDO POR TRAZABILIDAD:
 'use strict';
 /**
  * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Movimientos)
@@ -59,13 +69,9 @@ function api_getDashboardData(idCuenta, fechaInicio, fechaFin, requiereAjustes) 
         else if (ajusteCC < 0) kpis.egresos  += Math.abs(ajusteCC);
       }
 
-      const dataTC = pgRpc('get_ajuste_tc', {
-        p_id_cuenta:    idCuenta,
-        p_fecha_inicio: fechaInicio,
-        p_fecha_fin:    fechaFin
-      });
-      if (dataTC.length > 0 && dataTC[0].total_cuotas_mes !== null) {
-        const saldoTC  = (dataTC[0].total_cuotas_mes || 0) - (dataTC[0].total_imputado_externo || 0);
+      const calcTC = api_getConsumosTC(idCuenta, fechaInicio, fechaFin);
+      if (calcTC && calcTC.success && calcTC.kpis) {
+        const saldoTC  = calcTC.kpis.incidenciaPersonal || 0;
         kpis.ajuste_tc = saldoTC;
         kpis.egresos  += saldoTC;
       }
@@ -118,85 +124,90 @@ function api_getMovimientoDataForEdit(idMovimiento) {
 // --- SECCIÓN 3: API — ESCRITURA ---
 
 function api_createMovimiento(mov) {
-  Logger.log('[API_Movimientos → api_createMovimiento → inicio] rec:' + mov.esRecurrente + ' split:' + mov.esSplit);
+  Logger.log('[API_Movimientos → api_createMovimiento → inicio] tipoConsumo:' + mov.tipoConsumo + ' esSplit:' + mov.esSplit);
   try {
     validateRequired(mov, ['idCuenta', 'tipo', 'fecha', 'idCategoria', 'importe', 'medioPago']);
 
     const rows    = [];
     const fechaBase = new Date(mov.fecha + 'T12:00:00Z');
 
-    // Validación anticipada de splitPorcentaje
-    let pct = 0;
-    if (mov.esSplit) {
-      pct = parseFloat(mov.splitPorcentaje);
-      if (isNaN(pct) || pct <= 0 || pct >= 100) {
-        throw new Error('splitPorcentaje debe estar entre 1 y 99. Valor recibido: "' + mov.splitPorcentaje + '".');
+    // Validación de destinos de Split
+    let pctRetenido = 100;
+    const destinos = [];
+    if (mov.esSplit && Array.isArray(mov.splitDestinos)) {
+      mov.splitDestinos.forEach(d => {
+        const pct = parseFloat(d.pct);
+        if (isNaN(pct) || pct <= 0) throw new Error('Porcentaje de distribución inválido.');
+        pctRetenido -= pct;
+        destinos.push({ cuenta: d.cuenta, pct: pct / 100 });
+      });
+      if (pctRetenido < 0) {
+        throw new Error('La suma de porcentajes de distribución supera el 100%.');
       }
-      pct = pct / 100;
     }
 
-    // ── CASO 1: SIMPLE ──────────────────────────────────────────────
-    if (!mov.esRecurrente && !mov.esSplit) {
-      const fechaISO = addMonthsSafe(fechaBase, 0).toISOString().split('T')[0];
-      rows.push(crearRegistroSQL(
-        mov.idCuenta, fechaISO, mov.idCategoria, mov.tipo,
-        mov.descripcion, mov.importe, mov.medioPago,
-        null, null, null
-      ).row);
+    // Determinar iteraciones según tipoConsumo
+    let periodos = 1;
+    let esCuotas = false;
+    let groupIdPrefix = 'REC_';
+    
+    if (mov.tipoConsumo === 'CUOTAS') {
+      periodos = mov.cuotaTotal - mov.cuotaActual + 1;
+      esCuotas = true;
+      groupIdPrefix = 'INSTL_';
+    } else if (mov.tipoConsumo === 'RECURRENTE') {
+      periodos = mov.periodos || 12; // Si viene 0 podría ser infinito, pero el motor inyecta un nro por defecto (120) o 12.
+    }
 
-    // ── CASO 2: RECURRENTE ─────────────────────────────────────────
-    } else if (mov.esRecurrente && !mov.esSplit) {
-      if (!(mov.periodos > 1)) throw new Error('Se requieren al menos 2 períodos para series recurrentes.');
-      const recurGroupId = 'REC_' + generateUUID();
-      for (let i = 0; i < mov.periodos; i++) {
-        const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
-        rows.push(crearRegistroSQL(
-          mov.idCuenta, fechaISO, mov.idCategoria, mov.tipo,
-          mov.descripcion, mov.importe, mov.medioPago,
-          recurGroupId, null, null
-        ).row);
+    if (periodos < 1) periodos = 1;
+    const isSeries = periodos > 1;
+    const seriesGroupId = isSeries ? groupIdPrefix + generateUUID() : null;
+
+    // Generar Movimientos
+    for (let i = 0; i < periodos; i++) {
+      const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
+      
+      let desc = mov.descripcion;
+      if (esCuotas) {
+         const cuotaNro = mov.cuotaActual + i;
+         desc = `${desc} (Cuota ${cuotaNro}/${mov.cuotaTotal})`;
       }
 
-    // ── CASO 3: SPLIT SIMPLE ───────────────────────────────────────
-    } else if (!mov.esRecurrente && mov.esSplit) {
-      if (!mov.splitCuentaDestino) throw new Error('splitCuentaDestino es requerido para operaciones split.');
-      const splitGroupId   = 'SPLIT_' + generateUUID();
-      const fechaISO       = addMonthsSafe(fechaBase, 0).toISOString().split('T')[0];
-      const importeDestino = mov.importe * pct;
-      const importeOrigen  = mov.importe * (1 - pct);
-
-      rows.push(crearRegistroSQL(
-        mov.idCuenta, fechaISO, mov.idCategoria, mov.tipo,
-        mov.descripcion, importeOrigen, mov.medioPago,
-        null, splitGroupId, 'ORIGEN'
-      ).row);
-      rows.push(crearRegistroSQL(
-        mov.splitCuentaDestino, fechaISO, mov.idCategoria, mov.tipo,
-        mov.descripcion, importeDestino, mov.medioPago,
-        null, splitGroupId, 'DESTINO'
-      ).row);
-
-    // ── CASO 4: SPLIT RECURRENTE ───────────────────────────────────
-    } else if (mov.esRecurrente && mov.esSplit) {
-      if (!mov.splitCuentaDestino) throw new Error('splitCuentaDestino es requerido para operaciones split.');
-      if (!(mov.periodos > 1)) throw new Error('Se requieren al menos 2 períodos para series recurrentes.');
-      const recurGroupId   = 'REC_' + generateUUID();
-      const importeDestino = mov.importe * pct;
-      const importeOrigen  = mov.importe * (1 - pct);
-
-      for (let i = 0; i < mov.periodos; i++) {
+      if (mov.esSplit && destinos.length > 0) {
         const splitGroupId = 'SPLIT_' + generateUUID();
-        const fechaISO     = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
+        // Generar Destinos
+        destinos.forEach(d => {
+          const importeDestino = mov.importe * d.pct;
+          rows.push(crearRegistroSQL(
+            d.cuenta, fechaISO, mov.idCategoria, mov.tipo,
+            desc, importeDestino, mov.medioPago,
+            seriesGroupId, splitGroupId, 'DESTINO'
+          ).row);
+        });
+        
+        // Generar Origen Remanente (si es > 0)
+        if (pctRetenido > 0) {
+          const importeOrigen = mov.importe * (pctRetenido / 100);
+          rows.push(crearRegistroSQL(
+            mov.idCuenta, fechaISO, mov.idCategoria, mov.tipo,
+            desc, importeOrigen, mov.medioPago,
+            seriesGroupId, splitGroupId, 'ORIGEN'
+          ).row);
+        } else {
+          // Si retuvo 0%, asigna 0 como traza lógica de salida
+          rows.push(crearRegistroSQL(
+            mov.idCuenta, fechaISO, mov.idCategoria, mov.tipo,
+            desc, 0, mov.medioPago,
+            seriesGroupId, splitGroupId, 'ORIGEN'
+          ).row);
+        }
 
+      } else {
+        // CASO NORMAL (Sin Split)
         rows.push(crearRegistroSQL(
           mov.idCuenta, fechaISO, mov.idCategoria, mov.tipo,
-          mov.descripcion, importeOrigen, mov.medioPago,
-          recurGroupId, splitGroupId, 'ORIGEN'
-        ).row);
-        rows.push(crearRegistroSQL(
-          mov.splitCuentaDestino, fechaISO, mov.idCategoria, mov.tipo,
-          mov.descripcion, importeDestino, mov.medioPago,
-          recurGroupId, splitGroupId, 'DESTINO'
+          desc, mov.importe, mov.medioPago,
+          seriesGroupId, null, null
         ).row);
       }
     }
@@ -291,7 +302,8 @@ function api_updateMovimiento(request) {
 
     const isOriginalRecurrente  = !!original.recurGroupId;
     const isOriginalSplit       = !!original.splitGroupId;
-    const isComplexityChanging  = mov.esRecurrente !== isOriginalRecurrente || mov.esSplit !== isOriginalSplit;
+    const isMovRecurrente       = mov.tipoConsumo === 'RECURRENTE' || mov.tipoConsumo === 'CUOTAS';
+    const isComplexityChanging  = isMovRecurrente !== isOriginalRecurrente || mov.esSplit !== isOriginalSplit;
 
     if (request.scope !== 'SINGLE' || isComplexityChanging) {
       // Edición compleja: delete-then-create
@@ -316,7 +328,7 @@ function api_updateMovimiento(request) {
 
       // Si se edita un ítem de una serie/grupo como SINGLE, aplanar a simple
       if (request.scope === 'SINGLE' && (isOriginalRecurrente || isOriginalSplit)) {
-        mov.esRecurrente = false;
+        mov.tipoConsumo  = 'COMUN';
         mov.esSplit      = false;
       }
 
@@ -346,3 +358,5 @@ function api_updateMovimiento(request) {
     return { success: false, error: e.message };
   }
 }
+
+*/

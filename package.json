@@ -1,0 +1,18 @@
+{
+  "name": "fluxo-finance",
+  "private": true,
+  "version": "6.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.42.0",
+    "chart.js": "^4.4.2"
+  }
+}

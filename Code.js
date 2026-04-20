@@ -36,7 +36,7 @@ const SUPABASE_URL = _scriptProps.getProperty('SUPABASE_URL');
 const SUPABASE_KEY = _scriptProps.getProperty('SUPABASE_ANON_KEY');
 
 const APP_VERSION = 'v5.0.0';
-const APP_NAME    = 'Sistema de Gestión Financiera';
+const APP_NAME    = 'Fluxo';
 
 // Validación en startup
 if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -103,7 +103,7 @@ function api_getInitialData() {
     const cuentas = pgSelect(
       'cuentas_principales',
       { activa: PG.eq('true') },
-      'id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_cc_activo,modulo_ahorro_activo,modulo_inversiones_activo,requiere_ajuste_cc_tc',
+      'id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_cc_activo,modulo_ahorro_activo,modulo_inversiones_activo',
       'es_predeterminada.desc,nombre.asc'
     );
     Logger.log('[Code → api_getInitialData → cuentas] ' + cuentas.length);
@@ -124,7 +124,15 @@ function api_getInitialData() {
     );
     Logger.log('[Code → api_getInitialData → tarjetas] ' + tarjetas.length);
 
-    return { success: true, cuentas: cuentas, categorias: categorias, tarjetas: tarjetas };
+    const usuarios_cc = pgSelect(
+      'cta_corriente_usuarios',
+      {},
+      '*',
+      'nombre.asc'
+    );
+    Logger.log('[Code → api_getInitialData → usuarios_cc] ' + usuarios_cc.length);
+
+    return { success: true, cuentas: cuentas, categorias: categorias, tarjetas: tarjetas, usuarios_cc: usuarios_cc };
 
   } catch (e) {
     Logger.log('[Code → api_getInitialData → ERROR] ' + e.message);
@@ -142,5 +150,66 @@ function api_getUserInfo() {
   } catch (e) {
     Logger.log('[Code → api_getUserInfo → ERROR] ' + e.message);
     return { success: false, email: 'Usuario no disponible' };
+  }
+}
+
+function api_getNotificaciones(idCuenta, mesYYYYMM) {
+  Logger.log('[Code → api_getNotificaciones → inicio] ' + mesYYYYMM);
+  try {
+    const notificaciones = [];
+    if (!mesYYYYMM || typeof mesYYYYMM !== 'string') {
+      return { success: true, data: notificaciones };
+    }
+    const trimmed = String(mesYYYYMM).trim();
+    const parts = trimmed.split('-');
+    if (parts.length < 2 || !parts[0] || !parts[1]) {
+      return { success: true, data: notificaciones };
+    }
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(y) || isNaN(m) || m < 1 || m > 12) {
+      return { success: true, data: notificaciones };
+    }
+    const dateStart = trimmed + '-01';
+    const endM = new Date(Date.UTC(y, m, 0));
+    if (isNaN(endM.getTime())) {
+      return { success: true, data: notificaciones };
+    }
+    const dateEnd = endM.toISOString().split('T')[0];
+
+    const consumos = pgRpc('get_consumos_tc_list', {
+      p_id_cuenta: idCuenta,
+      p_fecha_inicio: dateStart,
+      p_fecha_fin: dateEnd
+    });
+
+    if (consumos && consumos.length > 0) {
+      consumos.forEach(function(c) {
+         if (c.cuota_total > 1 && c.cuota_actual === c.cuota_total) {
+            notificaciones.push({
+               id: c.id_consumo_tarjeta + '_fin',
+               tipo: 'info',
+               icono: 'check_circle',
+               titulo: 'Última Cuota en Tarjeta',
+               mensaje: 'El consumo "' + c.descripcion + '" finaliza este mes.',
+               importe: c.importe
+            });
+         } else if (c.cuota_total > 1 && c.cuota_actual === 1) {
+            notificaciones.push({
+               id: c.id_consumo_tarjeta + '_nuevo',
+               tipo: 'ingreso',
+               icono: 'fiber_new',
+               titulo: 'Nuevo Consumo en Cuotas',
+               mensaje: 'Inicia la 1° cuota de "' + c.descripcion + '".',
+               importe: c.importe
+            });
+         }
+      });
+    }
+
+    return { success: true, data: notificaciones };
+  } catch (e) {
+    Logger.log('[Code → api_getNotificaciones → ERROR] ' + e.message);
+    return { success: false, error: e.message };
   }
 }

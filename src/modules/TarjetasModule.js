@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    module-tarjetas.html — v5.0.0
@@ -8,7 +7,7 @@
 
 // --- SECCIÓN 0: CLASE TarjetasModule ---
 
-class TarjetasModule extends BaseModule {
+export class TarjetasModule extends BaseModule {
 
   get moduleId() { return 'tarjetas'; }
   get vistaId()  { return 'vista-tarjetas'; }
@@ -47,9 +46,23 @@ class TarjetasModule extends BaseModule {
     this.#table?.showSkeleton(5);
 
     try {
-      const data = await App.API.cached('api_getConsumosTC', [cuenta, fechaInicio, fechaFin]);
-      this._render(data);
+      const resp = await App.API.swr(
+        'api_getConsumosTC',
+        [cuenta, fechaInicio, fechaFin],
+        App.API.defaultTtl,
+        (freshData) => { if (freshData && freshData.success) this._render(freshData); }
+      );
+      this._render(resp.data);
       App.Store.markModuloLoaded(this.moduleId);
+
+      // Fetch proyecciones silently
+      App.API.swr(
+        'api_getProyeccionTC',
+        [cuenta, mes],
+        App.API.defaultTtl,
+        (freshProy) => { if (freshProy && freshProy.success) this._renderProyecciones(freshProy); }
+      ).then(r => { if(r.data && r.data.success) this._renderProyecciones(r.data); });
+
     } catch (err) {
       App.error('TarjetasModule', 'cargar', 'Error', err);
       App.Toast.error('Error al cargar tarjetas: ' + err.message);
@@ -72,13 +85,38 @@ class TarjetasModule extends BaseModule {
     if (!this.#cuentas.length)    this.#cuentas    = App.Store.cuentas     || [];
 
     this.#kpiTotal?.setValue(kpis.saldoTotal);
-    this.#kpiImputado?.setValue(kpis.saldoImputado);
-    this.#kpiConsol?.setValue(kpis.saldoConsolidado, {
-      invertido: kpis.saldoConsolidado < 0
-    });
+    this.#kpiImputado?.setValue(kpis.incidenciaPersonal, { invertido: kpis.incidenciaPersonal < 0 });
+    this.#kpiConsol?.setValue(kpis.incidenciaFamiliar, { invertido: false });
 
     this.#table?.load(consumos || []);
     App.log('TarjetasModule', '_render', `${(consumos || []).length} consumos`);
+  }
+
+  _renderProyecciones(data) {
+     const wrap = document.getElementById('tc-proy-wrap');
+     if (!wrap) return;
+     if (!data.proyeccion || data.proyeccion.length === 0) {
+        wrap.innerHTML = `<div style="padding: 2rem;text-align:center;color:var(--texto-3)">No hay proyecciones futuras.</div>`;
+        return;
+     }
+
+     const rows = data.proyeccion.map(p => `
+        <div style="display:flex; justify-content:space-between; padding:var(--space-3); border-bottom:1px solid var(--border-color);">
+           <strong style="font-size:1.1rem; color:var(--texto-1)">${App.Utils.formatearMes(p.mes)}</strong>
+           <span class="negativo" style="font-size:1.1rem">${App.Utils.formatearMoneda(p.total)}</span>
+        </div>
+     `).join('');
+
+     wrap.innerHTML = `
+        <div style="padding:var(--space-3); border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:var(--space-2)">
+          <div style="flex-grow:1">
+            <h3 style="margin:0;color:var(--texto-1)">Proyección a 12 meses</h3>
+            <p style="margin:0;color:var(--texto-3);font-size:0.85rem">Totales consolidados pendientes de facturación en todos tus plásticos.</p>
+          </div>
+          ${App.Icons.get('trending_up', 'icon-md', { style: 'color:var(--kpi-amber)' })}
+        </div>
+        <div>${rows}</div>
+     `;
   }
 
   // --- SECCIÓN 3: BUILD DOM ---
@@ -91,20 +129,23 @@ class TarjetasModule extends BaseModule {
       <div class="kpi-grid" id="tc-kpi-grid"></div>
       <div class="section-header" style="margin-bottom:var(--space-3)">
         <div class="acciones-container" id="tc-acciones"></div>
+        <div class="selector-vista-container">
+          <button id="tc-btn-mes" class="btn btn-primary btn-vista active">Consumos del Mes</button>
+          <button id="tc-btn-proy" class="btn btn-ghost btn-vista">Proyecciones</button>
+        </div>
       </div>
       <div class="table-card" id="tc-tabla-wrap"></div>
+      <div class="table-card hidden" id="tc-proy-wrap">
+         <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando proyecciones...</div>
+      </div>
     `;
 
     const grid = document.getElementById('tc-kpi-grid');
-    this.#kpiTotal    = new App.KpiCard(grid, { titulo: 'Total Consumos', icono: 'card', colorClass: 'kpi-red',    onFormat: App.Utils.formatearMoneda });
-    this.#kpiImputado = new App.KpiCard(grid, { titulo: 'Imputado',       icono: 'card', colorClass: 'kpi-amber',  onFormat: App.Utils.formatearMoneda });
-    this.#kpiConsol   = new App.KpiCard(grid, { titulo: 'Consolidado',    icono: 'wallet',colorClass: 'kpi-blue',  onFormat: App.Utils.formatearMoneda });
+    this.#kpiTotal    = new App.KpiCard(grid, { titulo: 'Deuda Total',         icono: 'credit_card', colorClass: 'kpi-red',    onFormat: App.Utils.formatearMoneda });
+    this.#kpiImputado = new App.KpiCard(grid, { titulo: 'Incidencia Personal', icono: 'person',      colorClass: 'kpi-blue',   onFormat: App.Utils.formatearMoneda });
+    this.#kpiConsol   = new App.KpiCard(grid, { titulo: 'Incidencia Externa',  icono: 'groups',      colorClass: 'kpi-amber',  onFormat: App.Utils.formatearMoneda });
 
-    document.getElementById('tc-acciones').innerHTML = `
-      <button id="tc-btn-nuevo" class="btn btn-primary">
-        ${App.Icons.get('add', 'icon-sm')} Nuevo consumo
-      </button>
-    `;
+    document.getElementById('tc-acciones').innerHTML = '';
 
     this.#table = new App.DataTable(
       document.getElementById('tc-tabla-wrap'),
@@ -120,10 +161,10 @@ class TarjetasModule extends BaseModule {
             render: (r) => this.#renderDescripcion(r) },
           { key: 'importe',         label: 'Importe',   sortable: true, align: 'right',
             render: (r) => `<span class="negativo">${App.Utils.formatearMoneda(r.importe)}</span>` },
-          { key: 'imputado',        label: 'Estado',
+          { key: 'imputacion',      label: 'Imputación',
             render: (r) => r.imputado
-              ? `<span class="badge badge-neutro">Imputado</span>`
-              : `<span class="badge tipo-egreso">Pendiente</span>` },
+              ? `<span class="badge ${r.cuenta_imputada_nombre === 'Propios' ? 'badge-tc' : 'badge-recur'}">${r.cuenta_imputada_nombre}</span>`
+              : `<span class="badge badge-neutro">Sin Imputar</span>` },
           { key: '_acciones',       label: '', align: 'right', exportable: false,
             render: (r) => this.#renderAcciones(r) }
         ],
@@ -136,6 +177,10 @@ class TarjetasModule extends BaseModule {
   }
 
   // --- SECCIÓN 4: MODAL ---
+
+  abrirAlta() {
+    this.#abrirModalAlta();
+  }
 
   #abrirModalAlta() {
     this.#editData = null;
@@ -252,6 +297,27 @@ class TarjetasModule extends BaseModule {
               .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
               .join('')}
           </select>
+        </div>
+        <div class="form-group full-width">
+          <label class="form-switch">
+            <input type="checkbox" class="toggle-switch" name="compartir" id="tc-chk-compartir">
+            <span>Compartir gasto</span>
+          </label>
+        </div>
+        <div id="tc-compartir-opts" class="form-group full-width hidden">
+           <label>Contacto pagador alternativo</label>
+           <!-- Si pago yo y se lo reclamo a ella, dejo mi porcentaje en 50, y lo mando al CC de mi cuenta. -->
+           <p style="font-size:0.8rem;color:var(--texto-3);margin-top:0">Se creará automáticamente en Gastos Compartidos. Cargas qué % asumes vos del gasto.</p>
+           <label>Mi porcentaje asumido (%)</label>
+           <input class="input" type="number" name="compartir_porcentaje" min="1" max="99" value="50">
+        </div>
+        <div id="tc-imputar-opts" class="form-group full-width hidden">
+          <label>Cuenta destino</label>
+          <select class="input" name="cuenta_imputar">
+            ${this.#cuentas
+              .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
+              .join('')}
+          </select>
         </div>` : ''}
       </form>
     `;
@@ -301,6 +367,24 @@ class TarjetasModule extends BaseModule {
     modal.setLoading(true);
     try {
       if (!this.#editData) {
+        if (d.compartir === 'on') {
+          const ccPayload = {
+            idCuenta: App.Store.cuenta,
+            idCategoria: d.id_categoria,
+            fecha: d.fecha,
+            tipo: d.tipo_consumo || 'COMUN',
+            descripcion: d.descripcion + ' (Tarjeta)',
+            importe: Number(d.importe),
+            pagador: 'YO',
+            porcentajeImputado: Number(d.compartir_porcentaje || 50),
+            cuotaActual: Number(d.cuota_actual || 1),
+            cuotaTotal: Number(d.cuota_total || 1),
+            periodos: Number(d.periodos || 12)
+          };
+          const respCC = await App.API.call('api_createConsumoCC', ccPayload);
+          if (!respCC.success) throw new Error('Error al crear gasto compartido: ' + respCC.error);
+          App.Store.markModuloLoaded('cc', false);
+        }
         await this._handleCreate(payload, modal);
       } else {
         const req = {
@@ -347,6 +431,16 @@ class TarjetasModule extends BaseModule {
         
         if (btn.id === 'tc-btn-nuevo') {
           this.#abrirModalAlta();
+        } else if (btn.id === 'tc-btn-mes') {
+          document.getElementById('tc-btn-mes')?.classList.replace('btn-ghost', 'btn-primary');
+          document.getElementById('tc-btn-proy')?.classList.replace('btn-primary', 'btn-ghost');
+          document.getElementById('tc-tabla-wrap')?.classList.remove('hidden');
+          document.getElementById('tc-proy-wrap')?.classList.add('hidden');
+        } else if (btn.id === 'tc-btn-proy') {
+          document.getElementById('tc-btn-proy')?.classList.replace('btn-ghost', 'btn-primary');
+          document.getElementById('tc-btn-mes')?.classList.replace('btn-primary', 'btn-ghost');
+          document.getElementById('tc-proy-wrap')?.classList.remove('hidden');
+          document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
         }
       });
     }
@@ -396,6 +490,5 @@ class TarjetasModule extends BaseModule {
 }
 
 // --- REGISTRO ---
-App.Modules.tarjetas = new TarjetasModule();
+
 App.log('module-tarjetas', 'init', 'TarjetasModule registrado');
-</script>

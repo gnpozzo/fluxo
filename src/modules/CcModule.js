@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    module-cc.html — v5.0.0
@@ -46,12 +45,17 @@ class CCModule extends BaseModule {
     this.#table?.showSkeleton(5);
 
     try {
-      const data = await App.API.cached('api_getConsumosCC', [cuenta, fechaInicio, fechaFin]);
-      this._render(data);
+      const resp = await App.API.swr(
+        'api_getConsumosCC',
+        [cuenta, fechaInicio, fechaFin],
+        App.API.defaultTtl,
+        (freshData) => { if (freshData && freshData.success) this._render(freshData); }
+      );
+      this._render(resp.data);
       App.Store.markModuloLoaded(this.moduleId);
     } catch (err) {
       App.error('CCModule', 'cargar', 'Error', err);
-      App.Toast.error('Error al cargar cuenta corriente: ' + err.message);
+      App.Toast.error('Error al cargar gastos compartidos: ' + err.message);
     }
   }
 
@@ -67,7 +71,7 @@ class CCModule extends BaseModule {
 
     // Categorías y usuarios desde globales (cargados en boot)
     if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
-    // usuarios provienen del módulo de admin — se mantiene vacío hasta implementación futura
+    if (!this.#usuarios.length)   this.#usuarios   = window._appUsuariosCC || [];
 
     this.#kpiYo?.setValue(kpis.gastoYo);
     this.#kpiOtro?.setValue(kpis.gastoOtro);
@@ -96,11 +100,7 @@ class CCModule extends BaseModule {
     this.#kpiOtro = new App.KpiCard(grid, { titulo: 'Sus gastos',   icono: 'wallet',   colorClass: 'kpi-purple',onFormat: App.Utils.formatearMoneda });
     this.#kpiNeto = new App.KpiCard(grid, { titulo: 'Saldo neto',   icono: 'investment',colorClass: 'kpi-green', onFormat: App.Utils.formatearMoneda });
 
-    document.getElementById('cc-acciones').innerHTML = `
-      <button id="cc-btn-nuevo" class="btn btn-primary">
-        ${App.Icons.get('add', 'icon-sm')} Nuevo gasto compartido
-      </button>
-    `;
+    document.getElementById('cc-acciones').innerHTML = '';
 
     this.#table = new App.DataTable(
       document.getElementById('cc-tabla-wrap'),
@@ -131,6 +131,10 @@ class CCModule extends BaseModule {
 
   // --- SECCIÓN 4: MODAL ---
 
+  abrirAlta() {
+    this.#abrirModalAlta();
+  }
+
   #abrirModalAlta() {
     this.#editData = null;
     this.#modal.open({
@@ -160,7 +164,7 @@ class CCModule extends BaseModule {
       .join('');
 
     const optsU = this.#usuarios
-      .map(u => `<option value="${u.nombre}" ${data?.pagador === u.nombre ? 'selected':''}>${App.Utils.escapeHtml(u.nombre)}</option>`)
+      .map(u => `<option value="${u.id_usuario}" ${data?.id_usuario === u.id_usuario ? 'selected':''}>${App.Utils.escapeHtml(u.nombre)}</option>`)
       .join('');
 
     const rawFecha  = data
@@ -178,10 +182,18 @@ class CCModule extends BaseModule {
         </div>
 
         <div class="form-group">
-          <label>Pagador <span class="required-mark">*</span></label>
-          <select class="input" name="pagador" required>
-            <option value="">-- Seleccionar --</option>
+          <label>Contacto (Cuenta Corriente) <span class="required-mark">*</span></label>
+          <select class="input" name="id_usuario" required>
+            <option value="">-- Seleccionar Contacto --</option>
             ${optsU}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Quién pagó el gasto? <span class="required-mark">*</span></label>
+          <select class="input" name="pagador" required>
+            <option value="YO"   ${data?.pagador === 'YO'   || !data ? 'selected':''}>Lo pagué YO</option>
+            <option value="OTRO" ${data?.pagador === 'OTRO' ? 'selected':''}>Lo pagó el Contacto</option>
           </select>
         </div>
 
@@ -271,6 +283,7 @@ class CCModule extends BaseModule {
     const payload = {
       idCuenta      : App.Store.cuenta,
       fecha         : d.fecha,
+      idUsuario     : d.id_usuario,
       pagador       : d.pagador,
       idCategoria   : d.id_categoria,
       descripcion   : d.descripcion,
@@ -377,6 +390,5 @@ class CCModule extends BaseModule {
 }
 
 // --- REGISTRO ---
-App.Modules.cc = new CCModule();
+
 App.log('module-cc', 'init', 'CCModule registrado');
-</script>

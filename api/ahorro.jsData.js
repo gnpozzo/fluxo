@@ -1,3 +1,13 @@
+
+// [Origen -> api -> API_Ahorro.js]
+// Migración REST transicional (Las funciones contenían: 'use strict';/** * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Ahorro) * v5.0.0 * * Cam...)
+// Se debe migrar cada sub-función usando el supabase-js client tal como en getDashboardData.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Not allowed');
+  return res.status(501).json({ success: false, error: 'Endpoint sin transicionar. Por favor actualizar backend Edge.' });
+}
+/* CODIGO ORIGINAL MANTENIDO POR TRAZABILIDAD:
 'use strict';
 /**
  * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Ahorro)
@@ -50,8 +60,10 @@ function api_getAhorros(idCuenta, fechaInicio, fechaFin) {
       consolidadoArs: consolidadoArs
     };
 
+    const subcuentas = pgSelect('ahorro_subcuentas', {}, 'id_subcuenta,nombre,moneda', 'nombre.asc');
+
     Logger.log('[API_Ahorro → api_getAhorros → OK] movimientos:' + movimientos.length);
-    return { success: true, kpis: kpis, movimientos: movimientos, cotizacion: cotizacion };
+    return { success: true, kpis: kpis, transferencias: movimientos, cotizacion: cotizacion, subcuentas: subcuentas };
 
   } catch (e) {
     Logger.log('[API_Ahorro → api_getAhorros → ERROR] ' + e.message);
@@ -62,13 +74,14 @@ function api_getAhorros(idCuenta, fechaInicio, fechaFin) {
 function api_createAhorro(ahorroData) {
   Logger.log('[API_Ahorro → api_createAhorro → inicio] tipo:' + ahorroData.tipo_transfer + ' moneda:' + ahorroData.moneda);
   try {
-    validateRequired(ahorroData, ['idCuenta', 'fecha', 'tipo_transfer', 'moneda', 'importe']);
+    validateRequired(ahorroData, ['idCuenta', 'fecha', 'tipo_transfer', 'moneda', 'importe', 'idSubcuenta']);
 
     const idCuenta     = ahorroData.idCuenta;
     const fecha        = ahorroData.fecha;
     const tipo_transfer = ahorroData.tipo_transfer;
     const moneda       = ahorroData.moneda;
     const importe      = Number(ahorroData.importe);
+    const idSubcuenta  = ahorroData.idSubcuenta;
     const descripcion  = ahorroData.descripcion || '';
 
     const ID_CATEGORIA_AHORRO = 'CAT_AHORRO';
@@ -105,6 +118,7 @@ function api_createAhorro(ahorroData) {
       tipo_transfer:        tipo_transfer,
       moneda:               moneda,
       importe:              importe,
+      id_subcuenta:         idSubcuenta,
       descripcion:          sanitizeString(descripcion, 500)
       // created_at: DEFAULT now() en Postgres
     });
@@ -137,9 +151,10 @@ function api_updateAhorro(request) {
     validateRequired(request, ['id_ahorro', 'data']);
     const idAhorro = request.id_ahorro;
     const data     = request.data;
-    validateRequired(data, ['fecha', 'tipo_transfer', 'moneda', 'importe']);
+    validateRequired(data, ['fecha', 'tipo_transfer', 'moneda', 'importe', 'idSubcuenta']);
 
-    const importe = Number(data.importe);
+    const importe     = Number(data.importe);
+    const idSubcuenta = data.idSubcuenta;
 
     let importePrincipal = importe;
     let desc_principal   = data.tipo_transfer + ' de Ahorro (' + data.moneda + ') - ' + (data.descripcion || '');
@@ -161,6 +176,7 @@ function api_updateAhorro(request) {
       tipo_transfer: data.tipo_transfer,
       moneda:        data.moneda,
       importe:       importe,
+      id_subcuenta:  idSubcuenta,
       descripcion:   sanitizeString(data.descripcion || '', 500)
     });
 
@@ -200,3 +216,5 @@ function api_deleteAhorro(request) {
     return { success: false, error: e.message };
   }
 }
+
+*/

@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    app-store.html — v5.0.0
@@ -165,4 +164,3 @@ class AppStore {
 // --- REGISTRO EN NAMESPACE ---
 App.Store = new AppStore();
 App.log('app-store', 'init', 'App.Store registrado');
-</script>

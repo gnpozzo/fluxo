@@ -1,3 +1,13 @@
+
+// [Origen -> api -> API_CuentaCorriente.js]
+// Migración REST transicional (Las funciones contenían: 'use strict';/** * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Cuenta Corriente) * v5.0.0...)
+// Se debe migrar cada sub-función usando el supabase-js client tal como en getDashboardData.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Not allowed');
+  return res.status(501).json({ success: false, error: 'Endpoint sin transicionar. Por favor actualizar backend Edge.' });
+}
+/* CODIGO ORIGINAL MANTENIDO POR TRAZABILIDAD:
 'use strict';
 /**
  * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Cuenta Corriente)
@@ -30,6 +40,7 @@
  * @param {number}      opts.importe           - Importe.
  * @param {string}      opts.pagador           - 'YO' o 'OTRO'.
  * @param {number}      opts.porcentajeImputado- Porcentaje imputado (0-100).
+ * @param {string}      [opts.idUsuario]       - ID del contacto (usuario CC).
  * @param {string|null} [opts.recurGroupId]    - ID de grupo recurrente o de cuotas.
  * @param {number|null} [opts.nroCuota]        - Número de cuota (CUOTAS).
  * @param {number|null} [opts.totalCuotas]     - Total de cuotas (CUOTAS).
@@ -40,6 +51,7 @@ function buildCCInsert(opts) {
     id_cc_consumo:       opts.id,
     id_cuenta_principal: opts.idCuenta,
     id_categoria:        opts.idCategoria,
+    id_usuario:          opts.idUsuario || null,
     fecha:               opts.fechaISO,
     descripcion:         sanitizeString(opts.descripcion, 500),
     importe:             opts.importe,
@@ -88,7 +100,7 @@ function api_getConsumosCC(idCuenta, fechaInicio, fechaFin) {
 function api_createConsumoCC(consumo) {
   Logger.log('[API_CuentaCorriente → api_createConsumoCC → inicio] tipo:' + consumo.tipo);
   try {
-    validateRequired(consumo, ['idCuenta', 'idCategoria', 'fecha', 'tipo', 'importe', 'pagador', 'porcentajeImputado']);
+    validateRequired(consumo, ['idCuenta', 'idUsuario', 'idCategoria', 'fecha', 'tipo', 'importe', 'pagador', 'porcentajeImputado']);
 
     const ccItems     = [];
     const fechaBase   = new Date(consumo.fecha + 'T12:00:00Z');
@@ -100,6 +112,7 @@ function api_createConsumoCC(consumo) {
         id:                 generateUUID(),
         idCuenta:           consumo.idCuenta,
         idCategoria:        consumo.idCategoria,
+        idUsuario:          consumo.idUsuario,
         fechaISO:           fechaISO,
         descripcion:        consumo.descripcion,
         importe:            consumo.importe,
@@ -117,6 +130,7 @@ function api_createConsumoCC(consumo) {
           id:                 generateUUID(),
           idCuenta:           consumo.idCuenta,
           idCategoria:        consumo.idCategoria,
+          idUsuario:          consumo.idUsuario,
           fechaISO:           fechaISO,
           descripcion:        consumo.descripcion,
           importe:            consumo.importe,
@@ -137,6 +151,7 @@ function api_createConsumoCC(consumo) {
           id:                 generateUUID(),
           idCuenta:           consumo.idCuenta,
           idCategoria:        consumo.idCategoria,
+          idUsuario:          consumo.idUsuario,
           fechaISO:           fechaISO,
           descripcion:        consumo.descripcion,
           importe:            consumo.importe,
@@ -234,3 +249,5 @@ function api_deleteConsumoCC(request) {
     return { success: false, error: e.message };
   }
 }
+
+*/

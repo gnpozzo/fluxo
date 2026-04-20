@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    module-ahorro.html — v5.0.0
@@ -8,7 +7,7 @@
 
 // --- SECCIÓN 0: CLASE AhorroModule ---
 
-class AhorroModule extends BaseModule {
+export class AhorroModule extends BaseModule {
 
   get moduleId() { return 'ahorro'; }
   get vistaId()  { return 'vista-ahorro'; }
@@ -47,8 +46,13 @@ class AhorroModule extends BaseModule {
     this.#table?.showSkeleton(5);
 
     try {
-      const data = await App.API.cached('api_getAhorros', [cuenta, fechaInicio, fechaFin]);
-      this._render(data);
+      const resp = await App.API.swr(
+        'api_getAhorros',
+        [cuenta, fechaInicio, fechaFin],
+        App.API.defaultTtl,
+        (freshData) => { if (freshData && freshData.success) this._render(freshData); }
+      );
+      this._render(resp.data);
       App.Store.markModuloLoaded(this.moduleId);
     } catch (err) {
       App.error('AhorroModule', 'cargar', 'Error', err);
@@ -70,9 +74,11 @@ class AhorroModule extends BaseModule {
     const { kpis } = data;
     const tasa      = this.#cotizacion?.venta || 0;
 
-    this.#kpiArs?.setValue(kpis.arsTotal);
+    this.#kpiArs?.setValue(kpis.arsTotal, {
+      subtitulo: tasa ? `Eq: USD ${App.Utils.formatearMoneda(kpis.arsTotal / tasa, false)}` : ''
+    });
     this.#kpiUsd?.setValue(kpis.usdTotal, {
-      subtitulo: tasa ? `1 USD = $${App.Utils.formatearMoneda(tasa, false)}` : ''
+      subtitulo: tasa ? `Eq: ARS ${App.Utils.formatearMoneda(kpis.usdTotal * tasa, false)} (1 USD = $${App.Utils.formatearMoneda(tasa, false)})` : ''
     });
     this.#kpiConsol?.setValue(kpis.consolidadoArs, {
       subtitulo: this.#cotizacion?.fecha
@@ -344,6 +350,5 @@ class AhorroModule extends BaseModule {
 }
 
 // --- REGISTRO ---
-App.Modules.ahorro = new AhorroModule();
+
 App.log('module-ahorro', 'init', 'AhorroModule registrado');
-</script>

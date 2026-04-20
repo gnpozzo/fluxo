@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    module-movimientos.html — v5.1.0
@@ -8,7 +7,7 @@
 
 // --- SECCIÓN 0: CLASE MovimientosModule ---
 
-class MovimientosModule extends BaseModule {
+export class MovimientosModule extends BaseModule {
 
   // ── Identidad ─────────────────────────────────────────────
   get moduleId() { return 'movimientos'; }
@@ -53,11 +52,13 @@ class MovimientosModule extends BaseModule {
     this.#table?.showSkeleton(6);
 
     try {
-      const data = await App.API.cached(
+      const resp = await App.API.swr(
         'api_getDashboardData',
-        [cuenta, fechaInicio, fechaFin, requiereAjuste]
+        [cuenta, fechaInicio, fechaFin, requiereAjuste],
+        App.API.defaultTtl,
+        (freshData) => { if (freshData && freshData.success) this._render(freshData); }
       );
-      this._render(data);
+      this._render(resp.data);
       App.Store.markModuloLoaded(this.moduleId);
     } catch (err) {
       App.error('MovimientosModule', 'cargar', 'Error al cargar datos', err);
@@ -131,21 +132,14 @@ class MovimientosModule extends BaseModule {
     });
     this.#kpiResult   = new App.KpiCard(grid, {
       titulo    : 'Resultado',
-      icono     : 'wallet',
+      icono     : 'scale',
       colorClass: 'kpi-blue',
       onFormat  : App.Utils.formatearMoneda
     });
 
-    // Botones de acción
+    // Botones de acción eliminados en favor del FAB global
     const acciones = document.getElementById('mov-acciones');
-    acciones.innerHTML = `
-      <button id="mov-btn-ingreso" class="btn btn-success btn-pill">
-        ${App.Icons.get('add', 'icon-sm')} Ingreso
-      </button>
-      <button id="mov-btn-egreso" class="btn btn-danger btn-pill">
-        ${App.Icons.get('add', 'icon-sm')} Egreso
-      </button>
-    `;
+    acciones.innerHTML = '';
 
     // DataTable
     this.#table = new App.DataTable(
@@ -176,6 +170,10 @@ class MovimientosModule extends BaseModule {
   }
 
   // --- SECCIÓN 4: MODAL ALTA/EDICIÓN ---
+  
+  abrirAlta(tipo) {
+    this.#abrirModalAlta(tipo);
+  }
 
   #abrirModalAlta(tipo) {
     this.#editData = null;
@@ -215,6 +213,11 @@ class MovimientosModule extends BaseModule {
 
     const categoriasFiltradas = this.#categorias
       .filter(c => c.tipo_mov === tipo && c.activa);
+
+    const usuariosCC = window._appUsuariosCC || [];
+    const optsU = usuariosCC
+      .map(u => `<option value="${u.id_usuario}">${App.Utils.escapeHtml(u.nombre)}</option>`)
+      .join('');
 
     const optsCateg = categoriasFiltradas
       .map(c => `<option value="${c.id_categoria}"
@@ -294,14 +297,25 @@ class MovimientosModule extends BaseModule {
         ${!data ? `
         <!-- Opciones adicionales solo en alta -->
         <div class="form-group full-width">
-          <label class="form-switch">
-            <input type="checkbox" class="toggle-switch" name="es_recurrente" id="chk-recurrente">
-            <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Recurrente</span>
-          </label>
+          <label>Tipo de repetición</label>
+          <select class="input" name="tipo_consumo" id="mov-tipo-consumo">
+            <option value="COMUN">Única vez (Contado)</option>
+            <option value="CUOTAS">En Cuotas</option>
+            <option value="RECURRENTE">Recurrente</option>
+          </select>
         </div>
-        <div id="recur-opts" class="form-group full-width hidden">
-          <label>Cantidad de períodos</label>
-          <input class="input" type="number" name="periodos" min="2" max="60" value="12">
+
+        <div id="mov-cuotas-opts" class="form-group full-width hidden">
+          <label>Cuota actual / Total</label>
+          <div style="display:flex;gap:var(--space-2)">
+            <input class="input" type="number" name="cuota_actual" min="1" value="1" style="width:70px">
+            <input class="input" type="number" name="cuota_total"  min="2" value="12" style="width:70px">
+          </div>
+        </div>
+
+        <div id="mov-recur-opts" class="form-group full-width hidden">
+          <label>Cantidad de períodos adicionales</label>
+          <input class="input" type="number" name="periodos" min="2" max="120" value="12">
         </div>
         ${esIngreso ? `
         <div class="form-group full-width">
@@ -311,38 +325,80 @@ class MovimientosModule extends BaseModule {
           </label>
         </div>
         <div id="split-opts" class="form-group full-width hidden">
-          <div class="form-grid" style="gap:var(--space-3)">
+          <div class="form-grid" style="gap:var(--space-3); margin-bottom: var(--space-2);">
             <div class="form-group">
-              <label>Porcentaje para esta cuenta</label>
-              <input class="input" type="number" name="split_porcentaje" min="1" max="99" value="50">
-            </div>
-            <div class="form-group">
-              <label>Cuenta destino</label>
-              <select class="input" name="split_cuenta_destino">
-                ${this.#cuentas
-                  .filter(c => c.id_cuenta_principal !== App.Store.cuenta)
-                  .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
-                  .join('')}
+              <label>Cuenta de Distribución 1</label>
+              <select class="input" name="split_cuenta_destino_1">
+                <option value="">-- Ninguna --</option>
+                ${this.#cuentas.filter(c => c.id_cuenta_principal !== App.Store.cuenta).map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
               </select>
             </div>
+            <div class="form-group">
+              <label>Porcentaje (%) Destino 1</label>
+              <input class="input" type="number" name="split_porcentaje_1" min="1" max="99" value="40">
+            </div>
           </div>
-        </div>` : ''}
+          <div class="form-grid" style="gap:var(--space-3)">
+            <div class="form-group">
+              <label>Cuenta de Distribución 2</label>
+              <select class="input" name="split_cuenta_destino_2">
+                <option value="">-- Ninguna --</option>
+                ${this.#cuentas.filter(c => c.id_cuenta_principal !== App.Store.cuenta).map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Porcentaje (%) Destino 2</label>
+              <input class="input" type="number" name="split_porcentaje_2" min="1" max="99" value="">
+            </div>
+          </div>
+          <p style="font-size:0.8rem;color:var(--texto-3);margin-top:4px;">El remanente (hasta completar 100%) quedará en la cuenta actual.</p>
+        </div>` : `
+        <div class="form-group full-width">
+          <label class="form-switch">
+            <input type="checkbox" class="toggle-switch" name="compartir" id="mov-chk-compartir">
+            <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Compartir gasto</span>
+          </label>
+        </div>
+        <div id="mov-compartir-opts" class="form-group full-width hidden">
+           <div class="form-grid" style="gap:var(--space-3)">
+             <div class="form-group">
+               <label>Contacto <span class="required-mark">*</span></label>
+               <select class="input" name="compartir_contacto">
+                 <option value="">-- Seleccionar --</option>
+                 ${optsU}
+               </select>
+             </div>
+             <div class="form-group">
+               <label>Mi porcentaje asumido (%)</label>
+               <input class="input" type="number" name="compartir_porcentaje" min="1" max="99" value="50">
+             </div>
+           </div>
+           <p style="font-size:0.8rem;color:var(--texto-3);margin-top:4px;margin-bottom:0">Se descontará el porcentaje restante como deuda a cobrar en Gastos Compartidos con el contacto seleccionado.</p>
+        </div>
+        `}
         ` : '<!-- Edición: sin opciones de serie -->'}
       </form>
     `;
   }
 
   #postOpenForm() {
-    const chkRecur = document.getElementById('chk-recurrente');
-    const chkSplit = document.getElementById('chk-split');
-    if (chkRecur) {
-      chkRecur.addEventListener('change', () => {
-        document.getElementById('recur-opts')?.classList.toggle('hidden', !chkRecur.checked);
+    const selTipoConsumo = document.getElementById('mov-tipo-consumo');
+    if (selTipoConsumo) {
+      selTipoConsumo.addEventListener('change', () => {
+        document.getElementById('mov-cuotas-opts')?.classList.toggle('hidden', selTipoConsumo.value !== 'CUOTAS');
+        document.getElementById('mov-recur-opts')?.classList.toggle('hidden', selTipoConsumo.value !== 'RECURRENTE');
       });
     }
+    const chkSplit = document.getElementById('chk-split');
     if (chkSplit) {
       chkSplit.addEventListener('change', () => {
         document.getElementById('split-opts')?.classList.toggle('hidden', !chkSplit.checked);
+      });
+    }
+    const chkComp = document.getElementById('mov-chk-compartir');
+    if (chkComp) {
+      chkComp.addEventListener('change', () => {
+        document.getElementById('mov-compartir-opts')?.classList.toggle('hidden', !chkComp.checked);
       });
     }
   }
@@ -367,6 +423,24 @@ class MovimientosModule extends BaseModule {
       return;
     }
 
+    const esSplit = datos.es_split === 'on';
+    const splitDestinos = [];
+    if (esSplit) {
+      const p1 = Number(datos.split_porcentaje_1 || 0);
+      const c1 = datos.split_cuenta_destino_1;
+      const p2 = Number(datos.split_porcentaje_2 || 0);
+      const c2 = datos.split_cuenta_destino_2;
+
+      if (c1 && p1 > 0) splitDestinos.push({ cuenta: c1, pct: p1 });
+      if (c2 && p2 > 0) splitDestinos.push({ cuenta: c2, pct: p2 });
+
+      const sumPct = splitDestinos.reduce((sum, d) => sum + d.pct, 0);
+      if (sumPct >= 100) {
+         App.Toast.error('La suma de porcentajes de distribución no puede ser >= 100%.');
+         return;
+      }
+    }
+
     const payload = {
       idCuenta          : App.Store.cuenta,
       tipo              : datos.tipo,
@@ -375,36 +449,93 @@ class MovimientosModule extends BaseModule {
       descripcion       : datos.descripcion,
       importe           : Number(datos.importe),
       medioPago         : datos.medio_pago || 'transferencia',
-      esRecurrente      : datos.es_recurrente === 'on',
+      tipoConsumo       : datos.tipo_consumo || 'COMUN', // COMUN, CUOTAS, RECURRENTE
+      cuotaActual       : Number(datos.cuota_actual || 1),
+      cuotaTotal        : Number(datos.cuota_total || 2),
       periodos          : Number(datos.periodos || 12),
-      esSplit           : datos.es_split === 'on',
-      splitPorcentaje   : Number(datos.split_porcentaje || 50),
-      splitCuentaDestino: datos.split_cuenta_destino || ''
+      esSplit           : esSplit,
+      splitDestinos     : splitDestinos
     };
 
     modal.setLoading(true);
 
     try {
       if (!this.#editData) {
+        if (datos.compartir === 'on') {
+          const ccPayload = {
+            idCuenta: App.Store.cuenta,
+            idCategoria: datos.id_categoria,
+            fecha: datos.fecha,
+            tipo: 'COMUN',
+            descripcion: datos.descripcion,
+            importe: Number(datos.importe),
+            idUsuario: datos.compartir_contacto,
+            pagador: 'YO',
+            porcentajeImputado: Number(datos.compartir_porcentaje || 50),
+            cuotaActual: 1,
+            cuotaTotal: 1,
+            periodos: 12
+          };
+          const respCC = await App.API.call('api_createConsumoCC', ccPayload);
+          if (!respCC.success) throw new Error('Error al crear gasto compartido: ' + respCC.error);
+          App.Store.markModuloLoaded('cc', false);
+        }
         // _handleCreate ya cierra el modal, muestra toast, destruye y recarga
         await this._handleCreate(payload, modal);
       } else {
-        const req = {
-          data     : payload,
-          original : {
-            movimientoId : this.#editData.id_movimiento,
-            recurGroupId : this.#editData.recur_group_id || null,
-            splitGroupId : this.#editData.split_group_id || null,
-            fecha        : this.#editData.fecha?.value || this.#editData.fecha
-          },
-          scope: 'SINGLE'
+        const esSerio = !!this.#editData.recur_group_id || !!this.#editData.split_group_id;
+        
+        const doUpdate = async (scope) => {
+          modal.setLoading(true);
+          const req = {
+            data     : payload,
+            original : {
+              movimientoId : this.#editData.id_movimiento,
+              recurGroupId : this.#editData.recur_group_id || null,
+              splitGroupId : this.#editData.split_group_id || null,
+              fecha        : this.#editData.fecha?.value || this.#editData.fecha
+            },
+            scope: scope
+          };
+          try {
+            await this._handleUpdate(this.#editData.id_movimiento, req, modal);
+          } catch (err) {
+             modal.setLoading(false);
+             App.Toast.error(err.message || 'Error al guardar.');
+          }
         };
-        // _handleUpdate ya cierra el modal, muestra toast, destruye y recarga
-        await this._handleUpdate(this.#editData.id_movimiento, req, modal);
+
+        if (esSerio) {
+          modal.setLoading(false);
+          const confirmModal = new App.Modal('modal-mov-scope-edit');
+          confirmModal.open({
+            titulo      : 'Editar movimiento de serie',
+            body        : `
+              <p>Este movimiento pertenece a una serie. ¿Qué deseas actualizar?</p>
+              <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
+                <button class="btn btn-ghost" id="edit-single">Solo este movimiento</button>
+                <button class="btn btn-primary" id="edit-series">Este y los futuros (Serie)</button>
+              </div>`,
+            confirmLabel: '',
+            cancelLabel : 'Cancelar'
+          });
+          confirmModal.el.querySelector('.modal-confirm')?.remove();
+
+          document.getElementById('edit-single')?.addEventListener('click', () => {
+             confirmModal.close();
+             doUpdate('SINGLE');
+          });
+          document.getElementById('edit-series')?.addEventListener('click', () => {
+             confirmModal.close();
+             doUpdate('SERIES');
+          });
+        } else {
+          await doUpdate('SINGLE');
+        }
       }
     } catch (err) {
       modal.setLoading(false);
-      App.Toast.error(err.message || 'Error al guardar.');
+      App.Toast.error(err.message || 'Error al procesar.');
     }
   }
 
@@ -545,6 +676,5 @@ class MovimientosModule extends BaseModule {
 }
 
 // --- REGISTRO EN NAMESPACE ---
-App.Modules.movimientos = new MovimientosModule();
+
 App.log('module-movimientos', 'init', 'MovimientosModule registrado');
-</script>

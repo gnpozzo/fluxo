@@ -1,3 +1,13 @@
+
+// [Origen -> api -> API_Tarjetas.js]
+// Migración REST transicional (Las funciones contenían: 'use strict';/** * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Tarjetas) * v5.0.0 * * C...)
+// Se debe migrar cada sub-función usando el supabase-js client tal como en getDashboardData.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).send('Not allowed');
+  return res.status(501).json({ success: false, error: 'Endpoint sin transicionar. Por favor actualizar backend Edge.' });
+}
+/* CODIGO ORIGINAL MANTENIDO POR TRAZABILIDAD:
 'use strict';
 /**
  * SISTEMA DE GESTIÓN FINANCIERA - BACKEND (API Módulo Tarjetas)
@@ -64,18 +74,93 @@ function api_getConsumosTC(idCuenta, fechaInicio, fechaFin) {
       p_fecha_fin:    fechaFin
     });
 
-    const kpis = { saldoTotal: 0, saldoImputado: 0, saldoConsolidado: 0 };
+    const consumoIds = consumos.map(function(c) { return c.id_consumo_tarjeta; });
+    let movimientos = [];
+    if (consumoIds.length > 0) {
+      movimientos = pgSelect(
+        'movimientos', 
+        { id_consumo_tarjeta_origen: PG.in(consumoIds) }, 
+        'id_consumo_tarjeta_origen,id_cuenta_principal'
+      );
+    }
+    const mapMovs = {};
+    movimientos.forEach(function(m) { mapMovs[m.id_consumo_tarjeta_origen] = m; });
+
+    const kpis = { saldoTotal: 0, saldoImputadoPropio: 0, saldoImputadoOtro: 0 };
     consumos.forEach(function(c) {
       kpis.saldoTotal += c.importe;
-      if (c.id_movimiento_imputado) kpis.saldoImputado += c.importe;
+      const mov = mapMovs[c.id_consumo_tarjeta];
+      if (mov) {
+         if (mov.id_cuenta_principal === idCuenta) {
+           kpis.saldoImputadoPropio += c.importe;
+           c.cuenta_imputada_nombre = 'Propios';
+         } else {
+           kpis.saldoImputadoOtro += c.importe;
+           c.cuenta_imputada_nombre = 'Familiar / Otros';
+         }
+         c.imputado = true;
+      } else {
+         c.imputado = false;
+      }
     });
-    kpis.saldoConsolidado = kpis.saldoTotal - kpis.saldoImputado;
+    
+    kpis.incidenciaPersonal  = kpis.saldoTotal - kpis.saldoImputadoOtro;
+    kpis.incidenciaFamiliar  = kpis.saldoImputadoOtro;
 
     Logger.log('[API_Tarjetas → api_getConsumosTC → OK] consumos:' + consumos.length);
     return { success: true, kpis: kpis, consumos: consumos };
 
   } catch (e) {
     Logger.log('[API_Tarjetas → api_getConsumosTC → ERROR] ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+function api_getProyeccionTC(idCuenta, mesYYYYMM) {
+  Logger.log('[API_Tarjetas → api_getProyeccionTC → inicio] cuenta:' + idCuenta);
+  try {
+    if (!idCuenta || !mesYYYYMM) {
+      throw new Error('Faltan parámetros para la proyección.');
+    }
+
+    const start = new Date(mesYYYYMM + '-01T12:00:00Z');
+    const end = new Date(start);
+    end.setMonth(start.getMonth() + 12);
+    
+    // El fin de mes de 12 meses a futuro
+    end.setDate(0); 
+    const fechaFin = end.toISOString().split('T')[0];
+    const fechaInicio = start.toISOString().split('T')[0];
+
+    const consumos = pgRpc('get_consumos_tc_list', {
+      p_id_cuenta:    idCuenta,
+      p_fecha_inicio: fechaInicio,
+      p_fecha_fin:    fechaFin
+    });
+
+    const objMeses = {};
+    for (let i = 0; i < 12; i++) {
+       const m = new Date(start);
+       m.setMonth(start.getMonth() + i);
+       objMeses[m.toISOString().substring(0, 7)] = 0;
+    }
+
+    consumos.forEach(function(c) {
+       const mesStr = c.fecha.substring(0, 7);
+       if (objMeses[mesStr] !== undefined) {
+         objMeses[mesStr] += c.importe;
+       }
+    });
+
+    const proyeccion = Object.keys(objMeses).sort().map(function(m) {
+       return { mes: m, total: objMeses[m] };
+    });
+
+    Logger.log('[API_Tarjetas → api_getProyeccionTC → OK] Proyectados 12 meses');
+    return { success: true, proyeccion: proyeccion };
+
+  } catch (e) {
+    Logger.log('[API_Tarjetas → api_getProyeccionTC → ERROR] ' + e.message);
     return { success: false, error: e.message };
   }
 }
@@ -273,3 +358,5 @@ function api_deleteConsumoTC(request) {
     return { success: false, error: e.message };
   }
 }
+
+*/

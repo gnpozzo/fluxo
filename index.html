@@ -4,8 +4,8 @@
     <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Gestión Financiera</title>
-    <?!= include('css'); ?>
+    <title>Fluxo — Gestión Inteligente de Finanzas</title>
+    <link rel="stylesheet" href="/src/styles/main.css">
   </head>
   <body>
 
@@ -16,158 +16,181 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════════
-         SIDEBAR — Navegación lateral fija
+         SIDEBAR — Navegación principal
          ══════════════════════════════════════════════════════════ -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="app-sidebar">
 
-      <!-- Marca -->
-      <div class="sidebar-brand">
-        Sistema de Gestión<br>Financiera
+      <!-- Brand -->
+      <div class="sidebar-brand" style="justify-content:center;padding:20px 16px 16px">
+        <img src="https://i.imgur.com/FLSwshY.png" alt="Fluxo" style="width:160px;height:auto;object-fit:contain">
       </div>
 
-      <!-- Nav principal -->
-      <nav class="sidebar-nav" role="tablist" aria-label="Módulos">
-        <button id="tab-btn-movimientos" class="nav-item active"
-                data-vista="vista-movimientos" role="tab" aria-selected="true">
-          <span class="icon icon-sm" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/>
-            </svg>
-          </span>
+      <!-- Navigation -->
+      <nav class="sidebar-nav" id="sidebar-nav" role="tablist">
+        <button class="nav-item active" data-vista="vista-dashboard" role="tab" aria-selected="true" id="nav-btn-dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          Dashboard
+        </button>
+
+        <button class="nav-item" data-vista="vista-movimientos" role="tab" id="nav-btn-movimientos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/>
+          </svg>
           Movimientos
         </button>
 
-        <button id="tab-btn-tarjetas" class="nav-item"
-                data-vista="vista-tarjetas" role="tab" aria-selected="false">
-          <span class="icon icon-sm" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
-            </svg>
-          </span>
+        <button class="nav-item" data-vista="vista-tarjetas" role="tab" id="tab-btn-tarjetas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+          </svg>
           Tarjetas
         </button>
 
-        <button id="tab-btn-cc" class="nav-item"
-                data-vista="vista-cc" role="tab" aria-selected="false">
-          <span class="icon icon-sm" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-            </svg>
-          </span>
-          Cta. Corriente
+        <button class="nav-item" data-vista="vista-cc" role="tab" id="tab-btn-cc">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Gastos Comp.
         </button>
 
-        <button id="tab-btn-ahorro" class="nav-item"
-                data-vista="vista-ahorro" role="tab" aria-selected="false">
-          <span class="icon icon-sm" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-            </svg>
-          </span>
+        <button class="nav-item" data-vista="vista-ahorro" role="tab" id="tab-btn-ahorro">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>
+          </svg>
           Ahorro
         </button>
 
-        <button id="tab-btn-inversiones" class="nav-item"
-                data-vista="vista-inversiones" role="tab" aria-selected="false">
-          <span class="icon icon-sm" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
-            </svg>
-          </span>
+        <button class="nav-item" data-vista="vista-inversiones" role="tab" id="tab-btn-inversiones">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
           Inversiones
         </button>
       </nav>
 
-      <!-- Footer de versión -->
+      
+      <!-- Proplan Ad -->
+      <div class="sidebar-proplan" style="margin: 0 16px 16px; padding: 16px; background: rgba(79, 70, 229, 0.08); border-radius: 12px; text-align: center;">
+        <span style="display:block; font-size: 0.75rem; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 4px;">PROPLAN</span>
+        <span style="display:block; font-size: 0.85rem; font-weight: 600; color: var(--texto); margin-bottom: 12px;">Maximiza tu capital</span>
+        <button class="btn btn-primary btn-sm" style="width:100%; border-radius: 20px;">Actualizar</button>
+      </div>
+
+      <!-- Footer -->
       <div class="sidebar-footer">
-        <p id="footer-version">v5.0.0</p>
+        <button class="nav-item" id="btn-admin" title="Configuración" aria-label="Abrir configuración">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Ajustes
+        </button>
+        <button class="nav-item" id="btn-logout" title="Cerrar Sesión" aria-label="Cerrar sesión">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Cerrar Sesión
+        </button>
       </div>
     </aside>
 
+    <!-- Sidebar backdrop for mobile -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
     <!-- ══════════════════════════════════════════════════════════
-         MAIN WRAPPER — Topbar + Contenido
+         MAIN WRAPPER — Content area (right of sidebar)
          ══════════════════════════════════════════════════════════ -->
     <div class="main-wrapper">
 
-      <!-- ── TOPBAR ───────────────────────────────────────────── -->
-      <header class="topbar">
-
-        <!-- Búsqueda global -->
-        <div class="topbar-search">
-          <span class="icon icon-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      <!-- ── APP HEADER ────────────────────────────────────────── -->
+      <header class="app-header">
+        <div style="display:flex;align-items:center;gap:12px">
+          <!-- Mobile sidebar toggle -->
+          <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menú">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
-          </span>
-          <input type="text" id="topbar-search-input" placeholder="Buscar..." aria-label="Buscar">
+          </button>
+          <span class="app-header-title">Fluxo</span>
         </div>
-
-        <div class="topbar-spacer"></div>
-
-        <div class="topbar-actions">
-
-          <!-- Selector de mes -->
-          <input type="month" id="selector-mes" aria-label="Seleccionar mes">
-
-          <!-- Select oculto (fuente de verdad legacy) -->
-          <select id="selector-cuenta" class="hidden" aria-hidden="true"></select>
-
-          <!-- Account Toggle -->
-          <div id="account-switch-ui" class="account-switch-wrapper hidden"
-               role="group" aria-label="Seleccionar cuenta">
-            <span id="label-cuenta-1" class="account-label active">Cuenta 1</span>
-            <label class="account-toggle" aria-label="Cambiar cuenta">
-              <input type="checkbox" id="chk-cuenta-toggle">
-              <span class="slider"></span>
-            </label>
-            <span id="label-cuenta-2" class="account-label">Cuenta 2</span>
-          </div>
-
-          <!-- Tema toggle -->
-          <button id="btn-theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">
-            <span class="icon" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/>
-              </svg>
-            </span>
+        <div class="app-header-actions">
+          <!-- Notificaciones -->
+          <button id="btn-notifications" class="btn-icon-sm bell-icon" title="Notificaciones" aria-label="Notificaciones" style="position:relative;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span id="badge-notifications" style="display:none; position:absolute; top:-2px; right:-2px; width:10px; height:10px; background:var(--rojo); border-radius:50%; border:2px solid var(--superficie);"></span>
           </button>
 
-          <!-- Usuario (avatar + nombre) -->
+          <!-- Gemini AI -->
+          <button id="btn-gemini" class="btn-icon-sm btn-gemini" title="Asistente Gemini AI" aria-label="Abrir asistente Gemini">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
+
+          <!-- Dark mode toggle -->
+          <button id="btn-theme-toggle" class="btn-icon-sm" title="Cambiar tema" aria-label="Cambiar tema">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/>
+            </svg>
+          </button>
+
+          <!-- Config -->
+          <button id="btn-admin-header" class="btn-icon-sm" title="Configuración" aria-label="Abrir configuración">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+
+          <!-- Avatar -->
           <div class="topbar-user">
             <div class="topbar-avatar" id="topbar-avatar" aria-hidden="true">?</div>
             <span class="topbar-username" id="user-info-container" title="Usuario">—</span>
           </div>
-
-          <!-- Admin / Configuración -->
-          <button id="btn-admin" title="Configuración" aria-label="Abrir configuración">
-            <span class="icon" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" stroke-width="1.75"
-                   stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33
-                         1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33
-                         l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1
-                         0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65
-                         1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0
-                         0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51
-                         1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-              </svg>
-            </span>
-          </button>
-
         </div>
       </header>
 
       <!-- ── CONTENIDO PRINCIPAL ────────────────────────────── -->
       <main class="main-content">
-        <div id="vista-movimientos"  class="vista-container active" role="tabpanel"></div>
+
+        <!-- Welcome Bar -->
+        <div class="welcome-bar" id="welcome-bar">
+          <div class="welcome-greeting">
+            <h2 id="welcome-name">Hola</h2>
+            <p id="welcome-subtitle">Resumen de tu patrimonio</p>
+          </div>
+          <div class="welcome-controls">
+            <!-- Currency Pills -->
+            <div class="currency-pills" id="currency-pills" role="group" aria-label="Moneda">
+              <button class="currency-pill active" id="pill-ars" data-currency="ARS">ARS</button>
+              <button class="currency-pill" id="pill-usd" data-currency="USD">USD</button>
+            </div>
+
+            <!-- Account Selector -->
+            <div class="welcome-select-wrap" id="account-select-ui" style="display:none;">
+              <svg class="ws-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+              <select id="selector-cuenta" aria-label="Seleccionar cuenta"></select>
+            </div>
+
+            <!-- Month Selector -->
+            <div class="welcome-select-wrap">
+              <svg class="ws-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <input type="month" id="selector-mes" aria-label="Seleccionar mes">
+            </div>
+          </div>
+        </div>
+
+        <!-- Paneles de contenido (módulos) -->
+        <div id="vista-dashboard"     class="vista-container active" role="tabpanel"></div>
+        <div id="vista-movimientos"  class="vista-container"        role="tabpanel"></div>
         <div id="vista-tarjetas"     class="vista-container"        role="tabpanel"></div>
         <div id="vista-cc"           class="vista-container"        role="tabpanel"></div>
         <div id="vista-ahorro"       class="vista-container"        role="tabpanel"></div>
@@ -175,41 +198,90 @@
         <div id="vista-admin"        class="vista-container"        role="tabpanel"></div>
       </main>
 
+      <!-- FLOATING ACTION BUTTON (FAB) UNIVERSAL -->
+      <div class="fab-container">
+        <button id="btn-fab-quick-add" class="fab-button" aria-label="Carga Rápida">
+          <span class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </span>
+        </button>
+      </div>
+
     </div><!-- /.main-wrapper -->
+
+    <!-- ══════════════════════════════════════════════════════════
+         GEMINI AI CHATBOT PANEL
+         ══════════════════════════════════════════════════════════ -->
+    <div class="gemini-overlay" id="gemini-overlay"></div>
+    <div class="gemini-panel" id="gemini-panel">
+      <div class="gemini-panel-header">
+        <div class="gemini-panel-header-title">
+          <svg class="gemini-icon-inline gemini-sparkle-anim" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="#9B72CB" stroke="none"/>
+          </svg>
+          Gemini AI
+        </div>
+        <button class="gemini-panel-close" id="gemini-panel-close" aria-label="Cerrar panel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="gemini-panel-body">
+        <div class="gemini-panel-welcome">
+          <svg class="gemini-sparkle-large gemini-sparkle-anim" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="#9B72CB" stroke="none"/>
+          </svg>
+          <h3>Asistente Financiero</h3>
+          <p>Preguntame sobre tus finanzas, composición de cartera, patrones de gastos o cómo optimizar tu ahorro.</p>
+          <p style="margin-top:16px;font-size:0.78rem;color:var(--texto-3);font-style:italic">Próximamente disponible</p>
+        </div>
+      </div>
+      <div class="gemini-panel-footer">
+        <div class="gemini-input-wrap">
+          <input type="text" id="gemini-input" placeholder="Preguntá sobre tus finanzas..." disabled>
+          <button class="gemini-send-btn" disabled aria-label="Enviar" title="Próximamente">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- ================================================================
          SCRIPTS — Orden de carga obligatorio
          ================================================================ -->
 
     <!-- Fase 1: Infraestructura -->
-    <?!= include('app-bootstrap'); ?>
-    <?!= include('app-utils'); ?>
-    <?!= include('app-store'); ?>
-    <?!= include('app-events'); ?>
-    <?!= include('app-api'); ?>
-    <?!= include('app-icons'); ?>
+    
+    
+    
+    
+    
+    
 
     <!-- Fase 2: Componentes UI -->
-    <?!= include('component-toast'); ?>
-    <?!= include('component-modal'); ?>
-    <?!= include('component-datatable'); ?>
-    <?!= include('component-kpi-card'); ?>
-    <?!= include('component-form-validator'); ?>
+    
+    
+    
+    
+    
 
     <!-- Fase 3: Prefetch (después de App.API y App.Events) -->
-    <?!= include('app-prefetch'); ?>
+    
 
     <!-- Fase 4: Módulos -->
-    <?!= include('module-movimientos'); ?>
-    <?!= include('module-tarjetas'); ?>
-    <?!= include('module-cc'); ?>
-    <?!= include('module-ahorro'); ?>
-    <?!= include('module-inversiones'); ?>
-    <?!= include('module-admin'); ?>
-    <?!= include('module-dashboard'); ?>
+    
+    
+    
+    
+    
+    
+    
 
     <!-- Fase 5: Init (arranca la app — debe ir último) -->
-    <?!= include('app-init'); ?>
+    
 
     <!-- Script de tema (independiente, no necesita App.*) -->
     <script>
@@ -242,8 +314,51 @@
         sessionStorage.setItem(THEME_KEY, next);
         updateThemeIcon(next);
       });
+
+      // --- Sidebar toggle for mobile ---
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      const sidebar = document.getElementById('app-sidebar');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      
+      function closeSidebar() {
+        sidebar?.classList.remove('sidebar-open');
+        backdrop?.classList.remove('open');
+      }
+
+      sidebarToggle?.addEventListener('click', () => {
+        sidebar?.classList.toggle('sidebar-open');
+        backdrop?.classList.toggle('open');
+      });
+
+      backdrop?.addEventListener('click', closeSidebar);
+
+      // --- Gemini panel toggle ---
+      const btnGemini = document.getElementById('btn-gemini');
+      const geminiPanel = document.getElementById('gemini-panel');
+      const geminiOverlay = document.getElementById('gemini-overlay');
+      const geminiClose = document.getElementById('gemini-panel-close');
+
+      function openGemini() {
+        geminiPanel?.classList.add('open');
+        geminiOverlay?.classList.add('open');
+      }
+
+      function closeGemini() {
+        geminiPanel?.classList.remove('open');
+        geminiOverlay?.classList.remove('open');
+      }
+
+      btnGemini?.addEventListener('click', openGemini);
+      geminiClose?.addEventListener('click', closeGemini);
+      geminiOverlay?.addEventListener('click', closeGemini);
+
+      // --- Config header button (same as sidebar Ajustes) ---
+      document.getElementById('btn-admin-header')?.addEventListener('click', () => {
+        document.getElementById('btn-admin')?.click();
+      });
     })();
     </script>
 
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

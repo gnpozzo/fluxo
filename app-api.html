@@ -110,7 +110,8 @@ class GasApiClient {
         .catch((err) => {
           App.warn('GasApiClient', 'swr', `BG revalidation failed: ${fnName}`, err);
         });
-      return { data: cached, fromCache: true };
+      // Importante: Clonamos la data cacheada para evitar mutaciones 
+      return { data: typeof cached === 'object' && cached !== null ? JSON.parse(JSON.stringify(cached)) : cached, fromCache: true };
     }
 
     // Sin cache en absoluto: esperar GAS
@@ -166,8 +167,15 @@ class GasApiClient {
     Object.keys(sessionStorage)
       .filter(k => k.startsWith(prefix) && k.includes(pattern))
       .forEach(k => {
-        sessionStorage.removeItem(k);
-        App.log('GasApiClient', 'invalidatePattern', `Eliminado: ${k}`);
+        try {
+          const raw = sessionStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            parsed.expiresAt = 0; // Mark as immediately expired
+            sessionStorage.setItem(k, JSON.stringify(parsed));
+          }
+        } catch(e) {}
+        App.log('GasApiClient', 'invalidatePattern', `Expirado: ${k}`);
       });
   }
 
@@ -178,8 +186,17 @@ class GasApiClient {
     const prefix = this.#cachePrefix;
     Object.keys(sessionStorage)
       .filter(k => k.startsWith(prefix))
-      .forEach(k => sessionStorage.removeItem(k));
-    App.log('GasApiClient', 'invalidateAll', 'Cache limpiado completamente');
+      .forEach(k => {
+        try {
+          const raw = sessionStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            parsed.expiresAt = 0; // Mark as immediately expired
+            sessionStorage.setItem(k, JSON.stringify(parsed));
+          }
+        } catch(e) {}
+      });
+    App.log('GasApiClient', 'invalidateAll', 'Cache expirado completamente');
   }
 
   /**
@@ -253,6 +270,7 @@ App.API = new GasApiClient();
 // Invalidar cache cuando cambia cuenta o mes
 App.Events.on('store:cuenta-changed', () => App.API.invalidateAll());
 App.Events.on('store:mes-changed',    () => App.API.invalidateAll());
+App.Events.on('store:moneda-changed', () => App.API.invalidateAll());
 
 App.log('app-api', 'init', 'App.API registrado con cache sessionStorage');
 </script>
