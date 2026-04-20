@@ -71,8 +71,8 @@ window.App.Modules['movimientosmodule'] = new MovimientosModule();
 import { TarjetasModule } from './modules/TarjetasModule.js';
 window.App.Modules['tarjetasmodule'] = new TarjetasModule();
 
-import { CtaCorrienteModule } from './modules/CcModule.js';
-window.App.Modules['ctacorrientemodule'] = new CtaCorrienteModule();
+import { CCModule } from './modules/CcModule.js';
+window.App.Modules['cc'] = new CCModule();
 
 import { AhorroModule } from './modules/AhorroModule.js';
 window.App.Modules['ahorromodule'] = new AhorroModule();

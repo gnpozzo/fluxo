@@ -7,7 +7,7 @@
 
 // --- SECCIÓN 0: CLASE CCModule ---
 
-class CCModule extends BaseModule {
+export class CCModule extends BaseModule {
 
   get moduleId() { return 'cc'; }
   get vistaId()  { return 'vista-cc'; }
