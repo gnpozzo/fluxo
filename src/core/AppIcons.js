@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    app-icons.html — v5.0.0
@@ -270,4 +269,3 @@ class IconRegistry {
 // --- REGISTRO EN NAMESPACE ---
 App.Icons = new IconRegistry();
 App.log('app-icons', 'init', `App.Icons registrado — ${App.Icons.list().length} iconos`);
-</script>

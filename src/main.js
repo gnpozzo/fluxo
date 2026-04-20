@@ -18,6 +18,16 @@ import './core/AppStore.js';
 import './core/AppUtils.js';
 
 // 3. UI Components
+import { ToastManager } from './components/Toast.js';
+window.App.Toast = new ToastManager();
+import { Modal } from './components/Modal.js';
+window.App.Modal = Modal;
+import { DataTable } from './components/DataTable.js';
+window.App.DataTable = DataTable;
+import { FormValidator } from './components/FormValidator.js';
+window.App.FormValidator = FormValidator;
+import "./core/AppIcons.js";
+
 import { KpiCard } from './components/KpiCard.js';
 window.App.KpiCard = KpiCard;
 

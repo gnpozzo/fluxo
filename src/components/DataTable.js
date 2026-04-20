@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    component-datatable.html — v5.0.0
@@ -11,7 +10,7 @@
 
 // --- SECCIÓN 0: CLASE DataTable ---
 
-class DataTable {
+export class DataTable {
 
   #container;
   #config;
@@ -317,105 +316,3 @@ class DataTable {
 // Exportar clase al namespace
 App.DataTable = DataTable;
 App.log('component-datatable', 'init', 'App.DataTable (clase) registrada');
-</script>
-
-<style>
-/* ============================================================
-   DataTable styles
-   ============================================================ */
-
-.dt-toolbar {
-  display         : flex;
-  align-items     : center;
-  justify-content : space-between;
-  gap             : var(--space-3, 0.75rem);
-  margin-bottom   : var(--space-3, 0.75rem);
-  flex-wrap       : wrap;
-}
-
-.dt-search {
-  display     : flex;
-  align-items : center;
-  gap         : var(--space-2, 0.5rem);
-  position    : relative;
-}
-.dt-search .icon { position: absolute; left: var(--space-3, 0.75rem); color: var(--color-text-muted); }
-.dt-search-input { padding-left: calc(var(--space-3, 0.75rem) * 2 + 1rem); min-width: 220px; }
-
-.table-responsive { overflow-x: auto; }
-
-.table {
-  width          : 100%;
-  border-collapse: collapse;
-  font-size      : var(--text-sm, 0.875rem);
-}
-
-.table th {
-  padding         : var(--space-3, 0.75rem) var(--space-4, 1rem);
-  text-align      : left;
-  font-size       : var(--text-xs, 0.75rem);
-  font-weight     : 600;
-  text-transform  : uppercase;
-  letter-spacing  : 0.05em;
-  color           : var(--color-text-muted, #6b7280);
-  background      : var(--color-surface-alt, #f9fafb);
-  border-bottom   : 2px solid var(--color-border, #e5e7eb);
-  white-space     : nowrap;
-}
-
-.table th.sortable {
-  cursor      : pointer;
-  user-select : none;
-  transition  : color 0.15s;
-}
-.table th.sortable:hover { color: var(--color-primary, #2563eb); }
-.table th.sort-asc  .sort-icon,
-.table th.sort-desc .sort-icon { color: var(--color-primary, #2563eb); }
-.table th.sort-desc .sort-icon { transform: rotate(180deg); }
-
-.table td {
-  padding      : var(--space-3, 0.75rem) var(--space-4, 1rem);
-  border-bottom: 1px solid var(--color-border-light, #f3f4f6);
-  color        : var(--color-text, #111827);
-  vertical-align: middle;
-}
-
-.dt-row:hover td { background: var(--color-hover, #f9fafb); }
-.dt-row:last-child td { border-bottom: none; }
-
-.text-right  { text-align: right; }
-.text-center { text-align: center; }
-
-/* Empty state */
-.dt-empty-cell {
-  text-align  : center;
-  padding     : var(--space-12, 3rem) !important;
-  color       : var(--color-text-muted, #9ca3af);
-  display     : flex !important;
-  align-items : center;
-  justify-content: center;
-  gap         : var(--space-2, 0.5rem);
-}
-
-/* Pagination */
-.dt-pagination {
-  display         : flex;
-  align-items     : center;
-  justify-content : space-between;
-  padding         : var(--space-3, 0.75rem) 0;
-  font-size       : var(--text-sm, 0.875rem);
-  color           : var(--color-text-muted, #6b7280);
-}
-.dt-pag-controls {
-  display    : flex;
-  align-items: center;
-  gap        : var(--space-2, 0.5rem);
-}
-.dt-pag-current { font-weight: 500; color: var(--color-text, #111827); }
-
-/* Skeleton rows */
-.skeleton-row td { padding: var(--space-3, 0.75rem) var(--space-4, 1rem); }
-
-/* Sort icon */
-.sort-icon { display: inline-flex; margin-left: var(--space-1, 0.25rem); transition: transform 0.2s; }
-</style>

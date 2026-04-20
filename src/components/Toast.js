@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    component-toast.html — v5.0.0
@@ -9,7 +8,7 @@
 
 // --- SECCIÓN 0: CLASE ToastManager ---
 
-class ToastManager {
+export class ToastManager {
 
   #container = null;
   #defaultDuration = 4000;  // ms
@@ -135,80 +134,3 @@ class ToastManager {
 // --- REGISTRO EN NAMESPACE ---
 App.Toast = new ToastManager();
 App.log('component-toast', 'init', 'App.Toast registrado');
-</script>
-
-<style>
-/* ============================================================
-   Toast styles — inlined para carga inmediata
-   ============================================================ */
-
-#toast-container {
-  position   : fixed;
-  bottom     : var(--space-6, 1.5rem);
-  right      : var(--space-6, 1.5rem);
-  z-index    : var(--z-toast, 9000);
-  display    : flex;
-  flex-direction : column-reverse;
-  gap        : var(--space-3, 0.75rem);
-  max-width  : 420px;
-  pointer-events : none;
-}
-
-.toast {
-  display         : flex;
-  align-items     : center;
-  gap             : var(--space-3, 0.75rem);
-  padding         : var(--space-3, 0.75rem) var(--space-4, 1rem);
-  border-radius   : var(--radius-lg, 0.75rem);
-  box-shadow      : var(--shadow-lg, 0 8px 24px rgba(0,0,0,.18));
-  font-size       : var(--text-sm, 0.875rem);
-  font-weight     : 500;
-  line-height     : 1.4;
-  pointer-events  : all;
-  opacity         : 0;
-  transform       : translateX(110%);
-  transition      : none;
-  backdrop-filter : blur(8px);
-}
-
-.toast-visible {
-  animation : toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-.toast-leaving {
-  animation : toast-out 0.25s ease-in forwards;
-}
-
-@keyframes toast-in {
-  from { opacity: 0; transform: translateX(110%); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes toast-out {
-  from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(110%); }
-}
-
-.toast-success { background: var(--color-success-bg, #ecfdf5); color: var(--color-success, #059669); border-left: 3px solid var(--color-success, #059669); }
-.toast-error   { background: var(--color-error-bg,   #fef2f2); color: var(--color-error,   #dc2626); border-left: 3px solid var(--color-error,   #dc2626); }
-.toast-warning { background: var(--color-warning-bg, #fffbeb); color: var(--color-warning, #d97706); border-left: 3px solid var(--color-warning, #d97706); }
-.toast-info    { background: var(--color-info-bg,    #eff6ff); color: var(--color-info,    #2563eb); border-left: 3px solid var(--color-info,    #2563eb); }
-
-.toast-icon { flex-shrink: 0; }
-.toast-msg  { flex: 1; }
-
-.toast-close {
-  flex-shrink   : 0;
-  background    : transparent;
-  border        : none;
-  cursor        : pointer;
-  padding       : 2px;
-  border-radius : var(--radius-sm, 4px);
-  color         : inherit;
-  opacity       : 0.6;
-  transition    : opacity 0.15s;
-  display       : flex;
-  align-items   : center;
-}
-.toast-close:hover { opacity: 1; }
-</style>

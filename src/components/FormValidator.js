@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    component-form-validator.html — v5.0.0
@@ -9,7 +8,7 @@
 
 // --- SECCIÓN 0: CLASE FormValidator ---
 
-class FormValidator {
+export class FormValidator {
 
   #form;
   #rules    = {};
@@ -217,59 +216,3 @@ class FormValidator {
 // Exportar clase al namespace
 App.FormValidator = FormValidator;
 App.log('component-form-validator', 'init', 'App.FormValidator (clase) registrada');
-</script>
-
-<style>
-/* ============================================================
-   FormValidator styles
-   ============================================================ */
-
-.input-error {
-  border-color : var(--color-error, #dc2626) !important;
-  background   : #fff5f5 !important;
-  box-shadow   : 0 0 0 3px rgba(220, 38, 38, 0.12) !important;
-}
-.input-error:focus {
-  outline      : none;
-  border-color : var(--color-error, #dc2626) !important;
-  box-shadow   : 0 0 0 3px rgba(220, 38, 38, 0.25) !important;
-}
-
-.field-error-msg {
-  display     : block;
-  font-size   : var(--text-xs, 0.75rem);
-  color       : var(--color-error, #dc2626);
-  margin-top  : var(--space-1, 0.25rem);
-  font-weight : 500;
-  animation   : fade-in 0.2s ease;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Form layout helpers */
-.form-grid {
-  display               : grid;
-  grid-template-columns : repeat(auto-fit, minmax(220px, 1fr));
-  gap                   : var(--space-4, 1rem);
-}
-
-.form-group {
-  display        : flex;
-  flex-direction : column;
-  gap            : var(--space-1, 0.25rem);
-}
-
-.form-group label {
-  font-size   : var(--text-sm, 0.875rem);
-  font-weight : 500;
-  color       : var(--color-text, #374151);
-}
-
-.form-group label .required-mark {
-  color       : var(--color-error, #dc2626);
-  margin-left : 2px;
-}
-</style>

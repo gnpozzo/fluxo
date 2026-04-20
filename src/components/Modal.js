@@ -1,4 +1,3 @@
-<script>
 'use strict';
 /* ============================================================
    component-modal.html — v5.0.0
@@ -9,7 +8,7 @@
 
 // --- SECCIÓN 0: CLASE Modal ---
 
-class Modal {
+export class Modal {
 
   #id;
   #el       = null;
@@ -195,105 +194,3 @@ class Modal {
 // Exportar clase al namespace para que los módulos la instancien
 App.Modal = Modal;
 App.log('component-modal', 'init', 'App.Modal (clase) registrada');
-</script>
-
-<style>
-/* ============================================================
-   Modal styles
-   ============================================================ */
-
-.modal-overlay {
-  display         : none;
-  position        : fixed;
-  inset           : 0;
-  z-index         : var(--z-modal, 8000);
-  background      : rgba(0, 0, 0, 0.5);
-  backdrop-filter : blur(4px);
-  align-items     : center;
-  justify-content : center;
-  padding         : var(--space-4, 1rem);
-  animation       : modal-bg-in 0.2s ease forwards;
-}
-
-.modal-overlay.modal-open {
-  display : flex;
-}
-
-@keyframes modal-bg-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-/* Tamaños */
-.modal-dialog       { width: 100%; }
-.modal-sm           { max-width: 400px; }
-.modal-md           { max-width: 560px; }
-.modal-lg           { max-width: 720px; }
-.modal-xl           { max-width: 960px; }
-
-.modal-container {
-  background    : var(--color-surface, #fff);
-  border-radius : var(--radius-xl, 1rem);
-  box-shadow    : var(--shadow-xl, 0 20px 60px rgba(0,0,0,.25));
-  overflow      : hidden;
-  animation     : modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  max-height    : calc(100vh - 2rem);
-  display       : flex;
-  flex-direction: column;
-}
-
-@keyframes modal-in {
-  from { opacity: 0; transform: scale(0.92) translateY(8px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.modal-header {
-  display         : flex;
-  align-items     : center;
-  justify-content : space-between;
-  padding         : var(--space-4, 1rem) var(--space-5, 1.25rem);
-  border-bottom   : 1px solid var(--color-border, #e5e7eb);
-  flex-shrink     : 0;
-}
-
-.modal-title {
-  font-size   : var(--text-lg, 1.125rem);
-  font-weight : 600;
-  color       : var(--color-text, #111827);
-  margin      : 0;
-}
-
-.modal-body {
-  padding    : var(--space-5, 1.25rem);
-  overflow-y : auto;
-  flex       : 1;
-}
-
-.modal-footer {
-  display         : flex;
-  justify-content : flex-end;
-  gap             : var(--space-3, 0.75rem);
-  padding         : var(--space-4, 1rem) var(--space-5, 1.25rem);
-  border-top      : 1px solid var(--color-border, #e5e7eb);
-  flex-shrink     : 0;
-}
-
-body.modal-active { overflow: hidden; }
-
-/* Botón X */
-.modal-x {
-  background    : transparent;
-  border        : none;
-  cursor        : pointer;
-  padding       : var(--space-1, 0.25rem);
-  border-radius : var(--radius-md, 0.5rem);
-  color         : var(--color-text-muted, #6b7280);
-  transition    : background 0.15s, color 0.15s;
-  display       : flex;
-  align-items   : center;
-}
-.modal-x:hover {
-  background : var(--color-hover, #f3f4f6);
-  color      : var(--color-text, #111827);
-}
-</style>
