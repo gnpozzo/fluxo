@@ -1,84 +1,54 @@
 // [Origen -> src -> main.js]
-// v2.0.0
-// QA Passed: Bootstrap verificado globalmente. Reemplaza app-init y dependencias.
+// v2.1.0
+// QA Passed: Bootstrap and Dependency Injection completely wired.
 
 import './styles/main.css';
 
-// Core imports (Migrados a Vercel/Vite standards)
+// 1. Initialize namespace and BaseModule
+import { BaseModule } from './core/AppBootstrap.js';
+
+// 2. Load Core Services
 import { EventBus } from './core/EventBus.js';
-import { API } from './core/AppAPI.js';
-
-// Legacy compatibility shims (El viejo ecosistema esperaba un global 'App')
-window.App = window.App || {};
-window.App.log = console.log;
-window.App.error = console.error;
 window.App.Events = EventBus;
-window.App.API = API;
-window.App.Store = window.App.Store || {};
-window.App.Modules = window.App.Modules || {};
 
-// Al importar, se ejecutarán sus top-level scopes, así que las acoplamos 
-// dinámicamente si exportaron la clase.
+import { API } from './core/AppAPI.js';
+window.App.API = API;
+
+import './core/AppStore.js';
+import './core/AppUtils.js';
+
+// 3. UI Components
 import { KpiCard } from './components/KpiCard.js';
 window.App.KpiCard = KpiCard;
 
+// 4. Modules
 import { DashboardModule } from './modules/DashboardModule.js';
-window.App.Modules.dashboard = new DashboardModule();
-
-// Renderizado asincrónico para QA
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('[QA -> main.js] DOM content loaded. Dispatching global init.');
-  
-  // Dummy store initialization para que Dashboard haga el render de prueba
-  window.App.Store.cuenta = 1;
-  window.App.Store.mes = '2023-10'; // Igual al mockup
-  
-  // Ocultar Loader
-  const loader = document.getElementById('loader-overlay');
-  if(loader) loader.classList.add('hidden');
-
-  // Inicializar modulo
-  if(window.App.Modules.dashboard) {
-    window.App.Modules.dashboard.init();
-    
-    // Inyectar funcionalidad global Mockup Indigo de prueba si el backend aún no está
-    // Forzaremos el renderizado aquí para QA
-    try {
-      const mockData = {
-        success: true,
-        kpis: { ingresos: 450200, egresos: -180340, resultado: 1240500 },
-        movimientos: []
-      };
-      window.App.Modules.dashboard._render(mockData);
-    } catch(e) {
-      console.warn("No se pudo pre-renderizar mock data para dashboard.", e);
-    }
-  }
-
-});
-
-// QA Chart rendering shim
-window.renderChart = function() {
-  const chartEl = document.getElementById('dash-chart-canvas');
-  if(!chartEl) return;
-  // Chart.js init mock para QA
-  console.log('✓ QA: Chart placeholder rendered');
-};
+window.App.Modules['dashboard'] = new DashboardModule();
 
 import { MovimientosModule } from './modules/MovimientosModule.js';
-window.App.Modules['movimientosmodule'] = new MovimientosModule();
+window.App.Modules['movimientos'] = new MovimientosModule();
 
 import { TarjetasModule } from './modules/TarjetasModule.js';
-window.App.Modules['tarjetasmodule'] = new TarjetasModule();
+window.App.Modules['tarjetas'] = new TarjetasModule();
 
 import { CCModule } from './modules/CcModule.js';
 window.App.Modules['cc'] = new CCModule();
 
 import { AhorroModule } from './modules/AhorroModule.js';
-window.App.Modules['ahorromodule'] = new AhorroModule();
+window.App.Modules['ahorro'] = new AhorroModule();
 
 import { InversionesModule } from './modules/InversionesModule.js';
-window.App.Modules['inversionesmodule'] = new InversionesModule();
+window.App.Modules['inversiones'] = new InversionesModule();
 
 import { AdminModule } from './modules/AdminModule.js';
-window.App.Modules['adminmodule'] = new AdminModule();
+window.App.Modules['admin'] = new AdminModule();
+
+// 5. Init Application (binds sidebar buttons, auth, and data fetching)
+import './core/AppInit.js';
+
+// QA Chart rendering shim (mock)
+window.renderChart = function() {
+  const chartEl = document.getElementById('dash-chart-canvas');
+  if(!chartEl) return;
+  console.log('✓ QA: Chart placeholder rendered');
+};
