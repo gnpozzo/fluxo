@@ -36,6 +36,18 @@ class AuthService {
     return data;
   }
 
+  async loginWithGoogle() {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) throw error;
+    // OAuth redirige la página, así que la sesión se cargará en el próximo init()
+    return data;
+  }
+
   async signUp(email, password) {
     const { data, error } = await supabase.auth.signUp({
       email,
