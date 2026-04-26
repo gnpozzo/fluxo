@@ -1,10 +1,8 @@
 // [Origen -> src/core -> Auth.js]
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock_key';
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Cliente de Supabase inicialmente null, se construye dinámicamente
+export let supabase = null;
 
 class AuthService {
   constructor() {
@@ -13,6 +11,24 @@ class AuthService {
   }
 
   async init() {
+    // 1. Obtener la configuración dinámica de lado del servidor
+    // Esto previene fallos si VITE_SUPABASE_URL no está seteado pre-build en Vercel
+    try {
+      const res = await fetch('/api/getConfig');
+      const config = await res.json();
+      const url = config.url || 'https://mock.supabase.co';
+      const anonKey = config.anonKey || 'mock_key';
+      
+      supabase = createClient(url, anonKey);
+    } catch (err) {
+      console.error('Error fetching Supabase Config:', err);
+      // Fallback a build-time estático
+      const url = import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co';
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock_key';
+      supabase = createClient(url, anonKey);
+    }
+
+    // 2. Extraer sesión usando SDK inicializado
     const { data, error } = await supabase.auth.getSession();
     if (error) {
       console.error('Auth error on init:', error.message);
@@ -22,7 +38,16 @@ class AuthService {
       this.user = data.session.user;
       return true;
     }
-    return false;
+    
+    // Check for Auth callback in URL (OAuth redirect)
+    const { data: cbData, error: cbError } = await supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        this.session = session;
+        this.user = session?.user;
+      }
+    });
+
+    return !!this.session;
   }
 
   async login(email, password) {
