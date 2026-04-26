@@ -30,14 +30,32 @@ export default async function handler(req, res) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   try {
-    const { cuenta, fechaInicio, fechaFin } = req.body;
+    let finalArgs = [];
+    if (Array.isArray(req.body)) {
+      finalArgs = req.body;
+    } else if (req.body && Array.isArray(req.body.args)) {
+      finalArgs = req.body.args;
+    } else if (typeof req.body === 'string') {
+      try { finalArgs = JSON.parse(req.body); if (finalArgs.args) finalArgs = finalArgs.args; } catch(e){}
+    }
+    const [cuenta, fechaInicio, fechaFin] = finalArgs;
 
-    // Emulación del RPC consolidado que usaba GAS (pgRpc)
-    const { data: movimientos, error: movError } = await supabase.rpc('get_movimientos_dashboard', {
-      p_id_cuenta: cuenta,
-      p_fecha_inicio: fechaInicio,
-      p_fecha_fin: fechaFin
-    });
+    if (!cuenta) throw new Error("Parámetros insuficientes");
+
+    const { data: movimientos, error: movError } = await supabase
+      .from('movimientos')
+      .select('*, categorias (nombre)')
+      .eq('id_cuenta_principal', cuenta)
+      .gte('fecha', fechaInicio)
+      .lte('fecha', fechaFin)
+      .order('fecha', { ascending: false });
+
+    // Map categorization name
+    if (movimientos) {
+      movimientos.forEach(m => {
+        m.categoria_nombre = m.categorias?.nombre || 'General';
+      });
+    }
 
     if (movError) throw movError;
 

@@ -11,6 +11,9 @@ import { BaseModule } from './core/AppBootstrap.js';
 import { EventBus } from './core/EventBus.js';
 window.App.Events = EventBus;
 
+import { Auth } from './core/Auth.js';
+window.App.Auth = Auth;
+
 import { API } from './core/AppAPI.js';
 window.App.API = API;
 

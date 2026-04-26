@@ -33,6 +33,48 @@ class AppInit {
     this.#mostrarLoader();
     this.#setDefaultMes();
 
+    // Check Auth Session
+    const isLogged = await App.Auth.init();
+    if (!isLogged) {
+      this.#ocultarLoader();
+      this.#showLoginUI();
+      return;
+    }
+    
+    this.#proceedWithBoot();
+  }
+
+  #showLoginUI() {
+    const overlay = document.getElementById('login-overlay');
+    const form = document.getElementById('form-login');
+    const btn = form.querySelector('button[type="submit"]');
+    
+    overlay.style.display = 'flex';
+    document.querySelector('.main-wrapper').style.display = 'none';
+    document.getElementById('app-sidebar').style.display = 'none';
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loader-spinner" style="width:20px;height:20px;"></div> Ingresando...';
+      try {
+        const email = document.getElementById('login-email').value;
+        const pwd = document.getElementById('login-password').value;
+        await App.Auth.login(email, pwd);
+        overlay.style.display = 'none';
+        document.querySelector('.main-wrapper').style.display = '';
+        document.getElementById('app-sidebar').style.display = 'flex';
+        this.#mostrarLoader();
+        this.#proceedWithBoot();
+      } catch (err) {
+        App.Toast.error(err.message || 'Credenciales incorrectas');
+        btn.disabled = false;
+        btn.innerHTML = 'Ingresar';
+      }
+    };
+  }
+
+  async #proceedWithBoot() {
     try {
       // Carga inicial: datos maestros y cotización Dólar
       const [initialData, pDolar] = await Promise.all([
@@ -105,6 +147,17 @@ class AppInit {
       }
 
       App.log('AppInit', 'boot', 'Inicialización completada');
+
+      // Bind logout
+      const btnLogout = document.getElementById('btn-logout');
+      if (btnLogout) {
+         btnLogout.addEventListener('click', async () => {
+           if(confirm('¿Seguro que quieres cerrar sesión?')) {
+             await App.Auth.logout();
+             window.location.reload();
+           }
+         });
+      }
 
     } catch (err) {
       App.error('AppInit', 'boot', 'Error fatal en boot', err);
@@ -293,8 +346,10 @@ class AppInit {
     });
 
     // Botón Admin (no es tab) - Lo vincula module-admin.html
-    // document.getElementById('btn-admin')
-    //  ?.addEventListener('click', () => App.Modules.admin?.cargar());
+    const adminBtn = document.getElementById('btn-admin');
+    if (adminBtn) {
+      adminBtn.addEventListener('click', () => this.#navegarTab('vista-admin'));
+    }
 
     App.log('AppInit', '#initModulos', `${Object.keys(App.Modules).length} módulos inicializados`);
   }

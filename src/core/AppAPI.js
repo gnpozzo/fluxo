@@ -64,12 +64,27 @@ class ApiService {
   // --- CORE DE RED ---
 
   async #internalFetch(endpoint, method = 'POST', bodyFields = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (window.App && window.App.Auth) {
+      const token = window.App.Auth.getToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
+    // If bodyFields contains an 'args' array (from call(...args)), send it directly
+    // This allows edge functions to destructure like: const [arg1, arg2] = req.body;
+    let finalBody = bodyFields;
+    if (bodyFields.args) {
+      finalBody = bodyFields.args;
+    }
+
     const response = await fetch(endpoint, {
       method: method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(bodyFields.args ? bodyFields.args[0] : bodyFields)
+      headers: headers,
+      body: JSON.stringify(finalBody)
     });
 
     if (!response.ok) {
