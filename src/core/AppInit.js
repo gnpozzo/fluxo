@@ -72,6 +72,42 @@ class AppInit {
         btn.innerHTML = 'Ingresar';
       }
     };
+
+    const regBtn = document.getElementById('btn-register-submit');
+    if (regBtn) {
+      regBtn.onclick = async () => {
+        regBtn.disabled = true;
+        regBtn.innerHTML = 'Creando...';
+        try {
+          const email = document.getElementById('login-email').value;
+          const pwd = document.getElementById('login-password').value;
+          if (!email || pwd.length < 6) {
+             App.Toast.error('Ingresa un email y una contraseña (mín. 6 chars)');
+             regBtn.disabled = false;
+             regBtn.innerHTML = 'Crear Cuenta';
+             return;
+          }
+          await App.Auth.signUp(email, pwd);
+          
+          // Auto login after creating if session exists OR show success message
+          if (App.Auth.session) {
+             overlay.style.display = 'none';
+             document.querySelector('.main-wrapper').style.display = '';
+             document.getElementById('app-sidebar').style.display = 'flex';
+             this.#mostrarLoader();
+             this.#proceedWithBoot();
+          } else {
+             App.Toast.success('Registrado con éxito. Revisa el email o inicia sesión.');
+             regBtn.disabled = false;
+             regBtn.innerHTML = 'Crear Cuenta';
+          }
+        } catch (err) {
+          App.Toast.error(err.message || 'Error al crear cuenta');
+          regBtn.disabled = false;
+          regBtn.innerHTML = 'Crear Cuenta';
+        }
+      };
+    }
   }
 
   async #proceedWithBoot() {

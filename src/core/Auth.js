@@ -36,6 +36,17 @@ class AuthService {
     return data;
   }
 
+  async signUp(email, password) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password
+    });
+    if (error) throw error;
+    this.session = data.session;
+    this.user = data.session.user;
+    return data;
+  }
+
   async logout() {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
