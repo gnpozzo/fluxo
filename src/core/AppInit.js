@@ -126,6 +126,9 @@ class AppInit {
   }
 
   async #proceedWithBoot() {
+    // Always initialize modules (binds navigation buttons) first, so UI isn't dead on DB errors
+    this.#initModulos();
+
     try {
       // Carga inicial: datos maestros y cotización Dólar
       const [initialData, pDolar] = await Promise.all([
@@ -139,7 +142,7 @@ class AppInit {
       }
 
       if (!initialData?.success) {
-        App.Toast.error(initialData?.error || 'Error al cargar datos iniciales.');
+        App.Toast.error(initialData?.error || 'Error al cargar datos iniciales. Revisa tu base de datos.');
         this.#ocultarLoader();
         return;
       }
@@ -183,9 +186,6 @@ class AppInit {
       // Configurar Centro de Notificaciones
       this.#setupNotifications();
       this.#cargarNotificaciones();
-
-      // Inicializar todos los módulos
-      this.#initModulos();
 
       this.#ocultarLoader();
 
