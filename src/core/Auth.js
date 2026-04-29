@@ -42,22 +42,28 @@ class AuthService {
       return true;
     }
     
-    // Check for Auth callback in URL (OAuth redirect)
-    // Supabase procesa el hash de la URL de manera asíncrona. 
-    // Si vemos que hay un access_token en la URL, esperamos a que Supabase termine de validarlo.
+    // Supabase procesa el hash de la URL de manera asíncrona, pero a veces falla por condiciones de carrera.
+    // Si vemos que hay un access_token en la URL, lo extraemos e iniciamos la sesión manualmente.
     if (window.location.hash.includes('access_token=')) {
-      return new Promise((resolve) => {
-        const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === 'SIGNED_IN' || session) {
-            this.session = session;
-            this.user = session?.user;
-            window.history.replaceState(null, '', window.location.pathname + window.location.search);
-            resolve(true);
-          }
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      
+      if (accessToken && refreshToken) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
         });
-        // Fallback de 3 segundos por si algo falla
-        setTimeout(() => resolve(false), 3000);
-      });
+        
+        if (!sessionError && sessionData?.session) {
+          this.session = sessionData.session;
+          this.user = sessionData.session.user;
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          return true;
+        } else {
+          console.error('Error setting session manually:', sessionError);
+        }
+      }
     }
 
     // Listener permanente en background
