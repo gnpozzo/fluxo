@@ -16,8 +16,8 @@ class AuthService {
     try {
       const res = await fetch('/api/getConfig');
       const config = await res.json();
-      const url = config.url || 'https://mock.supabase.co';
-      const anonKey = config.anonKey || 'mock_key';
+      const url = config.url || import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co';
+      const anonKey = config.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock_key';
       
       supabase = createClient(url, anonKey);
     } catch (err) {
