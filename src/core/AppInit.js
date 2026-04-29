@@ -574,9 +574,27 @@ class AppInit {
 }
 
 // --- ARRANQUE ---
-window.addEventListener('load', () => {
-  new AppInit().boot();
-});
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  setTimeout(() => new AppInit().boot(), 1);
+} else {
+  window.addEventListener('DOMContentLoaded', () => {
+    new AppInit().boot();
+  });
+  window.addEventListener('load', () => {
+    // Fallback if DOMContentLoaded is missed
+    if (!window._appInitBooted) {
+      new AppInit().boot();
+    }
+  });
+}
+
+// Set a flag to prevent double boot
+const originalBoot = AppInit.prototype.boot;
+AppInit.prototype.boot = async function() {
+  if (window._appInitBooted) return;
+  window._appInitBooted = true;
+  return originalBoot.apply(this, arguments);
+};
 
 // Actualizar versión en sidebar footer
 window.addEventListener('DOMContentLoaded', () => {
