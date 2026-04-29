@@ -36,11 +36,32 @@ class AuthService {
     if (data && data.session) {
       this.session = data.session;
       this.user = data.session.user;
+      if (window.location.hash.includes('access_token=')) {
+         window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
       return true;
     }
     
     // Check for Auth callback in URL (OAuth redirect)
-    const { data: cbData, error: cbError } = await supabase.auth.onAuthStateChange((event, session) => {
+    // Supabase procesa el hash de la URL de manera asíncrona. 
+    // Si vemos que hay un access_token en la URL, esperamos a que Supabase termine de validarlo.
+    if (window.location.hash.includes('access_token=')) {
+      return new Promise((resolve) => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_IN' || session) {
+            this.session = session;
+            this.user = session?.user;
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            resolve(true);
+          }
+        });
+        // Fallback de 3 segundos por si algo falla
+        setTimeout(() => resolve(false), 3000);
+      });
+    }
+
+    // Listener permanente en background
+    supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN') {
         this.session = session;
         this.user = session?.user;
