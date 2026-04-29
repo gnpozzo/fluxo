@@ -11,6 +11,10 @@ class AuthService {
   }
 
   async init() {
+    // CAPTURAR EL HASH ANTES DE NADA.
+    // Supabase createClient lo borra de la URL casi instantáneamente.
+    const capturedHash = window.location.hash || (window.location.href.includes('#') ? '#' + window.location.href.split('#')[1] : '');
+    
     // 1. Obtener la configuración dinámica de lado del servidor
     // Esto previene fallos si VITE_SUPABASE_URL no está seteado pre-build en Vercel
     try {
@@ -36,16 +40,15 @@ class AuthService {
     if (data && data.session) {
       this.session = data.session;
       this.user = data.session.user;
-      if (window.location.hash.includes('access_token=')) {
+      if (capturedHash.includes('access_token=')) {
          window.history.replaceState(null, '', window.location.pathname + window.location.search);
       }
       return true;
     }
     
     // Supabase procesa el hash de la URL de manera asíncrona, pero a veces falla por condiciones de carrera.
-    // Si vemos que hay un access_token en la URL, lo extraemos e iniciamos la sesión manualmente.
-    if (window.location.hash.includes('access_token=')) {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    if (capturedHash.includes('access_token=')) {
+      const hashParams = new URLSearchParams(capturedHash.substring(1));
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
       
@@ -61,7 +64,10 @@ class AuthService {
           window.history.replaceState(null, '', window.location.pathname + window.location.search);
           return true;
         } else {
-          console.error('Error setting session manually:', sessionError);
+          console.error('Error crítico setting session manually:', sessionError);
+          // Borrar el hash roto para no quedar atrapados en un loop
+          window.history.replaceState(null, '', window.location.pathname);
+          return false;
         }
       }
     }
