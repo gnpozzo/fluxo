@@ -24,8 +24,7 @@ for (const file of files) {
 const indexContent = `${imports}
 
 export default async function handler(req, res) {
-  const urlPath = req.url.split('?')[0];
-  const endpoint = urlPath.split('/').pop();
+  const endpoint = req.query?.endpoint || req.url.split('?')[0].split('/').pop();
   
   switch(endpoint) {
 ${switchCases}

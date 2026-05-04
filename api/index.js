@@ -42,8 +42,7 @@ import updateMovimiento from './_controllers/updateMovimiento.js';
 
 
 export default async function handler(req, res) {
-  const urlPath = req.url.split('?')[0];
-  const endpoint = urlPath.split('/').pop();
+  const endpoint = req.query?.endpoint || req.url.split('?')[0].split('/').pop();
   
   switch(endpoint) {
     case 'admin_deleteAhorroSubcuenta': return await admin_deleteAhorroSubcuenta(req, res);
