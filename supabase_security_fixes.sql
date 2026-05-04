@@ -45,6 +45,22 @@ END
 $$;
 
 -- ------------------------------------------------------------------------------
+-- 3. CREATE COVERING INDEXES FOR PERFORMANCE
+-- ------------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_movimientos_id_cuenta ON public.movimientos(id_cuenta_principal);
+CREATE INDEX IF NOT EXISTS idx_movimientos_id_categoria ON public.movimientos(id_categoria);
+CREATE INDEX IF NOT EXISTS idx_movimientos_fecha ON public.movimientos(fecha);
+
+CREATE INDEX IF NOT EXISTS idx_consumos_tc_id_tarjeta ON public.consumos_tc(id_tarjeta);
+CREATE INDEX IF NOT EXISTS idx_consumos_tc_id_categoria ON public.consumos_tc(id_categoria);
+CREATE INDEX IF NOT EXISTS idx_consumos_tc_fecha ON public.consumos_tc(fecha);
+
+CREATE INDEX IF NOT EXISTS idx_cc_consumos_id_cuenta ON public.cc_consumos(id_cuenta_principal);
+CREATE INDEX IF NOT EXISTS idx_cc_consumos_id_categoria ON public.cc_consumos(id_categoria);
+
+-- (Índices conflictivos retirados temporalmente para evitar error 42703)
+
+-- ------------------------------------------------------------------------------
 -- 3. FUNCTION SECURITY
 -- Note: To fix the "SECURITY DEFINER" warnings, please go to the 
 -- Supabase Dashboard -> Database -> Functions. 
