@@ -62,8 +62,9 @@ export default async function handler(req, res) {
     // Cálculo de capa intermedia en Edge Node.js (Más veloz que hacer el match en Frontend)
     let ingresos = 0, egresos = 0;
     (movimientos || []).forEach(m => {
-        if (m.tipo_mov === 'INGRESO') ingresos += Number(m.importe);
-        if (m.tipo_mov === 'EGRESO') egresos += Number(m.importe);
+        const amt = Math.abs(Number(m.importe));
+        if (m.tipo_mov === 'INGRESO') ingresos += amt;
+        if (m.tipo_mov === 'EGRESO') egresos -= amt;
     });
 
     return res.status(200).json({
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
       kpis: {
         ingresos,
         egresos,
-        resultado: ingresos - Math.abs(egresos)
+        resultado: ingresos + egresos
       },
       movimientos: movimientos || []
     });
