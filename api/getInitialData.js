@@ -18,8 +18,15 @@ export default async function handler(req, res) {
     if (tarjetasRes.error) throw tarjetasRes.error;
     if (usuariosCcRes.error) throw usuariosCcRes.error;
 
-    // TODO: fetch actual months from "movimientos" using RPC or group by
-    const meses = ['2023-10', '2023-11', '2023-12', '2024-01', '2024-02', '2024-03', '2024-04'];
+    // Generate dynamic list of months (-12 to +6 months from now)
+    const meses = [];
+    const today = new Date();
+    for (let i = -12; i <= 6; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      meses.push(`${yyyy}-${mm}`);
+    }
 
     return res.status(200).json({
       success: true,

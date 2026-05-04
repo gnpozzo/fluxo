@@ -145,7 +145,11 @@ export class TarjetasModule extends BaseModule {
     this.#kpiImputado = new App.KpiCard(grid, { titulo: 'Incidencia Personal', icono: 'person',      colorClass: 'kpi-blue',   onFormat: App.Utils.formatearMoneda });
     this.#kpiConsol   = new App.KpiCard(grid, { titulo: 'Incidencia Externa',  icono: 'groups',      colorClass: 'kpi-amber',  onFormat: App.Utils.formatearMoneda });
 
-    document.getElementById('tc-acciones').innerHTML = '';
+    document.getElementById('tc-acciones').innerHTML = `
+      <button id="tc-btn-nuevo" class="btn btn-primary">
+        ${App.Icons.get('add', 'icon-sm')} Cargar Consumo
+      </button>
+    `;
 
     this.#table = new App.DataTable(
       document.getElementById('tc-tabla-wrap'),
