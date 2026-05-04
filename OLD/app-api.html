@@ -1,0 +1,276 @@
+<script>
+'use strict';
+/* ============================================================
+   app-api.html — v5.0.0
+   Cliente GAS API con cache sessionStorage + TTL.
+   Estrategia: Cache-First → GAS solo si expirado.
+   Stale-While-Revalidate: muestra cache, actualiza en BG.
+   Se registra en window.App.API
+   ============================================================ */
+
+// --- SECCIÓN 0: CLASE GasApiClient ---
+
+class GasApiClient {
+
+  #defaultTimeout = 30_000;
+  #defaultTtl     = 5 * 60 * 1000;   // 5 minutos en ms
+  #cachePrefix     = 'app_cache_';
+
+  constructor() {
+    App.log('GasApiClient', 'constructor', 'Cliente API con cache listo');
+  }
+
+  // --- SECCIÓN 1: LLAMADA BASE A GAS ---
+
+  /**
+   * Llama a una función GAS y retorna una Promesa.
+   * No usa cache — llamada directa al backend.
+   * @param {string} fnName
+   * @param {...*}   args
+   */
+  call(fnName, ...args) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Timeout: "${fnName}" no respondió en ${this.#defaultTimeout / 1000}s`));
+      }, this.#defaultTimeout);
+
+      App.log('GasApiClient', 'call', `→ ${fnName}`);
+
+      google.script.run
+        .withSuccessHandler((result) => {
+          clearTimeout(timeout);
+          // Si el backend retorna { success: false }, lo tratamos como error
+          if (result !== null && typeof result === 'object' && !Array.isArray(result) && result.success === false) {
+            App.error('GasApiClient', 'call', `← ${fnName} success:false — ${result.error}`);
+            reject(new Error(result.error || 'Error en la operación'));
+            return;
+          }
+          App.log('GasApiClient', 'call', `← ${fnName} OK`);
+          resolve(result);
+        })
+        .withFailureHandler((err) => {
+          clearTimeout(timeout);
+          App.error('GasApiClient', 'call', `← ${fnName} ERROR`, err);
+          reject(err instanceof Error ? err : new Error(err?.message || String(err)));
+        })
+        [fnName](...args);
+    });
+  }
+
+  // --- SECCIÓN 2: LLAMADA CON CACHE ---
+
+  /**
+   * Llama a GAS con cache sessionStorage.
+   * Si hay cache válida → retorna inmediatamente.
+   * Si no hay cache → llama a GAS y guarda resultado.
+   *
+   * @param {string}  fnName
+   * @param {Array}   args
+   * @param {number}  [ttl]  ms de vida del cache (default: 5 min)
+   * @returns {Promise<*>}
+   */
+  async cached(fnName, args = [], ttl = this.#defaultTtl) {
+    const key    = this.#buildKey(fnName, args);
+    const cached = this.#getCache(key);
+
+    if (cached !== null) {
+      App.log('GasApiClient', 'cached', `HIT "${fnName}"`);
+      return cached;
+    }
+
+    App.log('GasApiClient', 'cached', `MISS "${fnName}" → llamando GAS`);
+    const result = await this.call(fnName, ...args);
+    this.#setCache(key, result, ttl);
+    return result;
+  }
+
+  /**
+   * Stale-While-Revalidate: retorna cache expirada inmediatamente
+   * y lanza actualización en background sin bloquear la UI.
+   *
+   * @param {string}   fnName
+   * @param {Array}    args
+   * @param {number}   [ttl]
+   * @param {Function} [onRevalidate]  callback(nuevosDatos) cuando el BG termina
+   * @returns {Promise<{data:*, fromCache:boolean}>}
+   */
+  async swr(fnName, args = [], ttl = this.#defaultTtl, onRevalidate = null) {
+    const key    = this.#buildKey(fnName, args);
+    const cached = this.#getCache(key, { allowExpired: true });
+
+    if (cached !== null) {
+      // Retornar cache stale inmediatamente
+      App.log('GasApiClient', 'swr', `STALE "${fnName}" — revalidando en BG`);
+      // Background revalidation (no await)
+      this.call(fnName, ...args)
+        .then((fresh) => {
+          this.#setCache(key, fresh, ttl);
+          if (typeof onRevalidate === 'function') onRevalidate(fresh);
+        })
+        .catch((err) => {
+          App.warn('GasApiClient', 'swr', `BG revalidation failed: ${fnName}`, err);
+        });
+      // Importante: Clonamos la data cacheada para evitar mutaciones 
+      return { data: typeof cached === 'object' && cached !== null ? JSON.parse(JSON.stringify(cached)) : cached, fromCache: true };
+    }
+
+    // Sin cache en absoluto: esperar GAS
+    const data = await this.call(fnName, ...args);
+    this.#setCache(key, data, ttl);
+    return { data, fromCache: false };
+  }
+
+  // --- SECCIÓN 3: HELPERS DE DOMINIO ---
+
+  /**
+   * GET con cache: obtiene datos pasando cuenta y mes del Store.
+   * @param {string}  fnName
+   * @param {Object}  [extraParams={}]
+   * @param {number}  [ttl]
+   */
+  async get(fnName, extraParams = {}, ttl = this.#defaultTtl) {
+    const { cuenta, mes } = App.Store;
+    return this.cached(fnName, [{ cuenta, mes, ...extraParams }], ttl);
+  }
+
+  /**
+   * POST/PUT: envía datos (sin cache — siempre fresco).
+   * Invalida la cache relacionada al módulo.
+   * @param {string} fnName
+   * @param {Object} payload
+   */
+  async send(fnName, payload) {
+    const result = await this.call(fnName, payload);
+    this.invalidatePattern(fnName);
+    return result;
+  }
+
+  /**
+   * DELETE: elimina un registro por ID (sin cache).
+   * @param {string}        fnName
+   * @param {string|number} id
+   */
+  async remove(fnName, id) {
+    const result = await this.call(fnName, id);
+    this.invalidatePattern(fnName);
+    return result;
+  }
+
+  // --- SECCIÓN 4: GESTIÓN DE CACHE ---
+
+  /**
+   * Invalida todas las entradas de cache que contengan una cadena.
+   * @param {string} pattern
+   */
+  invalidatePattern(pattern) {
+    const prefix = this.#cachePrefix;
+    Object.keys(sessionStorage)
+      .filter(k => k.startsWith(prefix) && k.includes(pattern))
+      .forEach(k => {
+        try {
+          const raw = sessionStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            parsed.expiresAt = 0; // Mark as immediately expired
+            sessionStorage.setItem(k, JSON.stringify(parsed));
+          }
+        } catch(e) {}
+        App.log('GasApiClient', 'invalidatePattern', `Expirado: ${k}`);
+      });
+  }
+
+  /**
+   * Invalida TODO el cache de la app (cambio de cuenta/mes).
+   */
+  invalidateAll() {
+    const prefix = this.#cachePrefix;
+    Object.keys(sessionStorage)
+      .filter(k => k.startsWith(prefix))
+      .forEach(k => {
+        try {
+          const raw = sessionStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            parsed.expiresAt = 0; // Mark as immediately expired
+            sessionStorage.setItem(k, JSON.stringify(parsed));
+          }
+        } catch(e) {}
+      });
+    App.log('GasApiClient', 'invalidateAll', 'Cache expirado completamente');
+  }
+
+  /**
+   * Cambia el TTL por defecto.
+   * @param {number} ms
+   */
+  setDefaultTtl(ms) {
+    if (ms > 0) this.#defaultTtl = ms;
+  }
+
+  // --- SECCIÓN 5: PRIVADOS ---
+
+  /**
+   * Construye la clave de cache combinando función + args + contexto.
+   * @param {string} fnName
+   * @param {Array}  args
+   */
+  #buildKey(fnName, args) {
+    const { cuenta, mes } = App.Store;
+    const argsStr = JSON.stringify(args);
+    return `${this.#cachePrefix}${fnName}_${cuenta}_${mes}_${argsStr}`;
+  }
+
+  /**
+   * Lee del cache. Retorna null si no existe o expiró (salvo allowExpired).
+   * @param {string}  key
+   * @param {Object}  [opts]
+   * @param {boolean} [opts.allowExpired=false]
+   */
+  #getCache(key, { allowExpired = false } = {}) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const { data, expiresAt } = JSON.parse(raw);
+      const expired = Date.now() > expiresAt;
+      if (expired && !allowExpired) {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+      return data;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Escribe en el cache con timestamp de expiración.
+   * @param {string} key
+   * @param {*}      data
+   * @param {number} ttl  ms
+   */
+  #setCache(key, data, ttl) {
+    try {
+      sessionStorage.setItem(key, JSON.stringify({
+        data,
+        expiresAt : Date.now() + ttl
+      }));
+    } catch (e) {
+      // sessionStorage lleno (privado, cuotas bajas): limpiar y reintentar
+      App.warn('GasApiClient', '#setCache', 'sessionStorage lleno, limpiando', e);
+      this.invalidateAll();
+      try { sessionStorage.setItem(key, JSON.stringify({ data, expiresAt: Date.now() + ttl })); }
+      catch (_) { /* sin cache esta vez */ }
+    }
+  }
+}
+
+// --- REGISTRO EN NAMESPACE ---
+App.API = new GasApiClient();
+
+// Invalidar cache cuando cambia cuenta o mes
+App.Events.on('store:cuenta-changed', () => App.API.invalidateAll());
+App.Events.on('store:mes-changed',    () => App.API.invalidateAll());
+App.Events.on('store:moneda-changed', () => App.API.invalidateAll());
+
+App.log('app-api', 'init', 'App.API registrado con cache sessionStorage');
+</script>

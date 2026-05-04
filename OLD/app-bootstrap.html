@@ -1,0 +1,291 @@
+<script>
+'use strict';
+/* ================================================================
+   SISTEMA DE GESTIÓN FINANCIERA
+   app-bootstrap.html — v5.0.0
+   Capa 1: Namespace global + Clase abstracta BaseModule
+   ================================================================
+
+   Responsabilidad:
+   - Define window.App como único punto de entrada global.
+   - Declara BaseModule: clase abstracta de la que heredan todos
+     los módulos de la aplicación.
+   - Establece constantes de versión y configuración.
+
+   Depende de: nada (primer script en ejecutarse).
+   ================================================================ */
+
+// --- SECCIÓN 0: CONSTANTES GLOBALES ---
+
+const APP_VERSION    = '5.0.0';
+const APP_NAME       = 'Sistema de Gestión Financiera';
+const APP_DEBUG      = true;   // false en producción
+
+// --- SECCIÓN 1: NAMESPACE ÚNICO ---
+// Reemplaza los 50+ globales anteriores (AppState, UIController,
+// MovimientosController, selectorCuenta, etc.).
+// Cada capa registra su instancia aquí; ningún módulo crea globales propios.
+
+window.App = {
+  VERSION : APP_VERSION,
+  NAME    : APP_NAME,
+
+  // Capas de servicio — asignadas por sus respectivos archivos
+  Store   : null,   // app-store.html      → AppStore
+  Events  : null,   // app-events.html     → EventBus
+  API     : null,   // app-api.html        → GasApiClient
+  Icons   : null,   // app-icons.html      → IconRegistry
+  Utils   : null,   // app-utils.html      → objeto de utilidades
+
+  // Componentes UI — asignados por sus archivos de componente
+  Toast   : null,   // component-toast.html
+  Modal   : null,   // component-modal.html  (fábrica de modales)
+
+  // Módulos de negocio — cada module-*.html se auto-registra aquí
+  Modules : {}
+};
+
+// --- SECCIÓN 2: LOGGER CENTRALIZADO ---
+// [Archivo -> Clase/Función -> Acción]
+// APP_DEBUG controla si los logs se emiten.
+
+App.log = function log(origin, action, payload) {
+  if (!APP_DEBUG) return;
+  const tag = `[${origin} -> ${action}]`;
+  if (payload !== undefined) {
+    console.log(tag, payload);
+  } else {
+    console.log(tag);
+  }
+};
+
+App.warn = function warn(origin, action, payload) {
+  const tag = `[${origin} -> ${action} -> WARN]`;
+  console.warn(tag, payload ?? '');
+};
+
+App.error = function error(origin, action, payload) {
+  const tag = `[${origin} -> ${action} -> ERROR]`;
+  console.error(tag, payload ?? '');
+};
+
+// --- SECCIÓN 3: CLASE BASE DE MÓDULOS ---
+// Todos los módulos de negocio extienden BaseModule.
+// Provee:
+//   • Ciclo de vida estándar: init, cargar, mostrar, ocultar, destruir
+//   • CRUD centralizado: _handleCreate, _handleUpdate, _handleDelete
+//   • Skeleton loading automático en el tbody de la vista
+//   • Suscripción automática a cambios de cuenta y mes (vía EventBus)
+
+class BaseModule {
+
+  // ── SECCIÓN 0: IDENTIDAD (sobreescribir en subclase) ──────────────
+
+  /** ID único del módulo (ej. 'movimientos'). Usado en AppStore y logs. */
+  get moduleId() {
+    throw new Error(`[BaseModule] moduleId no definido en ${this.constructor.name}`);
+  }
+
+  /** ID del elemento <section> / <div> de la vista en el DOM. */
+  get vistaId() {
+    throw new Error(`[BaseModule] vistaId no definido en ${this.constructor.name}`);
+  }
+
+  /** Nombre del método GAS para crear. Sobreescribir si se usa _handleCreate. */
+  get _createEndpoint() { return null; }
+  /** Nombre del método GAS para actualizar. */
+  get _updateEndpoint() { return null; }
+  /** Nombre del método GAS para eliminar. */
+  get _deleteEndpoint() { return null; }
+
+  // ── SECCIÓN 1: CICLO DE VIDA ──────────────────────────────────────
+
+  /**
+   * Llamado una sola vez al registrar el módulo (desde app-init.html).
+   * Registra listeners DOM propios y se suscribe al EventBus.
+   */
+  init() {
+    App.log(this.moduleId, 'init', 'Registrando listeners y suscripciones');
+    this._bindListeners();
+    this._subscribeEvents();
+  }
+
+  /**
+   * Carga y renderiza los datos del módulo.
+   * Usa AppStore para verificar si ya está cargado (lazy-load).
+   * Muestra skeleton → fetch → render → marca como cargado.
+   */
+  async cargar() {
+    if (App.Store.isModuloLoaded(this.moduleId)) {
+      App.log(this.moduleId, 'cargar', 'Ya cargado, omitiendo');
+      return;
+    }
+    App.log(this.moduleId, 'cargar', 'Iniciando carga de datos');
+    this._showSkeleton();
+
+    try {
+      const data = await this._fetchData();
+      this._render(data);
+      App.Store.markModuloLoaded(this.moduleId);
+      App.log(this.moduleId, 'cargar', 'Carga completada');
+    } catch (err) {
+      App.error(this.moduleId, 'cargar', err);
+      App.Events.emit('module:load-error', { moduleId: this.moduleId, error: err });
+      if (App.Toast) App.Toast.error(err.message || 'Error al cargar el módulo.');
+    }
+  }
+
+  /** Hace visible la sección de la vista. */
+  mostrar() {
+    const vista = document.getElementById(this.vistaId);
+    if (vista) vista.classList.add('active');
+  }
+
+  /** Oculta la sección de la vista. */
+  ocultar() {
+    const vista = document.getElementById(this.vistaId);
+    if (vista) vista.classList.remove('active');
+  }
+
+  /**
+   * Invalida el estado del módulo en AppStore.
+   * La próxima llamada a cargar() re-fetcha los datos.
+   */
+  destruir() {
+    App.log(this.moduleId, 'destruir', 'Invalidando estado');
+    App.Store.invalidateModulo(this.moduleId);
+  }
+
+  // ── SECCIÓN 2: CRUD ESTÁNDAR ──────────────────────────────────────
+
+  /**
+   * Flujo estándar de creación: llama al endpoint GAS,
+   * cierra el modal, muestra Toast, reinicia el módulo.
+   * @param {object} formData — datos del formulario ya validados
+   * @param {Modal}  modal    — instancia del Modal a cerrar
+   */
+  async _handleCreate(formData, modal) {
+    App.log(this.moduleId, '_handleCreate', formData);
+    if (!this._createEndpoint) {
+      App.error(this.moduleId, '_handleCreate', '_createEndpoint no definido');
+      return;
+    }
+    try {
+      modal?.setLoading(true);
+      await App.API.call(this._createEndpoint, formData);
+      modal?.close();
+      App.Toast.success('Registro creado exitosamente.');
+      App.API.invalidateAll();
+      this.destruir();
+      await this.cargar();
+    } catch (err) {
+      App.error(this.moduleId, '_handleCreate', err);
+      App.Toast.error(err.message || 'Error al crear el registro.');
+    } finally {
+      modal?.setLoading(false);
+    }
+  }
+
+  /**
+   * Flujo estándar de actualización.
+   * @param {string} id       — ID del registro a actualizar
+   * @param {object} formData — datos del formulario ya validados
+   * @param {Modal}  modal    — instancia del Modal
+   * @param {string} scope    — 'SINGLE' | 'SERIES' | 'GROUP'
+   */
+  async _handleUpdate(id, formData, modal, scope = 'SINGLE') {
+    App.log(this.moduleId, '_handleUpdate', { id, scope, formData });
+    if (!this._updateEndpoint) {
+      App.error(this.moduleId, '_handleUpdate', '_updateEndpoint no definido');
+      return;
+    }
+    try {
+      modal?.setLoading(true);
+      await App.API.call(this._updateEndpoint, id, formData, scope);
+      modal?.close();
+      App.Toast.success('Registro actualizado.');
+      App.API.invalidateAll();
+      this.destruir();
+      await this.cargar();
+    } catch (err) {
+      App.error(this.moduleId, '_handleUpdate', err);
+      App.Toast.error(err.message || 'Error al actualizar el registro.');
+    } finally {
+      modal?.setLoading(false);
+    }
+  }
+
+  /**
+   * Flujo estándar de eliminación con modal de confirmación.
+   * @param {string} id    — ID del registro a eliminar
+   * @param {string} scope — 'SINGLE' | 'SERIES' | 'GROUP'
+   */
+  async _handleDelete(id, scope = 'SINGLE') {
+    App.log(this.moduleId, '_handleDelete', { id, scope });
+    if (!this._deleteEndpoint) {
+      App.error(this.moduleId, '_handleDelete', '_deleteEndpoint no definido');
+      return;
+    }
+    try {
+      await App.API.call(this._deleteEndpoint, id, scope);
+      App.Toast.success('Registro eliminado.');
+      App.API.invalidateAll();
+      this.destruir();
+      await this.cargar();
+    } catch (err) {
+      App.error(this.moduleId, '_handleDelete', err);
+      App.Toast.error(err.message || 'Error al eliminar el registro.');
+    }
+  }
+
+  // ── SECCIÓN 3: MÉTODOS ABSTRACTOS (sobreescribir en subclase) ──────
+
+  /**
+   * Realiza el fetch de datos al backend GAS.
+   * @returns {Promise<object>} — datos crudos de la API
+   */
+  async _fetchData() {
+    throw new Error(`[${this.moduleId}] _fetchData no implementado`);
+  }
+
+  /**
+   * Renderiza los datos obtenidos en el DOM de la vista.
+   * @param {object} data — respuesta de _fetchData
+   */
+  _render(data) {
+    throw new Error(`[${this.moduleId}] _render no implementado`);
+  }
+
+  /** Registra event listeners propios del módulo. */
+  _bindListeners() {}
+
+  /** Elimina event listeners registrados en _bindListeners. */
+  _unbindListeners() {}
+
+  /**
+   * Suscribe el módulo a los eventos del EventBus.
+   * La implementación por defecto recarga ante cambios de cuenta/mes.
+   * Sobreescribir para comportamiento personalizado.
+   */
+  _subscribeEvents() {
+    const recargar = () => { this.destruir(); this.cargar(); };
+    App.Events.on('store:cuenta-changed', recargar);
+    App.Events.on('store:mes-changed',    recargar);
+  }
+
+  // ── SKELETON LOADING ──────────────────────────────────────────────
+
+  /** Reemplaza el tbody de la vista con filas skeleton animadas. */
+  _showSkeleton(filas = 5, columnas = 6) {
+    const tbody = document.querySelector(`#${this.vistaId} tbody`);
+    if (!tbody) return;
+    const skeletonRow = `
+      <tr class="skeleton-row">
+        ${'<td><div class="skeleton-line"></div></td>'.repeat(columnas)}
+      </tr>`;
+    tbody.innerHTML = skeletonRow.repeat(filas);
+  }
+}
+
+App.log('app-bootstrap', 'init', `Namespace App v${APP_VERSION} registrado`);
+</script>

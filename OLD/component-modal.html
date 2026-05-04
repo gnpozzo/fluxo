@@ -1,0 +1,299 @@
+<script>
+'use strict';
+/* ============================================================
+   component-modal.html — v5.0.0
+   Modal genérico reutilizable. Cada módulo instancia el suyo.
+   Soporta: header, body, footer, tamaños, confirmación peligrosa.
+   Se registra en window.App.Modal (clase exportada)
+   ============================================================ */
+
+// --- SECCIÓN 0: CLASE Modal ---
+
+class Modal {
+
+  #id;
+  #el       = null;
+  #overlay  = null;
+  #onConfirm = null;
+  #onCancel  = null;
+
+  /**
+   * @param {string} id  ID único del modal (ej: 'modal-movimientos')
+   */
+  constructor(id) {
+    this.#id = id;
+    this.#build();
+    App.log('Modal', 'constructor', `Modal "${id}" creado`);
+  }
+
+  // --- SECCIÓN 1: API PÚBLICA ---
+
+  /**
+   * Abre el modal con configuración opcional.
+   * @param {Object} opts
+   * @param {string}   opts.titulo
+   * @param {string}   opts.body          HTML del cuerpo
+   * @param {string}   [opts.confirmLabel='Guardar']
+   * @param {string}   [opts.cancelLabel='Cancelar']
+   * @param {boolean}  [opts.danger=false]  botón confirmar en rojo
+   * @param {string}   [opts.size='md']    'sm'|'md'|'lg'|'xl'
+   * @param {Function} [opts.onConfirm]
+   * @param {Function} [opts.onCancel]
+   */
+  open({
+    titulo       = '',
+    body         = '',
+    confirmLabel = 'Guardar',
+    cancelLabel  = 'Cancelar',
+    danger       = false,
+    size         = 'md',
+    onConfirm    = null,
+    onCancel     = null
+  } = {}) {
+    this.#onConfirm = onConfirm;
+    this.#onCancel  = onCancel;
+
+    this.#el.querySelector('.modal-title').textContent    = titulo;
+    this.#el.querySelector('.modal-body').innerHTML       = body;
+    this.#el.querySelector('.modal-confirm').textContent  = confirmLabel;
+    this.#el.querySelector('.modal-cancel').textContent   = cancelLabel;
+
+    // Tamaño
+    const dialog = this.#overlay.querySelector('.modal-dialog');
+    dialog.className = `modal-dialog modal-${size}`;
+
+    // Peligro
+    const btnConfirm = this.#el.querySelector('.modal-confirm');
+    if (btnConfirm) {
+      btnConfirm.classList.toggle('btn-danger', danger);
+      btnConfirm.classList.toggle('btn-primary', !danger);
+    }
+
+    // Mostrar
+    this.#overlay.classList.add('modal-open');
+    document.body.classList.add('modal-active');
+
+    // Focus trap: primer input o botón confirmar
+    setTimeout(() => {
+      const firstInput = this.#el.querySelector('input, select, textarea');
+      const targetFocus = firstInput || btnConfirm;
+      if (targetFocus) targetFocus.focus();
+    }, 50);
+
+    App.log('Modal', 'open', `"${this.#id}" abierto`);
+    return this;
+  }
+
+  /**
+   * Cierra el modal sin ejecutar onConfirm.
+   */
+  close() {
+    this.#overlay.classList.remove('modal-open');
+    document.body.classList.remove('modal-active');
+    this.#onConfirm = null;
+    this.#onCancel  = null;
+    App.log('Modal', 'close', `"${this.#id}" cerrado`);
+    return this;
+  }
+
+  /**
+   * Activa/desactiva el spinner de carga en el botón confirmar.
+   * @param {boolean} loading
+   */
+  setLoading(loading) {
+    const btn = this.#el.querySelector('.modal-confirm');
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.innerHTML = loading
+      ? `<span class="spinner spinner-sm"></span> Procesando...`
+      : btn.dataset.originalLabel || btn.textContent;
+    if (!loading) btn.dataset.originalLabel = '';
+    else btn.dataset.originalLabel = btn.textContent;
+  }
+
+  /**
+   * Obtiene el formulario dentro del modal (si existe).
+   * @returns {HTMLFormElement|null}
+   */
+  getForm() {
+    return this.#el.querySelector('form');
+  }
+
+  /**
+   * Retorna el elemento DOM del modal.
+   * @returns {HTMLElement}
+   */
+  get el() { return this.#el; }
+
+  // --- SECCIÓN 2: PRIVADOS ---
+
+  /** Construye el HTML del modal e inserta en body */
+  #build() {
+    if (document.getElementById(this.#id)) {
+      this.#overlay = document.getElementById(this.#id);
+      this.#el      = this.#overlay.querySelector('.modal-container');
+      return;
+    }
+
+    this.#overlay = document.createElement('div');
+    this.#overlay.id        = this.#id;
+    this.#overlay.className = 'modal-overlay';
+    this.#overlay.setAttribute('role', 'dialog');
+    this.#overlay.setAttribute('aria-modal', 'true');
+    this.#overlay.setAttribute('aria-labelledby', `${this.#id}-title`);
+
+    this.#overlay.innerHTML = `
+      <div class="modal-dialog modal-md">
+        <div class="modal-container">
+          <header class="modal-header">
+            <h2 class="modal-title" id="${this.#id}-title"></h2>
+            <button class="modal-x btn-icon" aria-label="Cerrar">
+              ${App.Icons.get('close', 'icon-md')}
+            </button>
+          </header>
+          <div class="modal-body"></div>
+          <footer class="modal-footer">
+            <button class="modal-cancel  btn btn-ghost">Cancelar</button>
+            <button class="modal-confirm btn btn-primary">Guardar</button>
+          </footer>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(this.#overlay);
+    this.#el = this.#overlay.querySelector('.modal-container');
+
+    // Listeners
+    this.#overlay.querySelector('.modal-x').addEventListener('click',     () => this.#handleCancel());
+    this.#overlay.querySelector('.modal-cancel').addEventListener('click', () => this.#handleCancel());
+    this.#overlay.querySelector('.modal-confirm').addEventListener('click',() => this.#handleConfirm());
+
+    // Click fuera cierra
+    this.#overlay.addEventListener('click', (e) => {
+      if (e.target === this.#overlay) this.#handleCancel();
+    });
+
+    // ESC cierra
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.#overlay.classList.contains('modal-open')) {
+        this.#handleCancel();
+      }
+    });
+  }
+
+  #handleConfirm() {
+    if (typeof this.#onConfirm === 'function') this.#onConfirm(this);
+    else this.close();
+  }
+
+  #handleCancel() {
+    if (typeof this.#onCancel === 'function') this.#onCancel(this);
+    this.close();
+  }
+}
+
+// Exportar clase al namespace para que los módulos la instancien
+App.Modal = Modal;
+App.log('component-modal', 'init', 'App.Modal (clase) registrada');
+</script>
+
+<style>
+/* ============================================================
+   Modal styles
+   ============================================================ */
+
+.modal-overlay {
+  display         : none;
+  position        : fixed;
+  inset           : 0;
+  z-index         : var(--z-modal, 8000);
+  background      : rgba(0, 0, 0, 0.5);
+  backdrop-filter : blur(4px);
+  align-items     : center;
+  justify-content : center;
+  padding         : var(--space-4, 1rem);
+  animation       : modal-bg-in 0.2s ease forwards;
+}
+
+.modal-overlay.modal-open {
+  display : flex;
+}
+
+@keyframes modal-bg-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Tamaños */
+.modal-dialog       { width: 100%; }
+.modal-sm           { max-width: 400px; }
+.modal-md           { max-width: 560px; }
+.modal-lg           { max-width: 720px; }
+.modal-xl           { max-width: 960px; }
+
+.modal-container {
+  background    : var(--color-surface, #fff);
+  border-radius : var(--radius-xl, 1rem);
+  box-shadow    : var(--shadow-xl, 0 20px 60px rgba(0,0,0,.25));
+  overflow      : hidden;
+  animation     : modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  max-height    : calc(100vh - 2rem);
+  display       : flex;
+  flex-direction: column;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+  display         : flex;
+  align-items     : center;
+  justify-content : space-between;
+  padding         : var(--space-4, 1rem) var(--space-5, 1.25rem);
+  border-bottom   : 1px solid var(--color-border, #e5e7eb);
+  flex-shrink     : 0;
+}
+
+.modal-title {
+  font-size   : var(--text-lg, 1.125rem);
+  font-weight : 600;
+  color       : var(--color-text, #111827);
+  margin      : 0;
+}
+
+.modal-body {
+  padding    : var(--space-5, 1.25rem);
+  overflow-y : auto;
+  flex       : 1;
+}
+
+.modal-footer {
+  display         : flex;
+  justify-content : flex-end;
+  gap             : var(--space-3, 0.75rem);
+  padding         : var(--space-4, 1rem) var(--space-5, 1.25rem);
+  border-top      : 1px solid var(--color-border, #e5e7eb);
+  flex-shrink     : 0;
+}
+
+body.modal-active { overflow: hidden; }
+
+/* Botón X */
+.modal-x {
+  background    : transparent;
+  border        : none;
+  cursor        : pointer;
+  padding       : var(--space-1, 0.25rem);
+  border-radius : var(--radius-md, 0.5rem);
+  color         : var(--color-text-muted, #6b7280);
+  transition    : background 0.15s, color 0.15s;
+  display       : flex;
+  align-items   : center;
+}
+.modal-x:hover {
+  background : var(--color-hover, #f3f4f6);
+  color      : var(--color-text, #111827);
+}
+</style>

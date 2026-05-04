@@ -1,0 +1,222 @@
+<script>
+'use strict';
+/* ============================================================
+   component-kpi-card.html — v5.0.0
+   Tarjeta KPI reutilizable para dashboards y cabeceras de módulo.
+   Soporta: valor, variación, ícono, skeleton, click.
+   Se registra en window.App.KpiCard (clase)
+   ============================================================ */
+
+// --- SECCIÓN 0: CLASE KpiCard ---
+
+class KpiCard {
+
+  #container;
+  #config;
+  #el = null;
+
+  /**
+   * @param {string|HTMLElement} container  Selector o elemento contenedor
+   * @param {Object} config
+   * @param {string}   config.titulo           Título de la KPI
+   * @param {string}   [config.icono]          Clave del IconRegistry
+   * @param {string}   [config.colorClass]     Clase CSS de color ('kpi-green' | 'kpi-red' | 'kpi-blue' | 'kpi-purple')
+   * @param {Function} [config.onFormat]       Función de formateo del valor
+   * @param {Function} [config.onClick]        Callback al hacer click en la card
+   */
+  constructor(container, config = {}) {
+    this.#container = typeof container === 'string'
+      ? document.querySelector(container)
+      : container;
+    this.#config = {
+      titulo     : '',
+      icono      : 'wallet',
+      colorClass : 'kpi-blue',
+      onFormat   : (v) => App.Utils.formatearMoneda(v),
+      onClick    : null,
+      ...config
+    };
+    this.#build();
+  }
+
+  // --- SECCIÓN 1: API PÚBLICA ---
+
+  /**
+   * Actualiza el valor mostrado en la card.
+   * @param {number|string} valor
+   * @param {Object} [opts]
+   * @param {number} [opts.variacion]      Porcentaje de variación (±)
+   * @param {string} [opts.subtitulo]      Texto secundario
+   * @param {boolean}[opts.invertirColor]  Negativo=bueno (ej: deuda)
+   */
+  setValue(valor, { variacion = null, subtitulo = '', invertirColor = false } = {}) {
+    const formatted = this.#config.onFormat(valor);
+    const valEl     = this.#el.querySelector('.kpi-value');
+    const varEl     = this.#el.querySelector('.kpi-variation');
+    const subEl     = this.#el.querySelector('.kpi-subtitle');
+
+    valEl.textContent = formatted;
+    valEl.classList.remove('skeleton', 'skeleton-text');
+
+    if (variacion !== null) {
+      const cls = App.Utils.classeVariacion(variacion, invertirColor);
+      varEl.className  = `kpi-variation kpi-var-${cls}`;
+      varEl.textContent = App.Utils.formatearPorcentaje(variacion);
+      varEl.style.display = '';
+    } else {
+      varEl.style.display = 'none';
+    }
+
+    if (subtitulo) {
+      subEl.textContent    = subtitulo;
+      subEl.style.display  = '';
+    } else {
+      subEl.style.display  = 'none';
+    }
+
+    App.log('KpiCard', 'setValue', `"${this.#config.titulo}" → ${formatted}`);
+  }
+
+  /**
+   * Muestra skeleton de carga.
+   */
+  showSkeleton() {
+    const valEl = this.#el.querySelector('.kpi-value');
+    valEl.innerHTML = `<div class="skeleton skeleton-text" style="width:80px;height:1.5rem"></div>`;
+  }
+
+  /**
+   * Muestra un estado de error.
+   * @param {string} [msg='Error']
+   */
+  showError(msg = 'Error') {
+    const valEl = this.#el.querySelector('.kpi-value');
+    valEl.innerHTML = `<span class="kpi-error">${App.Utils.escapeHtml(msg)}</span>`;
+  }
+
+  // --- SECCIÓN 2: PRIVADOS ---
+
+  #build() {
+    const { titulo, icono, colorClass, onClick } = this.#config;
+
+    const card = document.createElement('div');
+    card.className = `kpi-card ${colorClass}`;
+    if (typeof onClick === 'function') {
+      card.classList.add('kpi-clickable');
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+      card.addEventListener('click', () => onClick(this));
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') onClick(this);
+      });
+    }
+
+    card.innerHTML = `
+      <div class="kpi-icon-wrap">
+        ${App.Icons.get(icono, 'icon-lg')}
+      </div>
+      <div class="kpi-content">
+        <span class="kpi-label">${App.Utils.escapeHtml(titulo)}</span>
+        <span class="kpi-value skeleton skeleton-text" style="width:80px;height:1.5rem"></span>
+        <span class="kpi-subtitle" style="display:none"></span>
+        <span class="kpi-variation" style="display:none"></span>
+      </div>
+    `;
+
+    this.#container.appendChild(card);
+    this.#el = card;
+  }
+}
+
+// Exportar clase al namespace
+App.KpiCard = KpiCard;
+App.log('component-kpi-card', 'init', 'App.KpiCard (clase) registrada');
+</script>
+
+<style>
+/* ============================================================
+   KpiCard styles
+   ============================================================ */
+
+.kpi-grid {
+  display               : grid;
+  grid-template-columns : repeat(auto-fit, minmax(220px, 1fr));
+  gap                   : var(--space-4, 1rem);
+  margin-bottom         : var(--space-5, 1.25rem);
+}
+
+.kpi-card {
+  display       : flex;
+  align-items   : center;
+  gap           : var(--space-4, 1rem);
+  padding       : var(--space-5, 1.25rem);
+  border-radius : var(--radius-xl, 1rem);
+  background    : var(--color-surface, #fff);
+  border        : 1px solid var(--color-border-light, #f3f4f6);
+  box-shadow    : 0 4px 15px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition    : box-shadow 0.2s, transform 0.15s;
+}
+
+.kpi-card.kpi-clickable {
+  cursor : pointer;
+}
+.kpi-card.kpi-clickable:hover {
+  box-shadow : var(--shadow-md, 0 4px 12px rgba(0,0,0,.1));
+  transform  : translateY(-2px);
+}
+
+.kpi-icon-wrap {
+  width         : 48px;
+  height        : 48px;
+  border-radius : var(--radius-lg, 0.75rem);
+  display       : flex;
+  align-items   : center;
+  justify-content: center;
+  flex-shrink   : 0;
+}
+
+/* Variantes de color */
+.kpi-blue   .kpi-icon-wrap { background: #eff6ff; color: #2563eb; }
+.kpi-green  .kpi-icon-wrap { background: #ecfdf5; color: #059669; }
+.kpi-red    .kpi-icon-wrap { background: #fef2f2; color: #dc2626; }
+.kpi-purple .kpi-icon-wrap { background: #f5f3ff; color: #7c3aed; }
+.kpi-amber  .kpi-icon-wrap { background: #fffbeb; color: #d97706; }
+
+.kpi-content {
+  display       : flex;
+  flex-direction: column;
+  gap           : 2px;
+  min-width     : 0;
+}
+
+.kpi-label {
+  font-size   : var(--text-xs, 0.75rem);
+  font-weight : 500;
+  color       : var(--color-text-muted, #6b7280);
+  text-transform : uppercase;
+  letter-spacing : 0.05em;
+}
+
+.kpi-value {
+  font-size   : 1.45rem;
+  font-weight : 700;
+  color       : var(--color-text, #111827);
+  white-space : nowrap;
+  letter-spacing: -0.01em;
+}
+
+.kpi-subtitle {
+  font-size : var(--text-xs, 0.75rem);
+  color     : var(--color-text-muted, #6b7280);
+}
+
+.kpi-variation {
+  font-size   : var(--text-sm, 0.875rem);
+  font-weight : 600;
+}
+.kpi-var-positivo { color: var(--color-success, #059669); }
+.kpi-var-negativo { color: var(--color-error,   #dc2626); }
+.kpi-var-neutral  { color: var(--color-text-muted, #6b7280); }
+
+.kpi-error { color: var(--color-error, #dc2626); font-size: var(--text-sm); }
+</style>
