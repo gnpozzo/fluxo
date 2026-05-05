@@ -181,6 +181,7 @@ export class MovimientosModule extends BaseModule {
 
     this.#modal.open({
       titulo      : esIngreso ? 'Nuevo Ingreso' : 'Nuevo Egreso',
+      icono       : esIngreso ? 'trending_up' : 'trending_down',
       body        : this.#buildFormHtml(tipo, null),
       confirmLabel: esIngreso ? 'Guardar Ingreso' : 'Registrar Gasto',
       danger      : !esIngreso,
@@ -197,6 +198,7 @@ export class MovimientosModule extends BaseModule {
 
     this.#modal.open({
       titulo      : 'Editar Movimiento',
+      icono       : 'edit',
       body        : this.#buildFormHtml(tipo, row),
       confirmLabel: esIngreso ? 'Actualizar Ingreso' : 'Actualizar Gasto',
       danger      : !esIngreso,

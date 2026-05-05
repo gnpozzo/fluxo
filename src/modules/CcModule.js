@@ -139,6 +139,7 @@ export class CCModule extends BaseModule {
     this.#editData = null;
     this.#modal.open({
       titulo      : 'Nuevo gasto compartido',
+      icono       : 'users',
       body        : this.#buildFormHtml(null),
       confirmLabel: 'Guardar',
       onConfirm   : (m) => this.#guardar(m)
@@ -150,6 +151,7 @@ export class CCModule extends BaseModule {
     this.#editData = row;
     this.#modal.open({
       titulo      : 'Editar gasto compartido',
+      icono       : 'edit',
       body        : this.#buildFormHtml(row),
       confirmLabel: 'Actualizar',
       onConfirm   : (m) => this.#guardar(m)

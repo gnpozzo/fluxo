@@ -405,6 +405,7 @@ export class InversionesModule extends BaseModule {
     this.#editData = null;
     this.#modal.open({
       titulo      : 'Nueva operación de inversión',
+      icono       : 'investment',
       body        : this.#buildFormHtml(null),
       confirmLabel: 'Guardar',
       size        : 'lg',

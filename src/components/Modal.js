@@ -41,6 +41,7 @@ export class Modal {
    */
   open({
     titulo       = '',
+    icono        = null,
     body         = '',
     confirmLabel = 'Guardar',
     cancelLabel  = 'Cancelar',
@@ -52,7 +53,12 @@ export class Modal {
     this.#onConfirm = onConfirm;
     this.#onCancel  = onCancel;
 
-    this.#el.querySelector('.modal-title').textContent    = titulo;
+    let titleHtml = titulo;
+    if (icono && App.Icons.has(icono)) {
+      titleHtml = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:var(--primary);">${App.Icons.get(icono)}</span>` + titulo;
+    }
+    
+    this.#el.querySelector('.modal-title').innerHTML      = titleHtml;
     this.#el.querySelector('.modal-body').innerHTML       = body;
     this.#el.querySelector('.modal-confirm').textContent  = confirmLabel;
     this.#el.querySelector('.modal-cancel').textContent   = cancelLabel;

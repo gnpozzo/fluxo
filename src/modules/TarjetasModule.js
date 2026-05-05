@@ -190,6 +190,7 @@ export class TarjetasModule extends BaseModule {
     this.#editData = null;
     this.#modal.open({
       titulo      : 'Nuevo Consumo TC',
+      icono       : 'card',
       body        : this.#buildFormHtml(null),
       confirmLabel: 'Guardar',
       onConfirm   : (m) => this.#guardar(m)
@@ -201,6 +202,7 @@ export class TarjetasModule extends BaseModule {
     this.#editData = row;
     this.#modal.open({
       titulo      : 'Editar Consumo',
+      icono       : 'edit',
       body        : this.#buildFormHtml(row),
       confirmLabel: 'Actualizar',
       onConfirm   : (m) => this.#guardar(m)

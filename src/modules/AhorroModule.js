@@ -173,6 +173,7 @@ export class AhorroModule extends BaseModule {
     this.#editData = null;
     this.#modal.open({
       titulo      : tipo === 'DEPOSITO' ? 'Nuevo Depósito' : 'Nuevo Retiro',
+      icono       : tipo === 'DEPOSITO' ? 'trending_up' : 'trending_down',
       body        : this.#buildFormHtml(tipo, null),
       confirmLabel: 'Guardar',
       danger      : tipo === 'RETIRO',
@@ -184,6 +185,7 @@ export class AhorroModule extends BaseModule {
     this.#editData = row;
     this.#modal.open({
       titulo      : 'Editar movimiento de ahorro',
+      icono       : 'edit',
       body        : this.#buildFormHtml(row.tipo_mov, row),
       confirmLabel: 'Actualizar',
       onConfirm   : (m) => this.#guardar(m, row.tipo_mov)

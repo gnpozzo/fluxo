@@ -362,6 +362,7 @@ class AppInit {
       const m = new App.Modal('modal-quick-add');
       m.open({
         titulo: '¿Qué tipo de movimiento?',
+        icono: 'add',
         size: 'sm',
         body: `<div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
           <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('INGRESO')">${iw(icons.ing,'var(--verde-tint)','var(--verde)')}<span style="flex:1">Cargar Ingreso</span>${chev}</button>
