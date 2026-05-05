@@ -282,6 +282,12 @@ class AppInit {
           App.Store.setCuenta(nuevaId);
           this.#actualizarVisibilidadTabs(cuentaObj);
           
+          // Clear ALL loaded module caches so data reloads with the new account
+          Object.keys(this.#tabMap).forEach(v => {
+            const mid = this.#tabMap[v];
+            if (mid) App.Store.clearModuloLoaded(mid);
+          });
+
           this.#cargarNotificaciones(); // Refrescar notificaciones
 
           // Recargar módulo actual con la nueva cuenta
@@ -396,10 +402,14 @@ class AppInit {
       btn.addEventListener('click', () => this.#navegarTab(btn.dataset.vista));
     });
 
-    // Botón Admin (no es tab) - Lo vincula module-admin.html
+    // Botón Admin — NO navega a ningún tab, simplemente abre el modal admin.
     const adminBtn = document.getElementById('btn-admin');
     if (adminBtn) {
-      adminBtn.addEventListener('click', () => this.#navegarTab('vista-admin'));
+      adminBtn.addEventListener('click', () => {
+        if (App.Modules.admin) {
+          App.Modules.admin.cargar();
+        }
+      });
     }
 
     App.log('AppInit', '#initModulos', `${Object.keys(App.Modules).length} módulos inicializados`);

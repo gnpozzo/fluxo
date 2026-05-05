@@ -122,14 +122,16 @@ export class AdminModule extends BaseModule {
         <div class="table-card">
           <table class="table">
             <thead><tr>
-              <th>Nombre</th><th>Moneda</th><th>Ajuste CC/TC</th><th></th>
+              <th>Nombre</th><th>Moneda</th><th>Estado</th><th></th>
             </tr></thead>
             <tbody>
               ${cuentas.map(c => `
                 <tr>
                   <td>${App.Utils.escapeHtml(c.nombre)}</td>
                   <td>${App.Utils.escapeHtml(c.moneda_principal || c.moneda || 'ARS')}</td>
-                  <td>${c.requiere_ajuste_cc_tc ? '✓' : '—'}</td>
+                  <td>${c.activa
+                    ? '<span class="badge tipo-ingreso">Activa</span>'
+                    : '<span class="badge badge-neutro">Inactiva</span>'}</td>
                   <td class="text-right">
                     <button class="btn-accion" onclick="App.Modules.admin._editCuenta('${c.id_cuenta_principal}')" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}

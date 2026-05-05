@@ -25,6 +25,8 @@ export class TarjetasModule extends BaseModule {
   #categorias  = [];
   #cuentas     = [];
   #editData    = null;
+  #allConsumos = [];
+  #selectedTcId = null;
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -80,13 +82,22 @@ export class TarjetasModule extends BaseModule {
     const { kpis, consumos } = data;
 
     // Tarjetas, categorías y cuentas desde globales (cargados en boot por api_getInitialData)
-    if (!this.#tarjetas.length)   this.#tarjetas   = window._appTarjetas   || [];
+    // IMPORTANT: Filter tarjetas by current cuenta principal
+    const allTarjetas = window._appTarjetas || [];
+    this.#tarjetas = allTarjetas.filter(t => t.id_cuenta_principal === App.Store.cuenta);
     if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
     if (!this.#cuentas.length)    this.#cuentas    = App.Store.cuentas     || [];
 
     this.#kpiTotal?.setValue(kpis.saldoTotal);
     this.#kpiImputado?.setValue(kpis.incidenciaPersonal, { invertido: kpis.incidenciaPersonal < 0 });
     this.#kpiConsol?.setValue(kpis.incidenciaFamiliar, { invertido: false });
+
+    // Store all consumos for filtering
+    this.#allConsumos = consumos || [];
+    this.#selectedTcId = null;
+
+    // Build the card selector pills
+    this.#renderCardSelector();
 
     this.#table?.load(consumos || []);
     App.log('TarjetasModule', '_render', `${(consumos || []).length} consumos`);
@@ -127,6 +138,10 @@ export class TarjetasModule extends BaseModule {
 
     vista.innerHTML = `
       <div class="kpi-grid" id="tc-kpi-grid"></div>
+
+      <!-- Card Selector -->
+      <div id="tc-card-selector" style="display:flex;gap:10px;overflow-x:auto;padding:4px 0;margin-bottom:var(--space-3)"></div>
+
       <div class="section-header" style="margin-bottom:var(--space-3)">
         <div class="acciones-container" id="tc-acciones"></div>
         <div class="selector-vista-container">
@@ -492,6 +507,65 @@ export class TarjetasModule extends BaseModule {
       fechaInicio: `${y}-${String(mo).padStart(2, '0')}-01`,
       fechaFin   : `${y}-${String(mo).padStart(2, '0')}-${ultimo}`
     };
+  }
+
+  #renderCardSelector() {
+    const wrap = document.getElementById('tc-card-selector');
+    if (!wrap) return;
+
+    if (this.#tarjetas.length === 0) {
+      wrap.innerHTML = '';
+      return;
+    }
+
+    // Calculate subtotal per card
+    const subtotals = {};
+    this.#allConsumos.forEach(c => {
+      const tid = c.id_tarjeta;
+      subtotals[tid] = (subtotals[tid] || 0) + Number(c.importe || 0);
+    });
+
+    // "Todas" pill
+    const allPill = `<button class="tc-card-pill ${!this.#selectedTcId ? 'active' : ''}"
+      data-tc-filter="all"
+      style="display:flex;flex-direction:column;align-items:flex-start;padding:10px 16px;border-radius:var(--r);border:2px solid ${!this.#selectedTcId ? 'var(--primary)' : 'var(--borde)'};background:${!this.#selectedTcId ? 'var(--primary-tint)' : 'var(--superficie)'};cursor:pointer;min-width:140px;transition:all .15s;font-family:inherit">
+      <span style="font-size:0.78rem;font-weight:600;color:var(--texto)">Todas las tarjetas</span>
+      <span style="font-size:1rem;font-weight:700;color:var(--texto);margin-top:2px">${App.Utils.formatearMoneda(this.#allConsumos.reduce((s, c) => s + Number(c.importe || 0), 0))}</span>
+    </button>`;
+
+    const pills = this.#tarjetas.map(tc => {
+      const isActive = this.#selectedTcId === tc.id_tarjeta;
+      const last4 = tc.ultimos_4 || '••••';
+      const sub = subtotals[tc.id_tarjeta] || 0;
+      return `<button class="tc-card-pill ${isActive ? 'active' : ''}"
+        data-tc-filter="${tc.id_tarjeta}"
+        style="display:flex;flex-direction:column;align-items:flex-start;padding:10px 16px;border-radius:var(--r);border:2px solid ${isActive ? 'var(--primary)' : 'var(--borde)'};background:${isActive ? 'var(--primary-tint)' : 'var(--superficie)'};cursor:pointer;min-width:140px;transition:all .15s;font-family:inherit">
+        <span style="font-size:0.78rem;font-weight:600;color:var(--texto)">${App.Utils.escapeHtml(tc.nombre || tc.marca)}</span>
+        <span style="font-size:0.68rem;color:var(--texto-3)">•••• ${last4}</span>
+        <span style="font-size:1rem;font-weight:700;color:var(--texto);margin-top:2px">${App.Utils.formatearMoneda(sub)}</span>
+      </button>`;
+    }).join('');
+
+    wrap.innerHTML = allPill + pills;
+
+    // Bind click events
+    wrap.querySelectorAll('[data-tc-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.tcFilter;
+        this.#selectedTcId = val === 'all' ? null : val;
+        this.#renderCardSelector();
+        this.#filterConsumosByCard();
+      });
+    });
+  }
+
+  #filterConsumosByCard() {
+    if (!this.#selectedTcId) {
+      this.#table?.load(this.#allConsumos);
+    } else {
+      const filtered = this.#allConsumos.filter(c => c.id_tarjeta === this.#selectedTcId);
+      this.#table?.load(filtered);
+    }
   }
 }
 

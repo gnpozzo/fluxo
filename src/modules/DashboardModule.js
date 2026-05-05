@@ -132,6 +132,7 @@ export class DashboardModule extends BaseModule {
               </div>
               <button class="dash-tc-arrow" id="dash-tc-next" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
             </div>
+            <div style="text-align:center;margin-top:8px;font-size:0.85rem;font-weight:600;color:var(--texto-2)" id="dash-tc-subtotal">Subtotal: —</div>
             <button id="dash-tc-ver-consumos" class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" disabled>Ver consumos de esta tarjeta</button>
           </div>
         </div>
@@ -303,7 +304,9 @@ export class DashboardModule extends BaseModule {
   }
 
   #renderTcCards(data) {
-    const tarjetas = window._appTarjetas || [];
+    const allTarjetas = window._appTarjetas || [];
+    // Only show tarjetas belonging to the current account
+    const tarjetas = allTarjetas.filter(t => t.id_cuenta_principal === App.Store.cuenta);
     this._tcList = tarjetas;
     this._tcIndex = 0;
 
@@ -379,6 +382,14 @@ export class DashboardModule extends BaseModule {
 
     const vtoEl = document.getElementById('dash-tc-vto');
     if (vtoEl) vtoEl.textContent = tc.vencimiento || '—/—';
+
+    // Show per-card subtotal
+    const subtotalEl = document.getElementById('dash-tc-subtotal');
+    const cardData = this._tcConsumos?.[tc.id_tarjeta];
+    const subtotal = cardData?.total || 0;
+    if (subtotalEl) {
+      subtotalEl.textContent = `Subtotal: ${App.Utils.formatearMoneda(subtotal)}`;
+    }
   }
 
   #openTcModal(tarjetaId, tarjetaNombre) {

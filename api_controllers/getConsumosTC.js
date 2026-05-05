@@ -30,10 +30,22 @@ export default async function handler(req, res) {
     if (!rpcRes.error) {
        consumos = rpcRes.data;
     } else {
-       // Fallback to table if RPC is missing
-       const { data, error: tErr } = await supabase.from('consumos_tc').select('*').eq('id_cuenta_principal', cuenta);
-       if (tErr) throw tErr;
-       consumos = data;
+       // Fallback: get tarjetas for this account, then get their consumos
+       const { data: tarjetas, error: tErr1 } = await supabase
+         .from('tarjetas')
+         .select('id_tarjeta')
+         .eq('id_cuenta_principal', cuenta);
+       if (tErr1) throw tErr1;
+       
+       const tarjetaIds = (tarjetas || []).map(t => t.id_tarjeta);
+       if (tarjetaIds.length > 0) {
+         let query = supabase.from('consumos_tc').select('*').in('id_tarjeta', tarjetaIds);
+         if (fechaInicio) query = query.gte('fecha', fechaInicio);
+         if (fechaFin) query = query.lte('fecha', fechaFin);
+         const { data, error: tErr2 } = await query;
+         if (tErr2) throw tErr2;
+         consumos = data;
+       }
     }
 
     let saldoTotal = 0;
