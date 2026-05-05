@@ -515,6 +515,8 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   gap: 20px;
   padding: 0 0 24px;
   flex-wrap: wrap;
+  max-width: var(--max-w, 1280px);
+  margin: 0 auto;
 }
 .welcome-greeting h2 {
   font-size: 1.6rem;

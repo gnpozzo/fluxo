@@ -130,7 +130,7 @@ export class Modal {
   #build() {
     if (document.getElementById(this.#id)) {
       this.#overlay = document.getElementById(this.#id);
-      this.#el      = this.#overlay.querySelector('.modal-container');
+      this.#el      = this.#overlay.querySelector('.modal-content');
       return;
     }
 
@@ -143,7 +143,7 @@ export class Modal {
 
     this.#overlay.innerHTML = `
       <div class="modal-dialog modal-md">
-        <div class="modal-container">
+        <div class="modal-content">
           <header class="modal-header">
             <h2 class="modal-title" id="${this.#id}-title"></h2>
             <button class="modal-x btn-icon" aria-label="Cerrar">
@@ -160,7 +160,7 @@ export class Modal {
     `;
 
     document.body.appendChild(this.#overlay);
-    this.#el = this.#overlay.querySelector('.modal-container');
+    this.#el = this.#overlay.querySelector('.modal-content');
 
     // Listeners
     this.#overlay.querySelector('.modal-x').addEventListener('click',     () => this.#handleCancel());

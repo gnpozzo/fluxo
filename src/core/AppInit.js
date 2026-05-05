@@ -368,7 +368,6 @@ class AppInit {
           <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('EGRESO')">${iw(icons.egr,'var(--rojo-tint)','var(--rojo)')}<span style="flex:1">Cargar Gasto</span>${chev}</button>
           <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.tarjetas?.abrirAlta()">${iw(icons.tc,'#eff6ff','#2563eb')}<span style="flex:1">Consumo en Tarjeta</span>${chev}</button>
           <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.cc?.abrirAlta()">${iw(icons.cc,'#f5f3ff','#7c3aed')}<span style="flex:1">Gasto Compartido</span>${chev}</button>
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.ahorro?.abrirAlta()">${iw(icons.ah,'var(--amarillo-tint)','var(--amarillo-text)')}<span style="flex:1">Cargar Ahorro</span>${chev}</button>
         </div>`,
         confirmLabel: '',
         cancelLabel: 'Cancelar'
