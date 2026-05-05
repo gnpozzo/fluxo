@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './_lib/supabase.js';
+import { getSupabaseClient } from '../api_lib/supabase.js';
 import crypto from 'crypto';
 
 function addMonthsSafe(date, months) {

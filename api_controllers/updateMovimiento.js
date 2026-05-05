@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './_lib/supabase.js';
+import { getSupabaseClient } from '../api_lib/supabase.js';
 
 function addMonthsSafe(date, months) {
   const d = new Date(date);

@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './_lib/supabase.js';
+import { getSupabaseClient } from '../api_lib/supabase.js';
 
 // En el OLD API, updateConsumoCC hacía un delete + create.
 // Como los endpoints son archivos separados, lo resolvemos internamente aquí.
