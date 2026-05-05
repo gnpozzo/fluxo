@@ -310,11 +310,15 @@ export class DashboardModule extends BaseModule {
     this._tcList = tarjetas;
     this._tcIndex = 0;
 
-    // Aggregate consumos by tarjeta
+    // Build set of valid tarjeta IDs for this account
+    const validTcIds = new Set(tarjetas.map(t => t.id_tarjeta));
+
+    // Aggregate consumos by tarjeta — ONLY for tarjetas belonging to THIS account
     const consumosByTc = {};
     let totalGlobal = 0;
     (data.consumos || []).forEach(c => {
       const tid = c.id_tarjeta;
+      if (!validTcIds.has(tid)) return; // Skip consumos from other accounts' tarjetas
       if (!consumosByTc[tid]) consumosByTc[tid] = { total: 0, count: 0, items: [] };
       consumosByTc[tid].total += Number(c.importe || 0);
       consumosByTc[tid].count++;

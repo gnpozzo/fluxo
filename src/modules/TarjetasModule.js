@@ -88,19 +88,35 @@ export class TarjetasModule extends BaseModule {
     if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
     if (!this.#cuentas.length)    this.#cuentas    = App.Store.cuentas     || [];
 
-    this.#kpiTotal?.setValue(kpis.saldoTotal);
-    this.#kpiImputado?.setValue(kpis.incidenciaPersonal, { invertido: kpis.incidenciaPersonal < 0 });
-    this.#kpiConsol?.setValue(kpis.incidenciaFamiliar, { invertido: false });
+    // Filter consumos to only those from this account's tarjetas
+    const validTcIds = new Set(this.#tarjetas.map(t => t.id_tarjeta));
+    const filteredConsumos = (consumos || []).filter(c => validTcIds.has(c.id_tarjeta));
 
-    // Store all consumos for filtering
-    this.#allConsumos = consumos || [];
+    // Recalculate KPIs from filtered data (don't trust backend if RPC leaks cross-account)
+    let saldoTotal = 0, incidenciaPersonal = 0, incidenciaFamiliar = 0;
+    filteredConsumos.forEach(c => {
+      const imp = Number(c.importe || 0);
+      saldoTotal += imp;
+      if (c.imputado && c.cuenta_imputada_nombre !== 'Propios') {
+        incidenciaFamiliar += imp;
+      } else {
+        incidenciaPersonal += imp;
+      }
+    });
+
+    this.#kpiTotal?.setValue(saldoTotal);
+    this.#kpiImputado?.setValue(incidenciaPersonal, { invertido: incidenciaPersonal < 0 });
+    this.#kpiConsol?.setValue(incidenciaFamiliar, { invertido: false });
+
+    // Store filtered consumos for card selector filtering
+    this.#allConsumos = filteredConsumos;
     this.#selectedTcId = null;
 
     // Build the card selector pills
     this.#renderCardSelector();
 
-    this.#table?.load(consumos || []);
-    App.log('TarjetasModule', '_render', `${(consumos || []).length} consumos`);
+    this.#table?.load(filteredConsumos);
+    App.log('TarjetasModule', '_render', `${filteredConsumos.length} consumos (filtered from ${(consumos || []).length})`);
   }
 
   _renderProyecciones(data) {
