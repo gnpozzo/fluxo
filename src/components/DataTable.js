@@ -38,12 +38,13 @@ export class DataTable {
       : container;
 
     this.#config = {
-      columns   : [],
-      emptyMsg  : 'No hay datos para mostrar.',
-      searchable: false,
-      paginated : false,
-      pageSize  : 20,
-      onAction  : null,
+      columns    : [],
+      emptyMsg   : 'No hay datos para mostrar.',
+      searchable : false,
+      paginated  : false,
+      pageSize   : 20,
+      onAction   : null,
+      onRowClick : null,
       ...config
     };
 
@@ -186,8 +187,9 @@ export class DataTable {
       return;
     }
 
+    const clickable = typeof this.#config.onRowClick === 'function';
     tbody.innerHTML = rows.map((row, i) => `
-      <tr data-index="${i}" class="dt-row">
+      <tr data-index="${i}" class="dt-row${clickable ? ' dt-row-clickable' : ''}">
         ${columns.map(c => {
           const val = c.render
             ? c.render(row)
@@ -279,23 +281,32 @@ export class DataTable {
       });
     });
 
-    // Delegación centralizada para botones de acción por fila
+    // Delegación centralizada para clicks en filas y botones de acción
     const tbody = this.#container.querySelector('tbody');
     if (tbody) {
       tbody.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return;
-        
-        const action = btn.dataset.action;
-        const tr     = btn.closest('tr');
-        const rowId  = btn.dataset.id ?? tr?.dataset.id;
-        const rowIdx = Number(tr?.dataset.index);
-        
+        const tr = e.target.closest('tr.dt-row');
+        if (!tr) return;
+
+        const rowIdx = Number(tr.dataset.index);
         const rows = this.#config.paginated ? this.#currentPage() : this.#filtered;
         const rowData = rows[rowIdx];
-        
-        if (rowData && typeof this.#config.onAction === 'function') {
-          this.#config.onAction({ action, id: rowId, row: rowData, originalEvent: e });
+        if (!rowData) return;
+
+        // Check if an action button was clicked
+        const btn = e.target.closest('[data-action]');
+        if (btn) {
+          const action = btn.dataset.action;
+          const rowId  = btn.dataset.id ?? tr.dataset.id;
+          if (typeof this.#config.onAction === 'function') {
+            this.#config.onAction({ action, id: rowId, row: rowData, originalEvent: e });
+          }
+          return;
+        }
+
+        // Otherwise, trigger row click (detail modal)
+        if (typeof this.#config.onRowClick === 'function') {
+          this.#config.onRowClick({ row: rowData, index: rowIdx, originalEvent: e });
         }
       });
     }

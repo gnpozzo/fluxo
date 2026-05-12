@@ -18,7 +18,6 @@ class AppInit {
   /** Mapa de tabs: vistaId → módulo en App.Modules */
   #tabMap = {
     'vista-dashboard'   : 'dashboard',
-    'vista-movimientos' : 'movimientos',
     'vista-tarjetas'    : 'tarjetas',
     'vista-cc'          : 'cc',
     'vista-ahorro'      : 'ahorro',

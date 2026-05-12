@@ -199,14 +199,12 @@ export class TarjetasModule extends BaseModule {
           { key: 'imputacion',      label: 'Imputación',
             render: (r) => r.imputado
               ? `<span class="badge ${r.cuenta_imputada_nombre === 'Propios' ? 'badge-tc' : 'badge-recur'}">${r.cuenta_imputada_nombre}</span>`
-              : `<span class="badge badge-neutro">Sin Imputar</span>` },
-          { key: '_acciones',       label: '', align: 'right', exportable: false,
-            render: (r) => this.#renderAcciones(r) }
+              : `<span class="badge badge-neutro">Sin Imputar</span>` }
         ],
         emptyMsg  : 'No hay consumos para este período.',
         paginated : true,
         pageSize  : 25,
-        onAction  : ({ action, row }) => this.#handleAccion(action, row)
+        onRowClick: ({ row }) => this.#abrirModalDetalle(row)
       }
     );
   }
@@ -398,7 +396,7 @@ export class TarjetasModule extends BaseModule {
       cuotaTotal  : Number(d.cuota_total  || 1),
       periodos    : Number(d.periodos     || 12),
       imputar     : d.imputar === 'on',
-      cuentaImputar: d.cuenta_imputar || ''
+      idCuentaImputar: d.cuenta_imputar || ''
     };
 
     modal.setLoading(true);
@@ -483,7 +481,73 @@ export class TarjetasModule extends BaseModule {
     }
   }
 
-  // --- SECCIÓN 7: HELPERS ---
+  // --- SECCIÓN 7: DETAIL MODAL & HELPERS ---
+
+  #abrirModalDetalle(row) {
+    const badges = [];
+    if (row.tipo_consumo === 'CUOTAS')     badges.push(`<span class="badge badge-recur">Cuota ${row.cuota_actual}/${row.cuota_total}</span>`);
+    else if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
+    if (row.imputado) badges.push('<span class="badge badge-tc">Imputado</span>');
+
+    const detailModal = new App.Modal('modal-tc-detail');
+    detailModal.open({
+      titulo: row.descripcion,
+      icono: 'card',
+      size: 'md',
+      body: `
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Importe</span>
+            <span class="detail-value detail-amount negativo">${App.Utils.formatearMoneda(row.importe)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Tarjeta</span>
+            <span class="detail-value">${App.Utils.escapeHtml(row.tarjeta_nombre || '—')}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Fecha</span>
+            <span class="detail-value">${App.Utils.formatearFecha(row.fecha?.value || row.fecha)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Categoría</span>
+            <span class="detail-value">${App.Utils.escapeHtml(row.categoria_nombre || 'General')}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Imputación</span>
+            <span class="detail-value">${row.imputado
+              ? `<span class="badge ${row.cuenta_imputada_nombre === 'Propios' ? 'badge-tc' : 'badge-recur'}">${row.cuenta_imputada_nombre}</span>`
+              : '<span class="badge badge-neutro">Sin Imputar</span>'}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Etiquetas</span>
+            <span class="detail-value">${badges.length > 0 ? badges.join(' ') : '<span style="color:var(--texto-3)">Ninguna</span>'}</span>
+          </div>
+          ${row.descripcion ? `
+          <div class="detail-item full-width">
+            <span class="detail-label">Descripción</span>
+            <span class="detail-value" style="font-weight:500">${App.Utils.escapeHtml(row.descripcion)}</span>
+          </div>` : ''}
+        </div>
+        <div class="detail-actions">
+          <button class="btn btn-ghost" id="detail-tc-edit">${App.Icons.get('edit', 'icon-sm')} Editar</button>
+          <button class="btn btn-danger" id="detail-tc-delete">${App.Icons.get('delete', 'icon-sm')} Eliminar</button>
+        </div>
+      `,
+      confirmLabel: '',
+      cancelLabel: 'Cerrar'
+    });
+    const cb = detailModal.el.querySelector('.modal-confirm');
+    if (cb) cb.style.display = 'none';
+
+    document.getElementById('detail-tc-edit')?.addEventListener('click', () => {
+      detailModal.close();
+      this.#abrirModalEdicion(row);
+    });
+    document.getElementById('detail-tc-delete')?.addEventListener('click', () => {
+      detailModal.close();
+      this.#eliminar(row);
+    });
+  }
 
   #renderDescripcion(row) {
     const badges = [];
@@ -491,23 +555,6 @@ export class TarjetasModule extends BaseModule {
     else if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
     if (row.imputado) badges.push('<span class="badge badge-tc">Imputado</span>');
     return `${App.Utils.escapeHtml(row.descripcion)} ${badges.join(' ')}`;
-  }
-
-  #renderAcciones(row) {
-    return `
-      <div style="display:flex;gap:4px;justify-content:flex-end">
-        <button class="btn-accion" data-action="edit" data-id="${row.id_consumo_tc}">
-          ${App.Icons.get('edit', 'icon-sm')}
-        </button>
-        <button class="btn-accion btn-danger" data-action="delete" data-id="${row.id_consumo_tc}">
-          ${App.Icons.get('delete', 'icon-sm')}
-        </button>
-      </div>`;
-  }
-
-  #handleAccion(action, row) {
-    if (action === 'edit')   this.#abrirModalEdicion(row);
-    if (action === 'delete') this.#eliminar(row);
   }
 
   #mostrarKpiSkeletons() {

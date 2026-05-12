@@ -141,14 +141,12 @@ export class AhorroModule extends BaseModule {
               const fmt = r.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
               const cls = r.tipo_mov === 'RETIRO' ? 'negativo' : 'positivo';
               return `<span class="${cls}">${fmt(r.importe)}</span>`;
-            }},
-          { key: '_acciones', label: '', align: 'right', exportable: false,
-            render: (r) => this.#renderAcciones(r) }
+            }}
         ],
         emptyMsg : 'No hay movimientos de ahorro para este período.',
         paginated: true,
         pageSize : 25,
-        onAction : ({ action, row }) => this.#handleAccion(action, row)
+        onRowClick: (row) => this.#abrirModalDetalle(row)
       }
     );
   }
@@ -318,21 +316,72 @@ export class AhorroModule extends BaseModule {
 
   // --- SECCIÓN 8: HELPERS ---
 
-  #renderAcciones(row) {
-    return `
-      <div style="display:flex;gap:4px;justify-content:flex-end">
-        <button class="btn-accion" data-action="edit" data-id="${row.id_ahorro}">
-          ${App.Icons.get('edit', 'icon-sm')}
-        </button>
-        <button class="btn-accion btn-danger" data-action="delete" data-id="${row.id_ahorro}">
-          ${App.Icons.get('delete', 'icon-sm')}
-        </button>
-      </div>`;
-  }
+  #abrirModalDetalle(row) {
+    const isRetiro = row.tipo_mov === 'RETIRO';
+    const clr = isRetiro ? 'var(--rojo)' : 'var(--verde)';
+    const fmt = row.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
 
-  #handleAccion(action, row) {
-    if (action === 'edit')   this.#abrirModalEdicion(row);
-    if (action === 'delete') this.#eliminar(row);
+    const html = `
+      <div class="detail-modal">
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Tipo</span>
+          <strong style="color:${clr}">${App.Utils.escapeHtml(row.tipo_mov)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Subcuenta</span>
+          <strong>${App.Utils.escapeHtml(row.subcuenta_nombre || '—')}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Fecha</span>
+          <strong>${App.Utils.formatearFecha(row.fecha?.value || row.fecha)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Descripción</span>
+          <strong>${App.Utils.escapeHtml(row.descripcion || '—')}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Importe</span>
+          <strong style="color:${clr}">${fmt(row.importe)}</strong>
+        </div>
+      </div>
+    `;
+
+    const m = new App.Modal('modal-aho-detalle');
+    m.open({
+      titulo: 'Detalle de Ahorro',
+      body: html,
+      confirmLabel: 'Cerrar'
+    });
+
+    const footer = m.el.querySelector('.modal-footer');
+    if (footer) {
+      const cb = footer.querySelector('.modal-confirm');
+      if (cb) cb.style.display = 'none';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn btn-outline';
+      editBtn.innerHTML = App.Icons.get('edit', 'icon-sm') + ' Editar';
+      editBtn.onclick = () => {
+         m.close();
+         this.#abrirModalEdicion(row);
+      };
+      footer.prepend(editBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-outline btn-danger';
+      delBtn.innerHTML = App.Icons.get('delete', 'icon-sm') + ' Eliminar';
+      delBtn.onclick = () => {
+         m.close();
+         this.#eliminar(row);
+      };
+      footer.prepend(delBtn);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'btn btn-primary';
+      closeBtn.textContent = 'Cerrar';
+      closeBtn.onclick = () => m.close();
+      footer.appendChild(closeBtn);
+    }
   }
 
   #mostrarKpiSkeletons() {

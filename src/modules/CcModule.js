@@ -117,14 +117,12 @@ export class CCModule extends BaseModule {
           { key: 'importe_total',   label: 'Total',     sortable: true, align: 'right',
             render: (r) => App.Utils.formatearMoneda(r.importe_total) },
           { key: 'mi_parte',        label: 'Mi parte',  align: 'right',
-            render: (r) => `<span class="negativo">${App.Utils.formatearMoneda(r.mi_parte)}</span>` },
-          { key: '_acciones',       label: '', align: 'right', exportable: false,
-            render: (r) => this.#renderAcciones(r) }
+            render: (r) => `<span class="negativo">${App.Utils.formatearMoneda(r.mi_parte)}</span>` }
         ],
         emptyMsg: 'No hay gastos compartidos para este período.',
         paginated: true,
         pageSize : 25,
-        onAction : ({ action, row }) => this.#handleAccion(action, row)
+        onRowClick: ({ row }) => this.#abrirModalDetalle(row)
       }
     );
   }
@@ -349,30 +347,74 @@ export class CCModule extends BaseModule {
     }
   }
 
-  // --- SECCIÓN 7: HELPERS ---
+  // --- SECCIÓN 7: DETAIL MODAL & HELPERS ---
+
+  #abrirModalDetalle(row) {
+    const badges = [];
+    if (row.tipo_consumo === 'CUOTAS')     badges.push(`<span class="badge badge-recur">Cuota ${row.cuota_actual}/${row.cuota_total}</span>`);
+    if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
+
+    const miParte = Number(row.mi_parte || 0);
+    const importeTotal = Number(row.importe_total || row.importe || 0);
+
+    const detailModal = new App.Modal('modal-cc-detail');
+    detailModal.open({
+      titulo: row.descripcion,
+      icono: 'users',
+      size: 'md',
+      body: `
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Importe Total</span>
+            <span class="detail-value detail-amount">${App.Utils.formatearMoneda(importeTotal)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Mi Parte</span>
+            <span class="detail-value detail-amount negativo">${App.Utils.formatearMoneda(miParte)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Fecha</span>
+            <span class="detail-value">${App.Utils.formatearFecha(row.fecha?.value || row.fecha)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Pagador</span>
+            <span class="detail-value">${App.Utils.escapeHtml(row.pagador || '—')}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Categoría</span>
+            <span class="detail-value">${App.Utils.escapeHtml(row.categoria_nombre || 'General')}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Etiquetas</span>
+            <span class="detail-value">${badges.length > 0 ? badges.join(' ') : '<span style="color:var(--texto-3)">Ninguna</span>'}</span>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <button class="btn btn-ghost" id="detail-cc-edit">${App.Icons.get('edit', 'icon-sm')} Editar</button>
+          <button class="btn btn-danger" id="detail-cc-delete">${App.Icons.get('delete', 'icon-sm')} Eliminar</button>
+        </div>
+      `,
+      confirmLabel: '',
+      cancelLabel: 'Cerrar'
+    });
+    const cb = detailModal.el.querySelector('.modal-confirm');
+    if (cb) cb.style.display = 'none';
+
+    document.getElementById('detail-cc-edit')?.addEventListener('click', () => {
+      detailModal.close();
+      this.#abrirModalEdicion(row);
+    });
+    document.getElementById('detail-cc-delete')?.addEventListener('click', () => {
+      detailModal.close();
+      this.#eliminar(row);
+    });
+  }
 
   #renderDescripcion(row) {
     const badges = [];
     if (row.tipo_consumo === 'CUOTAS')     badges.push(`<span class="badge badge-recur">Cuota ${row.cuota_actual}/${row.cuota_total}</span>`);
     if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
     return `${App.Utils.escapeHtml(row.descripcion)} ${badges.join(' ')}`;
-  }
-
-  #renderAcciones(row) {
-    return `
-      <div style="display:flex;gap:4px;justify-content:flex-end">
-        <button class="btn-accion" data-action="edit" data-id="${row.id_consumo_cc}">
-          ${App.Icons.get('edit', 'icon-sm')}
-        </button>
-        <button class="btn-accion btn-danger" data-action="delete" data-id="${row.id_consumo_cc}">
-          ${App.Icons.get('delete', 'icon-sm')}
-        </button>
-      </div>`;
-  }
-
-  #handleAccion(action, row) {
-    if (action === 'edit')   this.#abrirModalEdicion(row);
-    if (action === 'delete') this.#eliminar(row);
   }
 
   #mostrarKpiSkeletons() {

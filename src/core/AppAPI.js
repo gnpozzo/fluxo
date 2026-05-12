@@ -57,6 +57,12 @@ class ApiService {
     return this.call(fnName, id);
   }
 
+  invalidatePattern(pattern) {
+    for (const key of this._cache.keys()) {
+      if (key.includes(pattern)) this._cache.delete(key);
+    }
+  }
+
   invalidateAll() {
     this._cache.clear();
   }

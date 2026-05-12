@@ -749,6 +749,13 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   background : var(--color-hover, #f9fafb);
 }
 
+.table tbody tr.dt-row-clickable {
+  cursor: pointer;
+}
+.table tbody tr.dt-row-clickable:hover {
+  background: var(--primary-tint);
+}
+
 .movimientos-container {
   background-color: transparent;
   border: none;
@@ -1078,6 +1085,47 @@ button.btn-secundario:hover {
   background: var(--superficie);
   border-bottom-left-radius: var(--r-lg);
   border-bottom-right-radius: var(--r-lg);
+}
+
+/* Detail modal data grid */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.detail-grid .detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.detail-grid .detail-item.full-width {
+  grid-column: 1 / -1;
+}
+.detail-grid .detail-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.detail-grid .detail-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--texto);
+}
+.detail-grid .detail-value.detail-amount {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+.detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borde);
+}
+.detail-actions .btn {
+  flex: 1;
 }
 
 /* ----------------------------------------------------------------

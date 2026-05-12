@@ -387,14 +387,12 @@ export class InversionesModule extends BaseModule {
               if (r.ganancia === null || r.ganancia === undefined) return '—';
               const cls = r.ganancia >= 0 ? 'positivo' : 'negativo';
               return `<span class="${cls}">${App.Utils.formatearMoneda(r.ganancia)}</span>`;
-            }},
-          { key: '_acciones', label: '', align: 'right', exportable: false,
-            render: (r) => this.#renderAcciones(r) }
+            }}
         ],
         emptyMsg: 'No hay operaciones en el portfolio.',
         paginated: true,
         pageSize : 25,
-        onAction : ({ action, row }) => this.#handleAccion(action, row)
+        onRowClick: (row) => this.#abrirModalDetalle(row)
       }
     );
   }
@@ -575,17 +573,80 @@ export class InversionesModule extends BaseModule {
 
   // --- SECCIÓN 7: HELPERS ---
 
-  #renderAcciones(row) {
-    return `
-      <div style="display:flex;gap:4px;justify-content:flex-end">
-        <button class="btn-accion btn-danger" data-action="delete" data-id="${row.id_operacion}">
-          ${App.Icons.get('delete', 'icon-sm')}
-        </button>
-      </div>`;
+  #abrirModalDetalle(row) {
+    const isCompra = row.tipo_op === 'COMPRA';
+    const clr = isCompra ? 'var(--verde)' : 'var(--rojo)';
+    const fmt = row.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
+    
+    let resultHtml = '';
+    if (row.ganancia !== null && row.ganancia !== undefined) {
+       const resClr = row.ganancia >= 0 ? 'var(--verde)' : 'var(--rojo)';
+       resultHtml = `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+         <span style="color:var(--texto-2)">P&L</span>
+         <strong style="color:${resClr}">${App.Utils.formatearMoneda(row.ganancia)}</strong>
+       </div>`;
+    }
+
+    const html = `
+      <div class="detail-modal">
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Operación</span>
+          <strong style="color:${clr}">${App.Utils.escapeHtml(row.tipo_op)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Ticker</span>
+          <strong>${App.Utils.escapeHtml(row.ticker)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Fecha</span>
+          <strong>${App.Utils.formatearFecha(row.fecha?.value || row.fecha)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Cantidad</span>
+          <strong>${App.Utils.formatearMoneda(row.cantidad, false)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Precio</span>
+          <strong>${fmt(row.precio)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
+          <span style="color:var(--texto-2)">Precio Actual</span>
+          <strong>${row.precio_actual ? fmt(row.precio_actual) : '—'}</strong>
+        </div>
+        ${resultHtml}
+      </div>
+    `;
+
+    const m = new App.Modal('modal-inv-detalle');
+    m.open({
+      titulo: 'Detalle de Inversión',
+      body: html,
+      confirmLabel: 'Cerrar'
+    });
+
+    const footer = m.el.querySelector('.modal-footer');
+    if (footer) {
+      const cb = footer.querySelector('.modal-confirm');
+      if (cb) cb.style.display = 'none';
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-outline btn-danger';
+      delBtn.innerHTML = App.Icons.get('delete', 'icon-sm') + ' Eliminar';
+      delBtn.onclick = () => {
+         m.close();
+         this.#eliminarOperacion(row);
+      };
+      footer.prepend(delBtn);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'btn btn-primary';
+      closeBtn.textContent = 'Cerrar';
+      closeBtn.onclick = () => m.close();
+      footer.appendChild(closeBtn);
+    }
   }
 
-  #handleAccion(action, row) {
-    if (action === 'delete') {
+  #eliminarOperacion(row) {
       const m = new App.Modal('modal-inv-del-confirm');
       m.open({
         titulo      : 'Eliminar operación',
@@ -594,7 +655,6 @@ export class InversionesModule extends BaseModule {
         danger      : true,
         onConfirm   : async () => {
           try {
-            // Inversiones no tiene endpoint delete estándar — usar call directo
             await App.API.call('api_deleteInversion', row.id_operacion);
             App.API.invalidatePattern('api_getPortfolio');
             App.Toast.success('Operación eliminada.');
@@ -605,7 +665,6 @@ export class InversionesModule extends BaseModule {
           }
         }
       });
-    }
   }
 
   #mostrarKpiSkeletons() {
