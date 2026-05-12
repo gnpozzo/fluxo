@@ -101,14 +101,14 @@ class ApiService {
         throw new Error(`HTTP Error: ${response.status} en ${endpoint}`);
       }
 
-      const { success, error, data, ...rest } = await response.json();
+      const resObj = await response.json();
       
-      if (success === false) {
-        throw new Error(error || 'Error genérico en el servidor');
+      if (resObj.success === false) {
+        throw new Error(resObj.error || 'Error genérico en el servidor');
       }
 
       if (window.App) window.App.log('AppAPI', 'fetch:success', { endpoint, time: `${(performance.now() - t0).toFixed(1)}ms` });
-      return { success: true, ...data, ...rest };
+      return resObj;
     } catch (err) {
       if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: err.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
       throw err;

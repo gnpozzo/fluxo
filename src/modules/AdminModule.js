@@ -52,9 +52,9 @@ export class AdminModule extends BaseModule {
       onCancel    : () => this.#modal.close()
     });
 
-    // Ocultar el botón "confirmar" vacío en lugar de eliminarlo para no romper el focus trap de component-modal
-    const btnConfirm = this.#modal.el.querySelector('.modal-confirm');
-    if (btnConfirm) btnConfirm.style.display = 'none';
+    // Ocultar el footer completo ya que la X de la barra de título es suficiente
+    const footer = this.#modal.el.querySelector('.modal-footer');
+    if (footer) footer.style.display = 'none';
 
     this.#activarSeccion(this.#seccionActiva);
   }
