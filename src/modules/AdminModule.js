@@ -417,6 +417,26 @@ export class AdminModule extends BaseModule {
             <input class="input" type="number" name="dia_vencimiento_resumen" min="1" max="31" value="${data?.dia_vencimiento_resumen || ''}" required>
           </div>
 
+          <div class="form-group full-width">
+            <label>Color de Tarjeta</label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              ${['blue','red','orange','purple','green','dark','gold'].map(col => `
+                <label style="cursor:pointer;display:flex;align-items:center;gap:4px">
+                  <input type="radio" name="color" value="${col}" ${data?.color === col || (!data && col === 'blue') ? 'checked' : ''}>
+                  <div style="width:24px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,0.2);background:var(--card-${col}, ${
+                    col === 'blue' ? 'linear-gradient(135deg, #1a1f71, #2d5bab)' :
+                    col === 'red' ? 'linear-gradient(135deg, #1a1a2e, #c41e3a)' :
+                    col === 'orange' ? 'linear-gradient(135deg, #d35400, #e67e22)' :
+                    col === 'purple' ? 'linear-gradient(135deg, #4a235a, #8e44ad)' :
+                    col === 'green' ? 'linear-gradient(135deg, #145a32, #27ae60)' :
+                    col === 'dark' ? 'linear-gradient(135deg, #111, #333)' :
+                    'linear-gradient(135deg, #b8860b, #ffd700)'
+                  })"></div>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+
           <div class="form-group">
             <label class="form-switch">
               <input type="checkbox" class="toggle-switch" name="activa" ${!data || data.activa ? 'checked':''}>

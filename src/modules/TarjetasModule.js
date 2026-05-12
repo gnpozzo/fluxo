@@ -176,11 +176,7 @@ export class TarjetasModule extends BaseModule {
     this.#kpiImputado = new App.KpiCard(grid, { titulo: 'Incidencia Personal', icono: 'person',      colorClass: 'kpi-blue',   onFormat: App.Utils.formatearMoneda });
     this.#kpiConsol   = new App.KpiCard(grid, { titulo: 'Incidencia Externa',  icono: 'groups',      colorClass: 'kpi-amber',  onFormat: App.Utils.formatearMoneda });
 
-    document.getElementById('tc-acciones').innerHTML = `
-      <button id="tc-btn-nuevo" class="btn btn-primary">
-        ${App.Icons.get('add', 'icon-sm')} Cargar Consumo
-      </button>
-    `;
+    document.getElementById('tc-acciones').innerHTML = ``;
 
     this.#table = new App.DataTable(
       document.getElementById('tc-tabla-wrap'),
@@ -464,9 +460,7 @@ export class TarjetasModule extends BaseModule {
         const btn = e.target.closest('button');
         if (!btn) return;
         
-        if (btn.id === 'tc-btn-nuevo') {
-          this.#abrirModalAlta();
-        } else if (btn.id === 'tc-btn-mes') {
+        if (btn.id === 'tc-btn-mes') {
           document.getElementById('tc-btn-mes')?.classList.replace('btn-ghost', 'btn-primary');
           document.getElementById('tc-btn-proy')?.classList.replace('btn-primary', 'btn-ghost');
           document.getElementById('tc-tabla-wrap')?.classList.remove('hidden');
@@ -591,21 +585,50 @@ export class TarjetasModule extends BaseModule {
     // "Todas" pill
     const allPill = `<button class="tc-card-pill ${!this.#selectedTcId ? 'active' : ''}"
       data-tc-filter="all"
-      style="display:flex;flex-direction:column;align-items:flex-start;padding:10px 16px;border-radius:var(--r);border:2px solid ${!this.#selectedTcId ? 'var(--primary)' : 'var(--borde)'};background:${!this.#selectedTcId ? 'var(--primary-tint)' : 'var(--superficie)'};cursor:pointer;min-width:140px;transition:all .15s;font-family:inherit">
-      <span style="font-size:0.78rem;font-weight:600;color:var(--texto)">Todas las tarjetas</span>
-      <span style="font-size:1rem;font-weight:700;color:var(--texto);margin-top:2px">${App.Utils.formatearMoneda(this.#allConsumos.reduce((s, c) => s + Number(c.importe || 0), 0))}</span>
+      style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;border-radius:12px;border:2px solid ${!this.#selectedTcId ? 'var(--primary)' : 'transparent'};background:var(--superficie);box-shadow:0 4px 12px rgba(0,0,0,0.05);cursor:pointer;min-width:160px;transition:all .15s;font-family:inherit">
+      <span style="font-size:0.8rem;font-weight:700;color:var(--texto);text-transform:uppercase">Consolidado</span>
+      <span style="font-size:0.7rem;color:var(--texto-3)">Todas las tarjetas</span>
+      <span style="font-size:1.1rem;font-weight:800;color:var(--texto);margin-top:10px">${App.Utils.formatearMoneda(this.#allConsumos.reduce((s, c) => s + Number(c.importe || 0), 0))}</span>
     </button>`;
 
     const pills = this.#tarjetas.map(tc => {
       const isActive = this.#selectedTcId === tc.id_tarjeta;
-      const last4 = tc.ultimos_4 || '••••';
+      const last4 = tc.ultimos_4_digitos || tc.ultimos_4 || '••••';
       const sub = subtotals[tc.id_tarjeta] || 0;
+      
+      const marca = (tc.marca || tc.nombre || '').toUpperCase();
+      let gradient;
+      switch(tc.color) {
+        case 'red':    gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)'; break;
+        case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #e67e22 100%)'; break;
+        case 'purple': gradient = 'linear-gradient(135deg, #4a235a 0%, #8e44ad 100%)'; break;
+        case 'green':  gradient = 'linear-gradient(135deg, #145a32 0%, #27ae60 100%)'; break;
+        case 'dark':   gradient = 'linear-gradient(135deg, #111111 0%, #333333 100%)'; break;
+        case 'gold':   gradient = 'linear-gradient(135deg, #b8860b 0%, #ffd700 100%)'; break;
+        case 'blue':
+        default:
+          if (!tc.color && marca.includes('MASTER')) gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
+          else gradient = 'linear-gradient(135deg, #1a1f71 0%, #2d5bab 100%)';
+          break;
+      }
+
       return `<button class="tc-card-pill ${isActive ? 'active' : ''}"
         data-tc-filter="${tc.id_tarjeta}"
-        style="display:flex;flex-direction:column;align-items:flex-start;padding:10px 16px;border-radius:var(--r);border:2px solid ${isActive ? 'var(--primary)' : 'var(--borde)'};background:${isActive ? 'var(--primary-tint)' : 'var(--superficie)'};cursor:pointer;min-width:140px;transition:all .15s;font-family:inherit">
-        <span style="font-size:0.78rem;font-weight:600;color:var(--texto)">${App.Utils.escapeHtml(tc.nombre || tc.marca)}</span>
-        <span style="font-size:0.68rem;color:var(--texto-3)">•••• ${last4}</span>
-        <span style="font-size:1rem;font-weight:700;color:var(--texto);margin-top:2px">${App.Utils.formatearMoneda(sub)}</span>
+        style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;border-radius:12px;border:2px solid ${isActive ? 'var(--primary)' : 'transparent'};background:${gradient};color:#fff;box-shadow:0 4px 15px rgba(0,0,0,0.15);cursor:pointer;min-width:180px;transition:all .15s;font-family:'Courier New', monospace;position:relative;overflow:hidden">
+        
+        <!-- Decoration -->
+        <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent 50%);pointer-events:none"></div>
+        
+        <div style="display:flex;justify-content:space-between;width:100%;align-items:center;margin-bottom:8px;position:relative;z-index:1">
+           <svg width="24" height="16" viewBox="0 0 28 20" fill="#FFD700" style="opacity:0.9"><rect width="28" height="20" rx="3"/></svg>
+           <span style="font-family:'Inter', sans-serif;font-weight:800;font-size:0.8rem;font-style:italic;opacity:0.9">${App.Utils.escapeHtml(marca)}</span>
+        </div>
+        <span style="font-size:1.1rem;letter-spacing:2px;text-shadow:1px 1px 1px rgba(0,0,0,0.3);position:relative;z-index:1;margin-bottom:6px">•••• ${last4}</span>
+        
+        <div style="display:flex;justify-content:space-between;width:100%;font-family:'Inter', sans-serif;position:relative;z-index:1;align-items:flex-end">
+           <span style="font-size:0.6rem;text-transform:uppercase;opacity:0.8">${App.Utils.escapeHtml(tc.nombre)}</span>
+           <span style="font-size:0.9rem;font-weight:700">${App.Utils.formatearMoneda(sub)}</span>
+        </div>
       </button>`;
     }).join('');
 

@@ -258,7 +258,7 @@ export class DashboardModule extends BaseModule {
     const full    = document.getElementById('dash-mov-table-full');
     if (!preview) return;
 
-    const rows = this.#accordionOpen ? this.#movData : this.#movData.slice(0, 10);
+    const rows = this.#accordionOpen ? this.#movData : this.#movData.slice(0, 5);
 
     const tableHtml = `
       <table class="dash-table">
@@ -377,11 +377,26 @@ export class DashboardModule extends BaseModule {
   #updateTcVisual() {
     const tc = this._tcList?.[this._tcIndex];
     if (!tc) return;
-    const marca = (tc.marca || '').toUpperCase();
-    const isVisa = marca.includes('VISA');
-    const gradient = isVisa
-      ? 'linear-gradient(135deg, #1a1f71 0%, #2d5bab 100%)'
-      : 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
+    const marca = (tc.marca || tc.nombre || '').toUpperCase();
+    
+    let gradient;
+    switch(tc.color) {
+      case 'red':    gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)'; break;
+      case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #e67e22 100%)'; break;
+      case 'purple': gradient = 'linear-gradient(135deg, #4a235a 0%, #8e44ad 100%)'; break;
+      case 'green':  gradient = 'linear-gradient(135deg, #145a32 0%, #27ae60 100%)'; break;
+      case 'dark':   gradient = 'linear-gradient(135deg, #111111 0%, #333333 100%)'; break;
+      case 'gold':   gradient = 'linear-gradient(135deg, #b8860b 0%, #ffd700 100%)'; break;
+      case 'blue':
+      default:
+        // Default to blue, or fallback to Visa/Mastercard heuristic if color is not set
+        if (!tc.color && marca.includes('MASTER')) {
+           gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
+        } else {
+           gradient = 'linear-gradient(135deg, #1a1f71 0%, #2d5bab 100%)';
+        }
+        break;
+    }
 
     const plastic = document.querySelector('.dash-tc-plastic');
     if (plastic) plastic.style.background = gradient;
