@@ -598,18 +598,24 @@ export class TarjetasModule extends BaseModule {
       
       const marca = (tc.marca || tc.nombre || '').toUpperCase();
       let gradient;
-      switch(tc.color) {
-        case 'red':    gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)'; break;
-        case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #e67e22 100%)'; break;
-        case 'purple': gradient = 'linear-gradient(135deg, #4a235a 0%, #8e44ad 100%)'; break;
-        case 'green':  gradient = 'linear-gradient(135deg, #145a32 0%, #27ae60 100%)'; break;
-        case 'dark':   gradient = 'linear-gradient(135deg, #111111 0%, #333333 100%)'; break;
-        case 'gold':   gradient = 'linear-gradient(135deg, #b8860b 0%, #ffd700 100%)'; break;
-        case 'blue':
-        default:
-          if (!tc.color && marca.includes('MASTER')) gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
-          else gradient = 'linear-gradient(135deg, #1a1f71 0%, #2d5bab 100%)';
-          break;
+      if (tc.color && tc.color.startsWith('#')) {
+        gradient = `linear-gradient(135deg, ${tc.color} 0%, rgba(0,0,0,0.6) 150%)`;
+      } else {
+        switch(tc.color) {
+          case 'red':    gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)'; break;
+          case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #e67e22 100%)'; break;
+          case 'purple': gradient = 'linear-gradient(135deg, #4a235a 0%, #8e44ad 100%)'; break;
+          case 'green':  gradient = 'linear-gradient(135deg, #145a32 0%, #27ae60 100%)'; break;
+          case 'dark':   gradient = 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)'; break;
+          case 'black':  gradient = 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)'; break;
+          case 'silver': gradient = 'linear-gradient(135deg, #bdc3c7 0%, #e2e2e2 100%)'; break;
+          case 'gold':   gradient = 'linear-gradient(135deg, #b8860b 0%, #ffd700 100%)'; break;
+          case 'blue':
+          default:
+            if (!tc.color && marca.includes('MASTER')) gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
+            else gradient = 'linear-gradient(135deg, #1a1f71 0%, #2d5bab 100%)';
+            break;
+        }
       }
 
       return `<button class="tc-card-pill ${isActive ? 'active' : ''}"

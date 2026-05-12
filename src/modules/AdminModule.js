@@ -419,8 +419,8 @@ export class AdminModule extends BaseModule {
 
           <div class="form-group full-width">
             <label>Color de Tarjeta</label>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              ${['blue','red','orange','purple','green','dark','gold'].map(col => `
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+              ${['blue','red','orange','purple','green','dark','black','silver','gold'].map(col => `
                 <label style="cursor:pointer;display:flex;align-items:center;gap:4px">
                   <input type="radio" name="color" value="${col}" ${data?.color === col || (!data && col === 'blue') ? 'checked' : ''}>
                   <div style="width:24px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,0.2);background:var(--card-${col}, ${
@@ -429,11 +429,18 @@ export class AdminModule extends BaseModule {
                     col === 'orange' ? 'linear-gradient(135deg, #d35400, #e67e22)' :
                     col === 'purple' ? 'linear-gradient(135deg, #4a235a, #8e44ad)' :
                     col === 'green' ? 'linear-gradient(135deg, #145a32, #27ae60)' :
-                    col === 'dark' ? 'linear-gradient(135deg, #111, #333)' :
+                    col === 'dark' ? 'linear-gradient(135deg, #2c3e50, #4ca1af)' :
+                    col === 'black' ? 'linear-gradient(135deg, #000000, #1a1a1a)' :
+                    col === 'silver' ? 'linear-gradient(135deg, #bdc3c7, #e2e2e2)' :
                     'linear-gradient(135deg, #b8860b, #ffd700)'
                   })"></div>
                 </label>
               `).join('')}
+              <label style="cursor:pointer;display:flex;align-items:center;gap:4px;margin-left:8px;border-left:1px solid var(--borde);padding-left:12px">
+                <input type="radio" name="color" value="custom" ${(data?.color && data.color.startsWith('#')) ? 'checked' : ''}>
+                <span style="font-size:0.8rem;color:var(--texto-2)">Hex:</span>
+                <input type="color" name="color_custom" value="${(data?.color && data.color.startsWith('#')) ? data.color : '#3b82f6'}" style="width:28px;height:24px;padding:0;border:none;border-radius:4px;cursor:pointer;background:transparent">
+              </label>
             </div>
           </div>
 
@@ -450,6 +457,11 @@ export class AdminModule extends BaseModule {
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
+        
+        if (d.color === 'custom') {
+          d.color = d.color_custom;
+        }
+        delete d.color_custom;
         modal.setLoading(true);
         try {
           await App.API.call('api_admin_saveTarjeta', d);
