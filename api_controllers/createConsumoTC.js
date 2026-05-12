@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     const movRows = [];
     const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
 
-    if (consumo.tipo === 'SIMPLE') {
+    if (consumo.tipoConsumo === 'COMUN' || consumo.tipoConsumo === 'SIMPLE') {
       const idConsumo = crypto.randomUUID();
       const fechaISO = fechaBase.toISOString().split('T')[0];
       
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
         });
       }
 
-    } else if (consumo.tipo === 'CUOTAS') {
+    } else if (consumo.tipoConsumo === 'CUOTAS') {
       const installmentGroupId = 'INSTL_' + crypto.randomUUID();
       const cuotasARegistrar = (consumo.cuotaTotal - consumo.cuotaActual) + 1;
       
@@ -82,7 +82,7 @@ export default async function handler(req, res) {
         }
       }
 
-    } else if (consumo.tipo === 'RECURRENTE') {
+    } else if (consumo.tipoConsumo === 'RECURRENTE') {
       const recurGroupId = 'REC_TC_' + crypto.randomUUID();
       
       for (let i = 0; i < consumo.periodos; i++) {

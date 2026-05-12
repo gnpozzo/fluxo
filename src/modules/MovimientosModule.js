@@ -550,7 +550,9 @@ export class MovimientosModule extends BaseModule {
         onConfirm   : async () => {
           try {
             await this._handleDelete(row.id_movimiento);
-          } catch (_) {}
+          } catch (err) {
+          if (err) App.Toast.error(err.message || 'Error al eliminar.');
+        }
         }
       });
     } else {

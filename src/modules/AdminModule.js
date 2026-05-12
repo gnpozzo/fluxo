@@ -551,6 +551,7 @@ export class AdminModule extends BaseModule {
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
+        console.log('[DEBUG] onConfirm _editSubcuenta iniciado');
         const fd = new FormData(modal.getForm());
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
@@ -586,6 +587,7 @@ export class AdminModule extends BaseModule {
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
+        console.log('[DEBUG] onConfirm _editUsuarioCC iniciado');
         const fd = new FormData(modal.getForm());
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
