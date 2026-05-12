@@ -353,6 +353,7 @@ export class AdminModule extends BaseModule {
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
+        d.activa = (d.activa === 'on');
         modal.setLoading(true);
         try {
           await App.API.call('api_admin_saveCuentaPrincipal', d);
@@ -457,6 +458,7 @@ export class AdminModule extends BaseModule {
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
+        d.activa = (d.activa === 'on');
         
         if (d.color === 'custom') {
           d.color = d.color_custom;
@@ -510,6 +512,7 @@ export class AdminModule extends BaseModule {
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
+        d.activa = (d.activa === 'on' || d.activa === true);
         modal.setLoading(true);
         try {
           await App.API.call('api_admin_saveCategoria', d);

@@ -5,10 +5,8 @@ export default async function handler(req, res) {
     // For now returning mock data to unblock UI
     return res.status(200).json({ 
       success: true, 
-      data: {
-        kpis: { valorActual: 0, costoTotal: 0, gananciaTotal: 0, rendimientoPorc: 0 },
-        portfolio: []
-      }
+      kpis: { valorActual: 0, costoTotal: 0, gananciaTotal: 0, rendimientoPorc: 0 },
+      portfolio: []
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
