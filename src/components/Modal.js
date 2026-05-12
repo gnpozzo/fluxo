@@ -67,11 +67,12 @@ export class Modal {
     const dialog = this.#overlay.querySelector('.modal-dialog');
     dialog.className = `modal-dialog modal-${size}`;
 
-    // Peligro
+    // Peligro y Reseteo
     const btnConfirm = this.#el.querySelector('.modal-confirm');
     if (btnConfirm) {
       btnConfirm.classList.toggle('btn-danger', danger);
       btnConfirm.classList.toggle('btn-primary', !danger);
+      btnConfirm.disabled = false;
     }
 
     // Mostrar
@@ -95,6 +96,7 @@ export class Modal {
   close() {
     this.#overlay.classList.remove('modal-open');
     document.body.classList.remove('modal-active');
+    this.setLoading(false);
     this.#onConfirm = null;
     this.#onCancel  = null;
     App.log('Modal', 'close', `"${this.#id}" cerrado`);
