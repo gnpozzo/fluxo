@@ -551,6 +551,7 @@ export class AdminModule extends BaseModule {
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
+        App.Toast.info('DEBUG: Botón Actualizar/Crear clickeado (Alcancía)');
         console.log('[DEBUG] onConfirm _editSubcuenta iniciado');
         const fd = new FormData(modal.getForm());
         const d  = {};
@@ -587,6 +588,7 @@ export class AdminModule extends BaseModule {
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
+        App.Toast.info('DEBUG: Botón Actualizar/Crear clickeado (Contacto)');
         console.log('[DEBUG] onConfirm _editUsuarioCC iniciado');
         const fd = new FormData(modal.getForm());
         const d  = {};

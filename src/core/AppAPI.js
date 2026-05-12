@@ -110,6 +110,7 @@ class ApiService {
       if (window.App) window.App.log('AppAPI', 'fetch:success', { endpoint, time: `${(performance.now() - t0).toFixed(1)}ms` });
       return resObj;
     } catch (err) {
+      alert('APP_API ERROR: ' + err.message);
       if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: err.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
       throw err;
     }
