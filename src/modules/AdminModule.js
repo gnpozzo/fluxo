@@ -20,8 +20,8 @@ export class AdminModule extends BaseModule {
     { id: 'cuentas',    label: 'Cuentas',          icono: 'movimientos', fn: () => this.#renderCuentas()    },
     { id: 'tarjetas',   label: 'Tarjetas',         icono: 'card',        fn: () => this.#renderTarjetas()   },
     { id: 'categorias', label: 'Categorías',       icono: 'filter',      fn: () => this.#renderCategorias() },
-    { id: 'ahorro',     label: 'Subcuentas Ahorro',icono: 'ahorro_coin', fn: () => this.#renderAhorroSubs() },
-    { id: 'cc',         label: 'Contactos (Compartidos)', icono: 'wallet', fn: () => this.#renderUsuariosCC() }
+    { id: 'ahorro',     label: 'Alcancías',icono: 'ahorro_coin', fn: () => this.#renderAhorroSubs() },
+    { id: 'cc',         label: 'Contactos (Gastos Compartidos)', icono: 'wallet', fn: () => this.#renderUsuariosCC() }
   ];
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
@@ -243,7 +243,7 @@ export class AdminModule extends BaseModule {
       const subs = response?.data || [];
       content.innerHTML = `
         <div class="section-header">
-          <h2 style="margin:0">Subcuentas de Ahorro</h2>
+          <h2 style="margin:0">Alcancías</h2>
           <button id="adm-btn-nueva-sub" class="btn btn-primary">
             ${App.Icons.get('add', 'icon-sm')} Nueva
           </button>
@@ -283,7 +283,7 @@ export class AdminModule extends BaseModule {
       const users = response?.data || [];
       content.innerHTML = `
         <div class="section-header">
-          <h2 style="margin:0">Contactos (Compartidos)</h2>
+          <h2 style="margin:0">Contactos (Gastos Compartidos)</h2>
           <button id="adm-btn-nuevo-usr" class="btn btn-primary">
             ${App.Icons.get('add', 'icon-sm')} Nuevo
           </button>
@@ -498,7 +498,7 @@ export class AdminModule extends BaseModule {
       data = (response?.data || []).find(s => s.id_subcuenta === id);
     }
     m.open({
-      titulo      : id ? 'Editar Subcuenta' : 'Nueva Subcuenta',
+      titulo      : id ? 'Editar Alcancía' : 'Nueva Alcancía',
       body        : `
         <form id="form-adm-sub" class="form-grid">
           <input type="hidden" name="id_subcuenta" value="${data?.id_subcuenta || ''}">
@@ -524,7 +524,7 @@ export class AdminModule extends BaseModule {
         try {
           await App.API.call('api_admin_saveAhorroSubcuenta', d);
           App.API.invalidatePattern('api_admin_getAhorroSubcuentas');
-          App.Toast.success('Subcuenta guardada.');
+          App.Toast.success('Alcancía guardada.');
           modal.close();
           this.#renderAhorroSubs();
         } catch (err) { modal.setLoading(false); App.Toast.error(err.message); }
@@ -600,11 +600,11 @@ export class AdminModule extends BaseModule {
   }
 
   async _deleteSubcuenta(id) {
-    if (!confirm('¿Seguro que deseas eliminar esta subcuenta?')) return;
+    if (!confirm('¿Seguro que deseas eliminar esta alcancía?')) return;
     try {
       await App.API.call('api_admin_deleteAhorroSubcuenta', id);
       App.API.invalidatePattern('api_admin_getAhorroSubcuentas');
-      App.Toast.success('Subcuenta eliminada.');
+      App.Toast.success('Alcancía eliminada.');
       this.#renderAhorroSubs();
     } catch (e) { App.Toast.error(e.message); }
   }

@@ -217,15 +217,18 @@ export class DashboardModule extends BaseModule {
     document.getElementById('dash-tc-prev')?.addEventListener('click', () => this.#navigateTc(-1));
     document.getElementById('dash-tc-next')?.addEventListener('click', () => this.#navigateTc(1));
     document.getElementById('dash-tc-ver-consumos')?.addEventListener('click', () => {
-      const tc = this._tcList?.[this._tcIndex];
-      if (tc) this.#openTcModal(tc.id_tarjeta, tc.nombre || tc.marca);
+      document.querySelector('[data-vista="vista-tarjetas"]')?.click();
     });
 
-    // CC detail => abre modal con tabla de consumos CC
-    document.getElementById('dash-cc-detail')?.addEventListener('click', () => this.#openCcModal());
+    // Gastos compartidos detail
+    document.getElementById('dash-cc-detail')?.addEventListener('click', () => {
+      document.querySelector('[data-vista="vista-cc"]')?.click();
+    });
 
-    // Ahorro detail => abre modal con subcuentas
-    document.getElementById('dash-ahorro-detail')?.addEventListener('click', () => this.#openAhorroModal());
+    // Alcancías (Chanchito) detail
+    document.getElementById('dash-ahorro-detail')?.addEventListener('click', () => {
+      document.querySelector('[data-vista="vista-ahorro"]')?.click();
+    });
   }
 
   _subscribeEvents() {
@@ -405,35 +408,7 @@ export class DashboardModule extends BaseModule {
     }
   }
 
-  #openTcModal(tarjetaId, tarjetaNombre) {
-    const consumos = this._tcConsumos?.[tarjetaId]?.items || [];
-    const modalTC = new App.Modal('modal-dash-tc');
-    modalTC.open({
-      titulo: `Consumos — ${tarjetaNombre}`,
-      size: 'lg',
-      body: `
-        <table class="dash-table">
-          <thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th style="text-align:right">Importe</th></tr></thead>
-          <tbody>
-            ${consumos.length === 0
-              ? '<tr><td colspan="4" style="text-align:center;color:var(--texto-3);padding:24px">Sin consumos este mes</td></tr>'
-              : consumos.map(c => `
-                <tr>
-                  <td>${App.Utils.formatearFecha(c.fecha?.value || c.fecha)}</td>
-                  <td>${App.Utils.escapeHtml(c.descripcion || '')}${c.cuota_actual && c.cuotas_total ? ` <span style="font-size:0.78rem;color:var(--texto-3)">(${c.cuota_actual}/${c.cuotas_total})</span>` : ''}</td>
-                  <td>${App.Utils.escapeHtml(c.categoria_nombre || 'General')}</td>
-                  <td style="text-align:right">${App.Utils.formatearMoneda(c.importe)}</td>
-                </tr>
-              `).join('')}
-          </tbody>
-        </table>
-      `,
-      confirmLabel: '',
-      cancelLabel: 'Cerrar'
-    });
-    const cb = modalTC.el.querySelector('.modal-confirm');
-    if (cb) cb.style.display = 'none';
-  }
+
 
   // --- SECCIÓN 7: GASTOS COMPARTIDOS ---
 
@@ -456,70 +431,7 @@ export class DashboardModule extends BaseModule {
     } catch (e) { App.error('Dashboard', '#loadCC', e.message, e); }
   }
 
-  #openCcModal() {
-    const consumos = this._ccData?.consumos || [];
-    const kpis = this._ccData?.kpis || {};
 
-    // Agrupar por usuario para mostrar saldos
-    const porUsuario = {};
-    const usuarios = window._appUsuariosCC || [];
-    consumos.forEach(c => {
-      const uid = c.id_usuario || '_sin_asignar';
-      if (!porUsuario[uid]) {
-        const usr = usuarios.find(u => u.id_usuario === uid);
-        porUsuario[uid] = { nombre: usr?.nombre || c.nombre_usuario || 'Sin asignar', saldo: 0, items: [] };
-      }
-      const miParte = (Number(c.importe || 0) * Number(c.porcentaje_imputado || 100)) / 100;
-      if (c.pagador === 'YO') porUsuario[uid].saldo += miParte;
-      else porUsuario[uid].saldo -= miParte;
-      porUsuario[uid].items.push(c);
-    });
-
-    const m = new App.Modal('modal-dash-cc');
-    m.open({
-      titulo: 'Gastos Compartidos del Mes',
-      size: 'lg',
-      body: `
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-          <div style="padding:8px 14px;background:var(--verde-tint);border-radius:var(--r);flex:1;min-width:120px;">
-            <span style="font-size:0.72rem;color:var(--verde-text);font-weight:600;text-transform:uppercase;">Pagué yo</span>
-            <strong style="display:block;font-size:1.1rem;margin-top:2px;color:var(--texto);">${App.Utils.formatearMoneda(kpis.gastoYo || 0)}</strong>
-          </div>
-          <div style="padding:8px 14px;background:var(--rojo-tint);border-radius:var(--r);flex:1;min-width:120px;">
-            <span style="font-size:0.72rem;color:var(--rojo);font-weight:600;text-transform:uppercase;">Pagó otro</span>
-            <strong style="display:block;font-size:1.1rem;margin-top:2px;color:var(--texto);">${App.Utils.formatearMoneda(kpis.gastoOtro || 0)}</strong>
-          </div>
-          <div style="padding:8px 14px;background:${(kpis.saldoNeto || 0) >= 0 ? 'var(--verde-tint)' : 'var(--rojo-tint)'};border-radius:var(--r);flex:1;min-width:120px;">
-            <span style="font-size:0.72rem;color:var(--texto-3);font-weight:600;text-transform:uppercase;">Saldo Neto</span>
-            <strong style="display:block;font-size:1.1rem;margin-top:2px;color:var(--texto);" class="${(kpis.saldoNeto || 0) >= 0 ? 'positivo' : 'negativo'}">${App.Utils.formatearMoneda(kpis.saldoNeto || 0)}</strong>
-          </div>
-        </div>
-        <table class="dash-table">
-          <thead><tr><th>Fecha</th><th>Pagador</th><th>Categoría</th><th>Descripción</th><th style="text-align:right">Total</th><th style="text-align:right">Mi parte</th></tr></thead>
-          <tbody>
-            ${consumos.length === 0
-              ? '<tr><td colspan="6" style="text-align:center;color:var(--texto-3);padding:24px">Sin gastos compartidos este mes</td></tr>'
-              : consumos.map(c => {
-                  const miParte = (Number(c.importe || 0) * Number(c.porcentaje_imputado || 100)) / 100;
-                  return `
-                <tr>
-                  <td>${App.Utils.formatearFecha(c.fecha?.value || c.fecha)}</td>
-                  <td>${App.Utils.escapeHtml(c.pagador || '—')}</td>
-                  <td>${App.Utils.escapeHtml(c.categoria_nombre || 'General')}</td>
-                  <td>${App.Utils.escapeHtml(c.descripcion || '')}</td>
-                  <td style="text-align:right">${App.Utils.formatearMoneda(c.importe)}</td>
-                  <td style="text-align:right" class="negativo">${App.Utils.formatearMoneda(miParte)}</td>
-                </tr>`;
-                }).join('')}
-          </tbody>
-        </table>
-      `,
-      confirmLabel: '',
-      cancelLabel: 'Cerrar'
-    });
-    const cb = m.el.querySelector('.modal-confirm');
-    if (cb) cb.style.display = 'none';
-  }
 
   // --- SECCIÓN 8: AHORRO ---
 
@@ -745,76 +657,7 @@ export class DashboardModule extends BaseModule {
     }
   }
 
-  #openAhorroModal() {
-    const data = this._ahorroData;
-    const subcuentas = data?.subcuentas || [];
-    const transferencias = data?.transferencias || [];
-    const kpis = data?.kpis || {};
 
-    // Enriquecer subcuentas con movimientos y saldos del período
-    const enrichedSubs = subcuentas.map(sc => {
-      const movs = transferencias.filter(t => t.id_subcuenta === sc.id_subcuenta);
-      let saldo = 0;
-      movs.forEach(m => {
-        const imp = Number(m.importe || 0);
-        if (m.tipo_transfer === 'DEPOSITO') saldo += imp;
-        else if (m.tipo_transfer === 'RETIRO') saldo -= imp;
-        else saldo += imp; // default
-      });
-      return { ...sc, movimientos: movs, saldo };
-    });
-
-    const m = new App.Modal('modal-dash-ahorro');
-    m.open({
-      titulo: '🐷 Mis Alcancías',
-      size: 'lg',
-      body: `
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-          <div style="padding:8px 14px;background:var(--verde-tint);border-radius:var(--r);flex:1;min-width:120px;">
-            <span style="font-size:0.72rem;color:var(--verde-text);font-weight:600;text-transform:uppercase;">ARS</span>
-            <strong style="display:block;font-size:1.1rem;margin-top:2px;color:var(--texto);">${App.Utils.formatearMoneda(kpis.arsTotal || 0)}</strong>
-          </div>
-          <div style="padding:8px 14px;background:var(--primary-tint);border-radius:var(--r);flex:1;min-width:120px;">
-            <span style="font-size:0.72rem;color:var(--primary);font-weight:600;text-transform:uppercase;">USD</span>
-            <strong style="display:block;font-size:1.1rem;margin-top:2px;color:var(--texto);">${App.Utils.formatearMonedaUSD(kpis.usdTotal || 0)}</strong>
-          </div>
-          <div style="padding:8px 14px;background:var(--amarillo-tint);border-radius:var(--r);flex:1;min-width:120px;">
-            <span style="font-size:0.72rem;color:var(--amarillo-text);font-weight:600;text-transform:uppercase;">Consolidado</span>
-            <strong style="display:block;font-size:1.1rem;margin-top:2px;color:var(--texto);">${App.Utils.formatearMoneda(kpis.consolidadoArs || 0)}</strong>
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          ${enrichedSubs.length === 0
-            ? '<p style="text-align:center;color:var(--texto-3);padding:24px">No hay alcancías configuradas</p>'
-            : enrichedSubs.map(sc => `
-              <div class="dash-ahorro-sub">
-                <div class="dash-ahorro-sub-header">
-                  <span style="font-weight:600;font-size:0.95rem">${App.Utils.escapeHtml(sc.nombre || 'Alcancía')} <small style="color:var(--texto-3)">(${sc.moneda || 'ARS'})</small></span>
-                  <span style="font-weight:700;font-size:1.1rem">${sc.moneda === 'USD' ? App.Utils.formatearMonedaUSD(sc.saldo) : App.Utils.formatearMoneda(sc.saldo)}</span>
-                </div>
-                ${sc.movimientos && sc.movimientos.length > 0 ? `
-                  <table class="dash-table" style="font-size:0.82rem;margin-top:8px">
-                    <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th style="text-align:right">Importe</th></tr></thead>
-                    <tbody>${sc.movimientos.map(mv => `
-                      <tr>
-                        <td>${App.Utils.formatearFecha(mv.fecha?.value || mv.fecha)}</td>
-                        <td><span class="tipo-mov tipo-${mv.tipo_transfer === 'DEPOSITO' ? 'ingreso' : 'egreso'}">${mv.tipo_transfer || '—'}</span></td>
-                        <td>${App.Utils.escapeHtml(mv.descripcion || '')}</td>
-                        <td style="text-align:right">${sc.moneda === 'USD' ? App.Utils.formatearMonedaUSD(mv.importe) : App.Utils.formatearMoneda(mv.importe)}</td>
-                      </tr>
-                    `).join('')}</tbody>
-                  </table>
-                ` : '<p style="color:var(--texto-3);font-size:0.82rem;padding:8px 0">Sin movimientos este mes</p>'}
-              </div>
-            `).join('')}
-        </div>
-      `,
-      confirmLabel: '',
-      cancelLabel: 'Cerrar'
-    });
-    const cb = m.el.querySelector('.modal-confirm');
-    if (cb) cb.style.display = 'none';
-  }
 }
 
 // Registrar
