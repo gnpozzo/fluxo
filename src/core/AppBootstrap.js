@@ -100,6 +100,7 @@ export class BaseModule {
       modal?.close();
       if (App.Toast) App.Toast.success('Registro creado exitosamente.');
       App.API.invalidateAll();
+      if (App.Events) App.Events.emit('data:changed');
       this.destruir();
       await this.cargar();
     } catch (err) {
@@ -117,6 +118,7 @@ export class BaseModule {
       modal?.close();
       if (App.Toast) App.Toast.success('Registro actualizado.');
       App.API.invalidateAll();
+      if (App.Events) App.Events.emit('data:changed');
       this.destruir();
       await this.cargar();
     } catch (err) {
@@ -132,6 +134,7 @@ export class BaseModule {
       await App.API.call(this._deleteEndpoint, id, scope);
       if (App.Toast) App.Toast.success('Registro eliminado.');
       App.API.invalidateAll();
+      if (App.Events) App.Events.emit('data:changed');
       this.destruir();
       await this.cargar();
     } catch (err) {
@@ -149,6 +152,7 @@ export class BaseModule {
     if(App.Events) {
       App.Events.on('store:cuenta-changed', recargar);
       App.Events.on('store:mes-changed',    recargar);
+      App.Events.on('data:changed',         recargar);
     }
   }
 

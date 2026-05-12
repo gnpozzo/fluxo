@@ -229,8 +229,8 @@ export class DashboardModule extends BaseModule {
   }
 
   _subscribeEvents() {
-    App.Events.on('mes:changed',    () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
-    App.Events.on('cuenta:changed', () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
+    App.Events.on('store:mes-changed',    () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
+    App.Events.on('store:cuenta-changed', () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
     App.Events.on('data:changed',   () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
   }
 

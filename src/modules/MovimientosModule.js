@@ -581,6 +581,7 @@ export class MovimientosModule extends BaseModule {
           };
           await App.API.call('api_deleteMovimiento', req);
           App.API.invalidatePattern('api_getDashboardData');
+          if (App.Events) App.Events.emit('data:changed');
           App.Toast.success('Movimiento eliminado.');
           this.destruir();
           await this.cargar();
