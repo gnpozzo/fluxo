@@ -1952,6 +1952,9 @@ button.btn-secundario:hover {
 .dash-table tbody tr:hover {
   background: var(--superficie-hover);
 }
+.dash-table tr.clickable-row {
+  cursor: pointer;
+}
 
 /* Fila de módulos secundarios */
 .dash-cards-row {
