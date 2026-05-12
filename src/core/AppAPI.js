@@ -70,6 +70,8 @@ class ApiService {
   // --- CORE DE RED ---
 
   async #internalFetch(endpoint, method = 'POST', bodyFields = {}) {
+    if (window.App) window.App.log('AppAPI', 'fetch:start', { endpoint, method, bodyFields });
+    const t0 = performance.now();
     const headers = {
       'Content-Type': 'application/json',
     };
@@ -80,33 +82,37 @@ class ApiService {
       }
     }
 
-    // If bodyFields contains an 'args' array (from call(...args)), send it directly
-    // This allows edge functions to destructure like: const [arg1, arg2] = req.body;
     let finalBody = bodyFields;
     if (bodyFields.args) {
       finalBody = bodyFields.args;
     }
 
-    const response = await fetch(endpoint, {
-      method: method,
-      headers: headers,
-      body: JSON.stringify(finalBody)
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: method,
+        headers: headers,
+        body: JSON.stringify(finalBody)
+      });
 
-    if (!response.ok) {
-      if (response.status === 401 && window.App.Events) {
-        window.App.Events.emit('auth:unauthorized');
+      if (!response.ok) {
+        if (response.status === 401 && window.App && window.App.Events) {
+          window.App.Events.emit('auth:unauthorized');
+        }
+        throw new Error(`HTTP Error: ${response.status} en ${endpoint}`);
       }
-      throw new Error(`HTTP Error: ${response.status} en ${endpoint}`);
-    }
 
-    const { success, error, data, ...rest } = await response.json();
-    
-    if (success === false) {
-      throw new Error(error || 'Error genérico en el servidor');
-    }
+      const { success, error, data, ...rest } = await response.json();
+      
+      if (success === false) {
+        throw new Error(error || 'Error genérico en el servidor');
+      }
 
-    return { success: true, ...data, ...rest };
+      if (window.App) window.App.log('AppAPI', 'fetch:success', { endpoint, time: `${(performance.now() - t0).toFixed(1)}ms` });
+      return { success: true, ...data, ...rest };
+    } catch (err) {
+      if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: err.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
+      throw err;
+    }
   }
 
 }

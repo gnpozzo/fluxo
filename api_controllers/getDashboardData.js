@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient } from '../api_lib/supabase.js';
 
 // [Origen -> api -> getDashboardData.js]
 // v6.0.0
@@ -12,24 +12,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
-
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn('[QA -> Vercel API] Supabase No Configurado. Retornando Mock Data QA.');
-    return res.status(200).json({
-      success: true,
-      kpis: { ingresos: 450200, egresos: -180340, resultado: 269860 },
-      movimientos: [
-        { id_movimiento: '1', fecha: '2023-10-15', descripcion: 'Sueldo (Mock)', importe: 450200, tipo_mov: 'INGRESO', categoria: 'Salario' },
-        { id_movimiento: '2', fecha: '2023-10-16', descripcion: 'Supermercado (Mock)', importe: -45000, tipo_mov: 'EGRESO', categoria: 'Alimentos' }
-      ]
-    });
-  }
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
   try {
+    const supabase = getSupabaseClient(req);
     let finalArgs = [];
     if (Array.isArray(req.body)) {
       finalArgs = req.body;
@@ -78,15 +62,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.warn('[API -> getDashboardData -> MOCK FALLBACK]', err.message);
-    // Hard fallback to mock data to NEVER throw 500 on QA
-    return res.status(200).json({
-      success: true,
-      kpis: { ingresos: 450200, egresos: -180340, resultado: 269860 },
-      movimientos: [
-        { id_movimiento: '1', fecha: '2023-10-15', descripcion: 'Sueldo (Mock Fallback)', importe: 450200, tipo_mov: 'INGRESO', categoria: 'Salario' },
-        { id_movimiento: '2', fecha: '2023-10-16', descripcion: 'Supermercado (Mock Fallback)', importe: -45000, tipo_mov: 'EGRESO', categoria: 'Alimentos' }
-      ]
-    });
+    console.error('[API -> getDashboardData -> ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 }
