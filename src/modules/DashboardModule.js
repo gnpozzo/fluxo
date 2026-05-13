@@ -54,22 +54,53 @@ export class DashboardModule extends BaseModule {
     const grid = document.getElementById('dash-portfolio-grid');
     if (!grid) return;
 
-    grid.innerHTML = cuentas.map(c => `
+    const ICON_SVG = {
+      home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+      briefcase: '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+      wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>',
+      piggy: '<circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>',
+      building: '<rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22v-4h6v4"/>',
+      user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+      globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z"/>',
+      star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'
+    };
+
+    grid.innerHTML = cuentas.map(c => {
+      const iconSvg = ICON_SVG[c.icono] || ICON_SVG.home;
+      return `
       <div class="portfolio-card" data-cuenta-id="${c.id_cuenta_principal}">
         <div class="portfolio-card-header">
           <span class="portfolio-card-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
           </span>
           <span class="portfolio-card-name">${App.Utils.escapeHtml(c.nombre)}</span>
         </div>
         <div class="portfolio-card-kpis">
-          <div class="portfolio-kpi"><span class="portfolio-kpi-label">Ingresos</span><span class="portfolio-kpi-val positivo" id="pf-ing-${c.id_cuenta_principal}">—</span></div>
-          <div class="portfolio-kpi"><span class="portfolio-kpi-label">Egresos</span><span class="portfolio-kpi-val negativo" id="pf-egr-${c.id_cuenta_principal}">—</span></div>
-          <div class="portfolio-kpi portfolio-kpi-balance"><span class="portfolio-kpi-label">Balance</span><span class="portfolio-kpi-val" id="pf-bal-${c.id_cuenta_principal}">—</span></div>
+          <div class="portfolio-kpi">
+            <span class="portfolio-kpi-label">Ingresos</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="portfolio-kpi-icon kpi-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
+              <span class="portfolio-kpi-val positivo" id="pf-ing-${c.id_cuenta_principal}">—</span>
+            </div>
+          </div>
+          <div class="portfolio-kpi">
+            <span class="portfolio-kpi-label">Egresos</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="portfolio-kpi-icon kpi-red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg></span>
+              <span class="portfolio-kpi-val negativo" id="pf-egr-${c.id_cuenta_principal}">—</span>
+            </div>
+          </div>
+          <div class="portfolio-kpi portfolio-kpi-balance">
+            <span class="portfolio-kpi-label">Balance</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="portfolio-kpi-icon kpi-blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+              <span class="portfolio-kpi-val" id="pf-bal-${c.id_cuenta_principal}">—</span>
+            </div>
+          </div>
         </div>
         <div class="portfolio-card-footer">Ver detalle →</div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     // Bind click
     grid.querySelectorAll('.portfolio-card').forEach(card => {
@@ -105,22 +136,55 @@ export class DashboardModule extends BaseModule {
 
   #enterDetailMode(cuentaId) {
     this.#viewMode = 'detail';
-    // Update store account
     App.Store.setCuenta(cuentaId);
-    // Update account selector DOM
     const sel = document.getElementById('selector-cuenta');
     if (sel) sel.value = cuentaId;
-    // Show detail, hide portfolio
     const pEl = document.getElementById('dash-portfolio-view');
     const dEl = document.getElementById('dash-detail-view');
     if (pEl) pEl.style.display = 'none';
     if (dEl) dEl.style.display = '';
+    this.#renderDetailNav(cuentaId);
     this.#cargarDetail();
   }
 
   #exitToPortfolio() {
     this.#viewMode = 'portfolio';
     this.#cargarPortfolio();
+  }
+
+  #renderDetailNav(cuentaId) {
+    const nav = document.getElementById('dash-detail-nav');
+    if (!nav) return;
+    const cuentas = App.Store.cuentas;
+    const idx = cuentas.findIndex(c => c.id_cuenta_principal === cuentaId);
+    const current = cuentas[idx];
+    const prev = idx > 0 ? cuentas[idx - 1] : null;
+    const next = idx < cuentas.length - 1 ? cuentas[idx + 1] : null;
+
+    nav.innerHTML = `
+      <button class="btn btn-ghost btn-sm dash-back-btn" id="dash-back-portfolio">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Portfolio
+      </button>
+      <div class="dash-detail-nav-center">
+        ${prev ? `<button class="dash-nav-arrow" id="dash-nav-prev" title="Ir a ${App.Utils.escapeHtml(prev.nombre)}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>` : '<div style="width:32px"></div>'}
+        <span class="dash-detail-nav-title">${App.Utils.escapeHtml(current?.nombre || '')}</span>
+        ${next ? `<button class="dash-nav-arrow" id="dash-nav-next" title="Ir a ${App.Utils.escapeHtml(next.nombre)}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </button>` : '<div style="width:32px"></div>'}
+      </div>
+    `;
+
+    // Bind nav events
+    document.getElementById('dash-back-portfolio')?.addEventListener('click', () => this.#exitToPortfolio());
+    if (prev) {
+      document.getElementById('dash-nav-prev')?.addEventListener('click', () => this.#enterDetailMode(prev.id_cuenta_principal));
+    }
+    if (next) {
+      document.getElementById('dash-nav-next')?.addEventListener('click', () => this.#enterDetailMode(next.id_cuenta_principal));
+    }
   }
 
   async #cargarDetail() {
@@ -131,9 +195,8 @@ export class DashboardModule extends BaseModule {
     const cuentaObj      = App.Store.cuentas.find(c => c.id_cuenta_principal === cuenta);
     const requiereAjuste = cuentaObj?.requiere_ajuste_cc_tc ?? false;
 
-    // Update back button label
-    const backLabel = document.getElementById('dash-back-label');
-    if (backLabel) backLabel.textContent = cuentaObj?.nombre || 'Cuenta';
+    // Update nav
+    this.#renderDetailNav(cuenta);
 
     this.#mostrarKpiSkeletons();
 
@@ -188,10 +251,7 @@ export class DashboardModule extends BaseModule {
 
       <!-- ═══ DETAIL VIEW (hidden initially) ═══ -->
       <div id="dash-detail-view" style="display:none">
-      <button class="btn btn-ghost btn-sm dash-back-btn" id="dash-back-portfolio">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        ← Portfolio <span id="dash-back-label" style="font-weight:700;margin-left:4px"></span>
-      </button>
+      <div id="dash-detail-nav" class="dash-detail-nav"></div>
       <!-- ═══ KPIs PRINCIPALES ═══ -->
       <div class="kpi-grid" id="dash-kpi-grid"></div>
 
@@ -302,11 +362,6 @@ export class DashboardModule extends BaseModule {
   // --- SECCIÓN 4: LISTENERS ---
 
   _bindListeners() {
-    // Back to portfolio
-    document.getElementById('dash-back-portfolio')?.addEventListener('click', () => {
-      this.#exitToPortfolio();
-    });
-
     // Acordeón movimientos
     document.getElementById('dash-mov-toggle')?.addEventListener('click', () => {
       const body = document.getElementById('dash-mov-body');
