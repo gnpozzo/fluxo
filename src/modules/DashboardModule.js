@@ -20,6 +20,7 @@ export class DashboardModule extends BaseModule {
   #kpiResult   = null;
   #movData     = [];
   #accordionOpen = false;
+  #viewMode = 'portfolio'; // 'portfolio' | 'detail'
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -31,6 +32,98 @@ export class DashboardModule extends BaseModule {
   }
 
   async cargar() {
+    if (this.#viewMode === 'portfolio') {
+      await this.#cargarPortfolio();
+    } else {
+      await this.#cargarDetail();
+    }
+  }
+
+  async #cargarPortfolio() {
+    const cuentas = App.Store.cuentas;
+    const mes = App.Store.mes;
+    if (!cuentas.length || !mes) return;
+
+    // Show portfolio, hide detail
+    const pEl = document.getElementById('dash-portfolio-view');
+    const dEl = document.getElementById('dash-detail-view');
+    if (pEl) pEl.style.display = '';
+    if (dEl) dEl.style.display = 'none';
+
+    const { fechaInicio, fechaFin } = this.#calcFechas(mes);
+    const grid = document.getElementById('dash-portfolio-grid');
+    if (!grid) return;
+
+    grid.innerHTML = cuentas.map(c => `
+      <div class="portfolio-card" data-cuenta-id="${c.id_cuenta_principal}">
+        <div class="portfolio-card-header">
+          <span class="portfolio-card-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </span>
+          <span class="portfolio-card-name">${App.Utils.escapeHtml(c.nombre)}</span>
+        </div>
+        <div class="portfolio-card-kpis">
+          <div class="portfolio-kpi"><span class="portfolio-kpi-label">Ingresos</span><span class="portfolio-kpi-val positivo" id="pf-ing-${c.id_cuenta_principal}">—</span></div>
+          <div class="portfolio-kpi"><span class="portfolio-kpi-label">Egresos</span><span class="portfolio-kpi-val negativo" id="pf-egr-${c.id_cuenta_principal}">—</span></div>
+          <div class="portfolio-kpi portfolio-kpi-balance"><span class="portfolio-kpi-label">Balance</span><span class="portfolio-kpi-val" id="pf-bal-${c.id_cuenta_principal}">—</span></div>
+        </div>
+        <div class="portfolio-card-footer">Ver detalle →</div>
+      </div>
+    `).join('');
+
+    // Bind click
+    grid.querySelectorAll('.portfolio-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const cid = card.dataset.cuentaId;
+        this.#enterDetailMode(cid);
+      });
+    });
+
+    // Load KPIs for each account in parallel
+    cuentas.forEach(async (c) => {
+      try {
+        const resp = await App.API.swr(
+          'api_getDashboardData',
+          [c.id_cuenta_principal, fechaInicio, fechaFin, c.requiere_ajuste_cc_tc ?? false],
+          App.API.defaultTtl
+        );
+        const d = resp.data;
+        if (d?.success) {
+          const ingEl = document.getElementById(`pf-ing-${c.id_cuenta_principal}`);
+          const egrEl = document.getElementById(`pf-egr-${c.id_cuenta_principal}`);
+          const balEl = document.getElementById(`pf-bal-${c.id_cuenta_principal}`);
+          if (ingEl) ingEl.textContent = App.Utils.formatearMoneda(d.kpis.ingresos);
+          if (egrEl) egrEl.textContent = App.Utils.formatearMoneda(d.kpis.egresos);
+          if (balEl) {
+            balEl.textContent = App.Utils.formatearMoneda(d.kpis.resultado);
+            balEl.className = 'portfolio-kpi-val ' + (d.kpis.resultado >= 0 ? 'positivo' : 'negativo');
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  #enterDetailMode(cuentaId) {
+    this.#viewMode = 'detail';
+    // Update store account
+    App.Store.setCuenta(cuentaId);
+    // Update account selector DOM
+    const sel = document.getElementById('selector-cuenta');
+    if (sel) sel.value = cuentaId;
+    // Show detail, hide portfolio
+    const pEl = document.getElementById('dash-portfolio-view');
+    const dEl = document.getElementById('dash-detail-view');
+    if (pEl) pEl.style.display = 'none';
+    if (dEl) dEl.style.display = '';
+    this.#cargarDetail();
+  }
+
+  #exitToPortfolio() {
+    this.#viewMode = 'portfolio';
+    this.#cargarPortfolio();
+  }
+
+  async #cargarDetail() {
     const { cuenta, mes } = App.Store;
     if (!cuenta || !mes) return;
 
@@ -38,10 +131,13 @@ export class DashboardModule extends BaseModule {
     const cuentaObj      = App.Store.cuentas.find(c => c.id_cuenta_principal === cuenta);
     const requiereAjuste = cuentaObj?.requiere_ajuste_cc_tc ?? false;
 
+    // Update back button label
+    const backLabel = document.getElementById('dash-back-label');
+    if (backLabel) backLabel.textContent = cuentaObj?.nombre || 'Cuenta';
+
     this.#mostrarKpiSkeletons();
 
     try {
-      // 1) Dashboard data (movimientos + KPIs)
       const resp = await App.API.swr(
         'api_getDashboardData',
         [cuenta, fechaInicio, fechaFin, requiereAjuste],
@@ -49,16 +145,9 @@ export class DashboardModule extends BaseModule {
         (freshData) => { if (freshData?.success) this._render(freshData); }
       );
       this._render(resp.data);
-
-      // 2) Tarjetas TC silently
       this.#loadTarjetas(cuenta, fechaInicio, fechaFin);
-
-      // 3) Gastos Compartidos silently
       this.#loadCC(cuenta, fechaInicio, fechaFin);
-
-      // 4) Ahorro silently
       this.#loadAhorro(cuenta, fechaInicio, fechaFin);
-
     } catch (err) {
       App.error('DashboardModule', 'cargar', 'Error', err);
       App.Toast.error('Error al cargar dashboard: ' + (err.message || 'Error desconocido'));
@@ -88,6 +177,21 @@ export class DashboardModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
+      <!-- ═══ PORTFOLIO VIEW ═══ -->
+      <div id="dash-portfolio-view">
+        <div class="portfolio-header">
+          <h2 class="portfolio-title">Mi Portfolio</h2>
+          <p class="portfolio-subtitle">Seleccioná una cuenta para ver el detalle</p>
+        </div>
+        <div class="portfolio-grid" id="dash-portfolio-grid"></div>
+      </div>
+
+      <!-- ═══ DETAIL VIEW (hidden initially) ═══ -->
+      <div id="dash-detail-view" style="display:none">
+      <button class="btn btn-ghost btn-sm dash-back-btn" id="dash-back-portfolio">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        ← Portfolio <span id="dash-back-label" style="font-weight:700;margin-left:4px"></span>
+      </button>
       <!-- ═══ KPIs PRINCIPALES ═══ -->
       <div class="kpi-grid" id="dash-kpi-grid"></div>
 
@@ -176,6 +280,7 @@ export class DashboardModule extends BaseModule {
           <p style="font-size:0.82rem;color:var(--texto-3);font-style:italic">Powered by Gemini AI — integración en desarrollo.</p>
         </div>
       </div>
+      </div><!-- /dash-detail-view -->
     `;
 
     // KPI Cards
@@ -197,6 +302,11 @@ export class DashboardModule extends BaseModule {
   // --- SECCIÓN 4: LISTENERS ---
 
   _bindListeners() {
+    // Back to portfolio
+    document.getElementById('dash-back-portfolio')?.addEventListener('click', () => {
+      this.#exitToPortfolio();
+    });
+
     // Acordeón movimientos
     document.getElementById('dash-mov-toggle')?.addEventListener('click', () => {
       const body = document.getElementById('dash-mov-body');
@@ -232,9 +342,24 @@ export class DashboardModule extends BaseModule {
   }
 
   _subscribeEvents() {
-    App.Events.on('store:mes-changed',    () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
-    App.Events.on('store:cuenta-changed', () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
-    App.Events.on('data:changed',   () => { App.Store.clearModuloLoaded(this.moduleId); this.cargar(); });
+    App.Events.on('store:mes-changed', () => {
+      // Reload whichever view is active
+      this.cargar();
+    });
+    App.Events.on('store:cuenta-changed', () => {
+      // When account changes externally (topbar selector), go to detail mode
+      if (this.#viewMode === 'portfolio') {
+        this.#viewMode = 'detail';
+        const pEl = document.getElementById('dash-portfolio-view');
+        const dEl = document.getElementById('dash-detail-view');
+        if (pEl) pEl.style.display = 'none';
+        if (dEl) dEl.style.display = '';
+      }
+      this.#cargarDetail();
+    });
+    App.Events.on('data:changed', () => {
+      this.cargar();
+    });
   }
 
   // --- SECCIÓN 5: HELPERS PRIVADOS ---
