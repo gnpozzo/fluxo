@@ -1,10 +1,15 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import crypto from 'crypto';
 
 function addMonthsSafe(date, months) {
   const d = new Date(date);
   d.setMonth(d.getMonth() + months);
   return d;
 }
+
+const FREQ_MAP = {
+  'MENSUAL': 1, 'BIMESTRAL': 2, 'TRIMESTRAL': 3, 'SEMESTRAL': 6, 'ANUAL': 12
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -35,7 +40,7 @@ export default async function handler(req, res) {
         mov.esSplit = false;
       }
       
-      // 2. CREATE (Inline implementation of createMovimiento)
+      // 2. CREATE (Inline)
       const rows = [];
       const fechaBase = new Date(mov.fecha + 'T12:00:00Z');
       let pctRetenido = 100;
@@ -50,19 +55,23 @@ export default async function handler(req, res) {
       let periodos = 1;
       let esCuotas = false;
       let groupIdPrefix = 'REC_';
+      let monthStep = 1;
+
       if (mov.tipoConsumo === 'CUOTAS') {
         periodos = mov.cuotaTotal - mov.cuotaActual + 1;
         esCuotas = true;
         groupIdPrefix = 'INSTL_';
       } else if (mov.tipoConsumo === 'RECURRENTE') {
         periodos = mov.periodos || 12;
+        monthStep = FREQ_MAP[mov.frecuencia] || 1;
       }
       if (periodos < 1) periodos = 1;
       const isSeries = periodos > 1;
       const seriesGroupId = isSeries ? groupIdPrefix + crypto.randomUUID() : null;
 
       for (let i = 0; i < periodos; i++) {
-        const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
+        const monthsToAdd = esCuotas ? i : (i * monthStep);
+        const fechaISO = addMonthsSafe(fechaBase, monthsToAdd).toISOString().split('T')[0];
         let desc = mov.descripcion;
         if (esCuotas) desc = `${desc} (Cuota ${mov.cuotaActual + i}/${mov.cuotaTotal})`;
 
@@ -111,7 +120,10 @@ export default async function handler(req, res) {
         }
       }
 
-      await supabase.from('movimientos').insert(rows);
+      if (rows.length > 0) {
+        const { error } = await supabase.from('movimientos').insert(rows);
+        if (error) throw error;
+      }
 
     } else {
       // UPDATE SIMPLE

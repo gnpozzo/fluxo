@@ -231,32 +231,27 @@ export class MovimientosModule extends BaseModule {
 
     const importeVal = data?.importe || '';
 
-    // Segunda columna del formulario varía según tipo
-    const segundaColumna = esIngreso
-      ? `<div class="form-group">
-           <label>Cuenta de Destino</label>
-           <select class="input" name="medio_pago">
-             <option value="transferencia" ${data?.medio_pago === 'transferencia' || !data ? 'selected':''}>Cuenta Bancaria</option>
-             <option value="efectivo"      ${data?.medio_pago === 'efectivo'      ? 'selected':''}>Efectivo</option>
-             <option value="debito"        ${data?.medio_pago === 'debito'        ? 'selected':''}>Débito</option>
-           </select>
-         </div>`
-      : `<div class="form-group">
-           <label>Método de Pago</label>
-           <select class="input" name="medio_pago">
-             <option value="transferencia" ${data?.medio_pago === 'transferencia' || !data ? 'selected':''}>Transferencia</option>
-             <option value="efectivo"      ${data?.medio_pago === 'efectivo'      ? 'selected':''}>Efectivo</option>
-             <option value="debito"        ${data?.medio_pago === 'debito'        ? 'selected':''}>Débito</option>
-             <option value="credito"       ${data?.medio_pago === 'credito'       ? 'selected':''}>Tarjeta Crédito</option>
-           </select>
-         </div>`;
+    // Cuenta destino: lista de cuentas principales
+    const optsCuentas = this.#cuentas
+      .map(c => `<option value="${c.id_cuenta_principal}"
+        ${(data?.id_cuenta_principal === c.id_cuenta_principal || (!data && c.id_cuenta_principal === App.Store.cuenta)) ? 'selected' : ''}>
+        ${App.Utils.escapeHtml(c.nombre)}
+      </option>`)
+      .join('');
+
+    // Tarjetas para cuotas con TC (solo egresos)
+    const allTarjetas = window._appTarjetas || [];
+    const tarjetasCuenta = allTarjetas.filter(t => t.id_cuenta_principal === App.Store.cuenta);
+    const optsTc = tarjetasCuenta
+      .map(t => `<option value="${t.id_tarjeta}">${App.Utils.escapeHtml(t.nombre)}</option>`)
+      .join('');
 
     return `
       <form id="form-movimiento" class="form-grid">
         <input type="hidden" name="tipo" value="${tipo}">
         <input type="hidden" name="id_movimiento" value="${data?.id_movimiento || ''}">
 
-        <!-- Fila 1: Monto (grande) + Fecha -->
+        <!-- Fila 1: Monto + Fecha -->
         <div class="form-group ${colorClass}">
           <label>Monto <span class="required-mark">*</span></label>
           <div class="form-monto-wrap ${colorClass}">
@@ -273,7 +268,7 @@ export class MovimientosModule extends BaseModule {
           <input class="input" type="date" name="fecha" value="${rawFecha}" required>
         </div>
 
-        <!-- Fila 2: Categoría + Medio de pago / Cuenta destino -->
+        <!-- Fila 2: Categoría + Cuenta destino -->
         <div class="form-group">
           <label>Categoría <span class="required-mark">*</span></label>
           <select class="input" name="id_categoria" required>
@@ -282,9 +277,14 @@ export class MovimientosModule extends BaseModule {
           </select>
         </div>
 
-        ${segundaColumna}
+        <div class="form-group">
+          <label>Cuenta de Destino</label>
+          <select class="input" name="id_cuenta_destino">
+            ${optsCuentas}
+          </select>
+        </div>
 
-        <!-- Fila 3: Descripción (ancho completo) -->
+        <!-- Fila 3: Descripción -->
         <div class="form-group full-width">
           <label>Descripción <span class="required-mark">*</span></label>
           <textarea class="input" name="descripcion" rows="3"
@@ -294,29 +294,66 @@ export class MovimientosModule extends BaseModule {
         </div>
 
         ${!data ? `
-        <!-- Opciones adicionales solo en alta -->
+        <!-- Tipo de repetición -->
         <div class="form-group full-width">
           <label>Tipo de repetición</label>
           <select class="input" name="tipo_consumo" id="mov-tipo-consumo">
             <option value="COMUN">Única vez (Contado)</option>
-            <option value="CUOTAS">En Cuotas</option>
             <option value="RECURRENTE">Recurrente</option>
+            ${!esIngreso ? '<option value="CUOTAS">En Cuotas</option>' : ''}
           </select>
         </div>
 
-        <div id="mov-cuotas-opts" class="form-group full-width hidden">
-          <label>Cuota actual / Total</label>
-          <div style="display:flex;gap:var(--space-2)">
-            <input class="input" type="number" name="cuota_actual" min="1" value="1" style="width:70px">
-            <input class="input" type="number" name="cuota_total"  min="2" value="12" style="width:70px">
+        <!-- Opciones Recurrente -->
+        <div id="mov-recur-opts" class="form-group full-width hidden">
+          <div class="form-grid" style="gap:var(--space-3)">
+            <div class="form-group">
+              <label>Frecuencia</label>
+              <select class="input" name="frecuencia" id="mov-frecuencia">
+                <option value="MENSUAL">Mensual</option>
+                <option value="BIMESTRAL">Bimestral (cada 2 meses)</option>
+                <option value="TRIMESTRAL">Trimestral (cada 3 meses)</option>
+                <option value="SEMESTRAL">Semestral (cada 6 meses)</option>
+                <option value="ANUAL">Anual (cada 12 meses)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Cantidad de repeticiones</label>
+              <input class="input" type="number" name="periodos" min="2" max="120" value="12">
+            </div>
           </div>
         </div>
 
-        <div id="mov-recur-opts" class="form-group full-width hidden">
-          <label>Cantidad de períodos adicionales</label>
-          <input class="input" type="number" name="periodos" min="2" max="120" value="12">
-        </div>
-        ${esIngreso ? `
+        <!-- Opciones Cuotas (solo egresos) -->
+        ${!esIngreso ? `
+        <div id="mov-cuotas-opts" class="form-group full-width hidden">
+          <div class="form-grid" style="gap:var(--space-3)">
+            <div class="form-group">
+              <label>Cuota actual</label>
+              <input class="input" type="number" name="cuota_actual" min="1" value="1" style="width:80px">
+            </div>
+            <div class="form-group">
+              <label>Total de cuotas</label>
+              <input class="input" type="number" name="cuota_total" min="2" value="12" style="width:80px">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:var(--space-3)">
+            <label>¿Cómo se pagan las cuotas?</label>
+            <select class="input" name="cuotas_medio" id="mov-cuotas-medio">
+              <option value="contado">Al contado (débito automático / transferencia)</option>
+              <option value="tarjeta">Con Tarjeta de Crédito</option>
+            </select>
+          </div>
+          <div id="mov-cuotas-tc-opts" class="form-group hidden" style="margin-top:var(--space-3)">
+            <label>Tarjeta de Crédito</label>
+            <select class="input" name="id_tarjeta_cuotas">
+              <option value="">— Seleccionar tarjeta —</option>
+              ${optsTc}
+            </select>
+          </div>
+        </div>` : ''}
+
+        <!-- Split -->
         <div class="form-group full-width">
           <label class="form-switch">
             <input type="checkbox" class="toggle-switch" name="es_split" id="chk-split">
@@ -324,34 +361,29 @@ export class MovimientosModule extends BaseModule {
           </label>
         </div>
         <div id="split-opts" class="form-group full-width hidden">
-          <div class="form-grid" style="gap:var(--space-3); margin-bottom: var(--space-2);">
-            <div class="form-group">
-              <label>Cuenta de Distribución 1</label>
-              <select class="input" name="split_cuenta_destino_1">
-                <option value="">-- Ninguna --</option>
-                ${this.#cuentas.filter(c => c.id_cuenta_principal !== App.Store.cuenta).map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Porcentaje (%) Destino 1</label>
-              <input class="input" type="number" name="split_porcentaje_1" min="1" max="99" value="40">
-            </div>
-          </div>
-          <div class="form-grid" style="gap:var(--space-3)">
-            <div class="form-group">
-              <label>Cuenta de Distribución 2</label>
-              <select class="input" name="split_cuenta_destino_2">
-                <option value="">-- Ninguna --</option>
-                ${this.#cuentas.filter(c => c.id_cuenta_principal !== App.Store.cuenta).map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Porcentaje (%) Destino 2</label>
-              <input class="input" type="number" name="split_porcentaje_2" min="1" max="99" value="">
+          <div id="split-rows-container">
+            <div class="form-grid split-row" style="gap:var(--space-3);margin-bottom:var(--space-2)">
+              <div class="form-group">
+                <label>Cuenta de Distribución</label>
+                <select class="input" name="split_cuenta_destino_1">
+                  <option value="">-- Ninguna --</option>
+                  ${this.#cuentas.filter(c => c.id_cuenta_principal !== App.Store.cuenta).map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Porcentaje (%)</label>
+                <input class="input" type="number" name="split_porcentaje_1" min="1" max="99" value="50">
+              </div>
             </div>
           </div>
-          <p style="font-size:0.8rem;color:var(--texto-3);margin-top:4px;">El remanente (hasta completar 100%) quedará en la cuenta actual.</p>
-        </div>` : `
+          <button type="button" id="btn-add-split" class="btn btn-ghost btn-sm" style="margin-top:4px">
+            + Agregar otra distribución
+          </button>
+          <p style="font-size:0.8rem;color:var(--texto-3);margin-top:8px;">El remanente (hasta completar 100%) quedará en la cuenta actual.</p>
+        </div>
+
+        ${!esIngreso ? `
+        <!-- Compartir gasto -->
         <div class="form-group full-width">
           <label class="form-switch">
             <input type="checkbox" class="toggle-switch" name="compartir" id="mov-chk-compartir">
@@ -372,9 +404,8 @@ export class MovimientosModule extends BaseModule {
                <input class="input" type="number" name="compartir_porcentaje" min="1" max="99" value="50">
              </div>
            </div>
-           <p style="font-size:0.8rem;color:var(--texto-3);margin-top:4px;margin-bottom:0">Se descontará el porcentaje restante como deuda a cobrar en Gastos Compartidos con el contacto seleccionado.</p>
-        </div>
-        `}
+           <p style="font-size:0.8rem;color:var(--texto-3);margin-top:4px;margin-bottom:0">Se descontará el porcentaje restante como deuda a cobrar en Gastos Compartidos.</p>
+        </div>` : ''}
         ` : '<!-- Edición: sin opciones de serie -->'}
       </form>
     `;
@@ -388,12 +419,56 @@ export class MovimientosModule extends BaseModule {
         document.getElementById('mov-recur-opts')?.classList.toggle('hidden', selTipoConsumo.value !== 'RECURRENTE');
       });
     }
+
+    // Cuotas medio: show TC selector when "tarjeta" selected
+    const selCuotasMedio = document.getElementById('mov-cuotas-medio');
+    if (selCuotasMedio) {
+      selCuotasMedio.addEventListener('change', () => {
+        document.getElementById('mov-cuotas-tc-opts')?.classList.toggle('hidden', selCuotasMedio.value !== 'tarjeta');
+      });
+    }
+
+    // Split toggle
     const chkSplit = document.getElementById('chk-split');
     if (chkSplit) {
       chkSplit.addEventListener('change', () => {
         document.getElementById('split-opts')?.classList.toggle('hidden', !chkSplit.checked);
       });
     }
+
+    // Dynamic split rows
+    let splitCount = 1;
+    const btnAddSplit = document.getElementById('btn-add-split');
+    if (btnAddSplit) {
+      btnAddSplit.addEventListener('click', () => {
+        splitCount++;
+        const container = document.getElementById('split-rows-container');
+        if (!container) return;
+        const optsCuentas = this.#cuentas
+          .filter(c => c.id_cuenta_principal !== App.Store.cuenta)
+          .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
+          .join('');
+        const newRow = document.createElement('div');
+        newRow.className = 'form-grid split-row';
+        newRow.style.cssText = 'gap:var(--space-3);margin-bottom:var(--space-2)';
+        newRow.innerHTML = `
+          <div class="form-group">
+            <label>Cuenta de Distribución ${splitCount}</label>
+            <select class="input" name="split_cuenta_destino_${splitCount}">
+              <option value="">-- Ninguna --</option>
+              ${optsCuentas}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Porcentaje (%)</label>
+            <input class="input" type="number" name="split_porcentaje_${splitCount}" min="1" max="99" value="">
+          </div>
+        `;
+        container.appendChild(newRow);
+      });
+    }
+
+    // Compartir gasto toggle
     const chkComp = document.getElementById('mov-chk-compartir');
     if (chkComp) {
       chkComp.addEventListener('change', () => {
@@ -425,14 +500,12 @@ export class MovimientosModule extends BaseModule {
     const esSplit = datos.es_split === 'on';
     const splitDestinos = [];
     if (esSplit) {
-      const p1 = Number(datos.split_porcentaje_1 || 0);
-      const c1 = datos.split_cuenta_destino_1;
-      const p2 = Number(datos.split_porcentaje_2 || 0);
-      const c2 = datos.split_cuenta_destino_2;
-
-      if (c1 && p1 > 0) splitDestinos.push({ cuenta: c1, pct: p1 });
-      if (c2 && p2 > 0) splitDestinos.push({ cuenta: c2, pct: p2 });
-
+      // Collect all dynamic split rows
+      for (let i = 1; i <= 20; i++) {
+        const c = datos[`split_cuenta_destino_${i}`];
+        const p = Number(datos[`split_porcentaje_${i}`] || 0);
+        if (c && p > 0) splitDestinos.push({ cuenta: c, pct: p });
+      }
       const sumPct = splitDestinos.reduce((sum, d) => sum + d.pct, 0);
       if (sumPct >= 100) {
          App.Toast.error('La suma de porcentajes de distribución no puede ser >= 100%.');
@@ -440,20 +513,24 @@ export class MovimientosModule extends BaseModule {
       }
     }
 
+    const cuentaDestino = datos.id_cuenta_destino || App.Store.cuenta;
+
     const payload = {
-      idCuenta          : App.Store.cuenta,
+      idCuenta          : cuentaDestino,
       tipo              : datos.tipo,
       fecha             : datos.fecha,
       idCategoria       : datos.id_categoria,
       descripcion       : datos.descripcion,
       importe           : Number(datos.importe),
-      medioPago         : datos.medio_pago || 'transferencia',
-      tipoConsumo       : datos.tipo_consumo || 'COMUN', // COMUN, CUOTAS, RECURRENTE
+      medioPago         : 'transferencia',
+      tipoConsumo       : datos.tipo_consumo || 'COMUN',
+      frecuencia        : datos.frecuencia || 'MENSUAL',
       cuotaActual       : Number(datos.cuota_actual || 1),
       cuotaTotal        : Number(datos.cuota_total || 2),
       periodos          : Number(datos.periodos || 12),
       esSplit           : esSplit,
-      splitDestinos     : splitDestinos
+      splitDestinos     : splitDestinos,
+      idTarjetaCuotas   : (datos.cuotas_medio === 'tarjeta' && datos.id_tarjeta_cuotas) ? datos.id_tarjeta_cuotas : null
     };
 
     modal.setLoading(true);

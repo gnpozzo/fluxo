@@ -7,6 +7,15 @@ function addMonthsSafe(date, months) {
   return d;
 }
 
+// Map frequency names to month intervals
+const FREQ_MAP = {
+  'MENSUAL': 1,
+  'BIMESTRAL': 2,
+  'TRIMESTRAL': 3,
+  'SEMESTRAL': 6,
+  'ANUAL': 12
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
@@ -31,6 +40,7 @@ export default async function handler(req, res) {
     let periodos = 1;
     let esCuotas = false;
     let groupIdPrefix = 'REC_';
+    let monthStep = 1; // default monthly
     
     if (mov.tipoConsumo === 'CUOTAS') {
       periodos = mov.cuotaTotal - mov.cuotaActual + 1;
@@ -38,14 +48,19 @@ export default async function handler(req, res) {
       groupIdPrefix = 'INSTL_';
     } else if (mov.tipoConsumo === 'RECURRENTE') {
       periodos = mov.periodos || 12;
+      monthStep = FREQ_MAP[mov.frecuencia] || 1;
     }
 
     if (periodos < 1) periodos = 1;
     const isSeries = periodos > 1;
     const seriesGroupId = isSeries ? groupIdPrefix + crypto.randomUUID() : null;
 
+    // Store frequency metadata in the first row for later editing
+    const metaFrequency = mov.tipoConsumo === 'RECURRENTE' ? (mov.frecuencia || 'MENSUAL') : null;
+
     for (let i = 0; i < periodos; i++) {
-      const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
+      const monthsToAdd = esCuotas ? i : (i * monthStep);
+      const fechaISO = addMonthsSafe(fechaBase, monthsToAdd).toISOString().split('T')[0];
       
       let desc = mov.descripcion;
       if (esCuotas) {
@@ -90,7 +105,7 @@ export default async function handler(req, res) {
         });
       } else {
         // CASO NORMAL
-        rows.push({
+        const row = {
           id_movimiento: crypto.randomUUID(),
           id_cuenta_principal: mov.idCuenta,
           fecha: fechaISO,
@@ -100,7 +115,14 @@ export default async function handler(req, res) {
           importe: mov.importe,
           medio_pago: mov.medioPago,
           recur_group_id: seriesGroupId
-        });
+        };
+
+        // Link to credit card if cuotas-with-TC
+        if (esCuotas && mov.idTarjetaCuotas) {
+          row.id_consumo_tarjeta_origen = mov.idTarjetaCuotas;
+        }
+
+        rows.push(row);
       }
     }
 
