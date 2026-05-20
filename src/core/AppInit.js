@@ -272,7 +272,8 @@ class AppInit {
     if (!selectEl) return;
 
     if (cuentas.length > 0 && selectWrap) {
-      selectWrap.style.display = 'flex';
+      // Account selector stays hidden - portfolio nav handles switching
+      // selectWrap.style.display = 'flex';
       
       selectEl.addEventListener('change', (e) => {
         const nuevaId = e.target.value;
