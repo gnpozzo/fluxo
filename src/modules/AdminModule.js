@@ -241,6 +241,8 @@ export class AdminModule extends BaseModule {
     try {
       const response = await App.API.cached('api_admin_getAhorroSubcuentas', [], 2 * 60_000);
       const subs = response?.data || [];
+      const rCuentas = await App.API.cached('api_admin_getCuentasPrincipales', [], 2 * 60_000);
+      const cuentas = rCuentas?.data || [];
       content.innerHTML = `
         <div class="section-header">
           <h2 style="margin:0">Alcancías</h2>
@@ -250,11 +252,15 @@ export class AdminModule extends BaseModule {
         </div>
         <div class="table-card">
           <table class="table">
-            <thead><tr><th>Nombre</th><th>Moneda</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Cuenta Asociada</th><th>Moneda</th><th></th></tr></thead>
             <tbody>
-              ${subs.map(s => `
+              ${subs.map(s => {
+                const cObj = cuentas.find(c => c.id_cuenta_principal === s.id_cuenta_principal);
+                const cuentaNombre = cObj ? cObj.nombre : '—';
+                return `
                 <tr>
                   <td>${App.Utils.escapeHtml(s.nombre)}</td>
+                  <td>${App.Utils.escapeHtml(cuentaNombre)}</td>
                   <td>${App.Utils.escapeHtml(s.moneda || 'ARS')}</td>
                   <td class="text-right">
                     <button class="btn-accion" onclick="App.Modules.admin._editSubcuenta('${s.id_subcuenta}')" title="Editar">
@@ -264,7 +270,8 @@ export class AdminModule extends BaseModule {
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>
-                </tr>`).join('')}
+                </tr>`;
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -548,6 +555,12 @@ export class AdminModule extends BaseModule {
   async _editSubcuenta(id) {
     const m = new App.Modal('modal-adm-sub');
     let data = null;
+    let cuentas = [];
+    try {
+      const pCuentas = await App.API.cached('api_admin_getCuentasPrincipales', [], 0);
+      cuentas = pCuentas?.data || [];
+    } catch(e) {}
+
     if (id) {
       const response = await App.API.cached('api_admin_getAhorroSubcuentas', [], 0);
       data = (response?.data || []).find(s => s.id_subcuenta === id);
@@ -557,10 +570,20 @@ export class AdminModule extends BaseModule {
       body        : `
         <form id="form-adm-sub" class="form-grid">
           <input type="hidden" name="id_subcuenta" value="${data?.id_subcuenta || ''}">
+          
+          <div class="form-group full-width">
+            <label>Cuenta Asociada <span class="required-mark">*</span></label>
+            <select class="input" name="id_cuenta_principal" required>
+              <option value="" disabled ${!data ? 'selected' : ''}>Seleccione una cuenta</option>
+              ${cuentas.map(c => `<option value="${c.id_cuenta_principal}" ${data?.id_cuenta_principal === c.id_cuenta_principal ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+
           <div class="form-group full-width">
             <label>Nombre <span class="required-mark">*</span></label>
             <input class="input" name="nombre" value="${App.Utils.escapeHtml(data?.nombre || '')}" required>
           </div>
+          
           <div class="form-group half-width">
             <label>Moneda</label>
             <select class="input" name="moneda">
@@ -571,11 +594,10 @@ export class AdminModule extends BaseModule {
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
-        App.Toast.info('DEBUG: Botón Actualizar/Crear clickeado (Alcancía)');
-        console.log('[DEBUG] onConfirm _editSubcuenta iniciado');
         const fd = new FormData(modal.getForm());
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
+        if (!d.id_cuenta_principal) { App.Toast.warning('La cuenta asociada es obligatoria.'); return; }
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
         modal.setLoading(true);
         try {
@@ -608,8 +630,6 @@ export class AdminModule extends BaseModule {
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
-        App.Toast.info('DEBUG: Botón Actualizar/Crear clickeado (Contacto)');
-        console.log('[DEBUG] onConfirm _editUsuarioCC iniciado');
         const fd = new FormData(modal.getForm());
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
