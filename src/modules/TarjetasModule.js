@@ -613,7 +613,7 @@ export class TarjetasModule extends BaseModule {
           case 'blue':
           default:
             if (!tc.color && marca.includes('MASTER')) gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
-            else gradient = 'linear-gradient(135deg, #1a1f71 0%, #2d5bab 100%)';
+            else gradient = 'linear-gradient(135deg, #1D195D 0%, #151249 100%)';
             break;
         }
       }

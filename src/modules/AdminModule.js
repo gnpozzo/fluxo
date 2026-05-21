@@ -452,7 +452,7 @@ export class AdminModule extends BaseModule {
                 <label style="cursor:pointer;display:flex;align-items:center;gap:4px">
                   <input type="radio" name="color" value="${col}" ${data?.color === col || (!data && col === 'blue') ? 'checked' : ''}>
                   <div style="width:24px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,0.2);background:var(--card-${col}, ${
-                    col === 'blue' ? 'linear-gradient(135deg, #1a1f71, #2d5bab)' :
+                    col === 'blue' ? 'linear-gradient(135deg, #1D195D, #151249)' :
                     col === 'red' ? 'linear-gradient(135deg, #1a1a2e, #c41e3a)' :
                     col === 'orange' ? 'linear-gradient(135deg, #d35400, #e67e22)' :
                     col === 'purple' ? 'linear-gradient(135deg, #4a235a, #8e44ad)' :

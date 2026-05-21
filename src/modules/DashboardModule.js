@@ -318,7 +318,7 @@ export class DashboardModule extends BaseModule {
       <!-- ═══ COLLAPSIBLE SALDO CARD ═══ -->
       <div class="saldo-card" id="dash-saldo-card" role="button" aria-expanded="false" tabindex="0">
         <div class="saldo-card-header">
-          <span class="saldo-label">Saldo</span>
+          <span class="saldo-label">Mi saldo</span>
           <svg class="saldo-chevron dash-chevron" id="dash-saldo-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
         <div class="saldo-value" id="dash-saldo-val">$ 0,00</div>
@@ -515,11 +515,11 @@ export class DashboardModule extends BaseModule {
       <table class="dash-table">
         <thead>
           <tr>
-            <th>Fecha</th>
-            <th>Tipo</th>
-            <th>Categoría</th>
-            <th>Descripción</th>
-            <th style="text-align:right">Importe</th>
+            <th>FECHA ▲</th>
+            <th>TIPO ⇅</th>
+            <th>CATEGORÍA ⇅</th>
+            <th>DESCRIPCIÓN ⇅</th>
+            <th style="text-align:right">IMPORTE</th>
           </tr>
         </thead>
         <tbody>
@@ -648,7 +648,7 @@ export class DashboardModule extends BaseModule {
           if (!tc.color && marca.includes('MASTER')) {
              gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
           } else {
-             gradient = 'linear-gradient(135deg, #1a1f71 0%, #2d5bab 100%)';
+             gradient = 'linear-gradient(135deg, #1D195D 0%, #151249 100%)';
           }
           break;
       }
