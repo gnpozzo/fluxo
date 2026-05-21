@@ -259,6 +259,7 @@ class AppInit {
     }
 
     App.Events.emit('ui:tab-changed', { tabId: vistaId });
+    App.updateAccountSelectorVisibility(vistaId);
     App.log('AppInit', '#navegarTab', vistaId);
   }
 
@@ -272,27 +273,30 @@ class AppInit {
     if (!selectEl) return;
 
     if (cuentas.length > 0 && selectWrap) {
-      // Account selector stays hidden - portfolio nav handles switching
-      // selectWrap.style.display = 'flex';
-      
       selectEl.addEventListener('change', (e) => {
-        const nuevaId = e.target.value;
+        App.Store.setCuenta(e.target.value);
+      });
+
+      App.Events.on('store:cuenta-changed', (payload) => {
+        const nuevaId = payload.cuenta;
+        selectEl.value = nuevaId;
+
         const cuentaObj = cuentas.find(c => c.id_cuenta_principal === nuevaId);
         if (cuentaObj) {
-          App.Store.setCuenta(nuevaId);
           this.#actualizarVisibilidadTabs(cuentaObj);
-          
+
           // Clear ALL loaded module caches so data reloads with the new account
           Object.keys(this.#tabMap).forEach(v => {
             const mid = this.#tabMap[v];
-            if (mid) App.Store.clearModuloLoaded(mid);
+            if (mid) App.Store.invalidateModulo(mid);
           });
 
           this.#cargarNotificaciones(); // Refrescar notificaciones
 
-          // Recargar módulo actual con la nueva cuenta
+          // Recargar módulo activo con la nueva cuenta
           const modId = this.#tabMap[this.#tabActivo];
           if (modId && App.Modules[modId]) {
+            App.Modules[modId].destruir();
             App.Modules[modId].cargar();
           }
         }

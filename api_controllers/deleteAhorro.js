@@ -4,8 +4,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const request = Array.isArray(req.body) ? req.body[0] : req.body;
-    
+    let request = req.body;
+    if (Array.isArray(req.body)) {
+      if (typeof req.body[0] === 'object' && req.body[0] !== null) {
+        request = req.body[0];
+      } else {
+        request = { id_ahorro: req.body[0] };
+      }
+    }
     const idAhorro = request.id_ahorro;
     
     // Delete from movimientos first (FK)

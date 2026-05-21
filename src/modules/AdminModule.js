@@ -484,6 +484,7 @@ export class AdminModule extends BaseModule {
         const fd = new FormData(modal.getForm());
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
+        if (!d.id_cuenta_principal) { App.Toast.warning('La cuenta asociada es obligatoria.'); return; }
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
         d.activa = (d.activa === 'on');
         

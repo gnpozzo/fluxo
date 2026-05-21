@@ -35,11 +35,16 @@ export default async function handler(req, res) {
     if (scope === 'SINGLE') data.tipo = 'SIMPLE';
     
     const consumo = data;
+    const tipo = consumo.tipo || (consumo.tipoConsumo === 'COMUN' ? 'SIMPLE' : (consumo.tipoConsumo || 'SIMPLE'));
+    const porcentajeImputado = (consumo.porcentajeImputado !== undefined && consumo.porcentajeImputado !== null)
+      ? consumo.porcentajeImputado
+      : (consumo.usaPorcentaje ? consumo.porcentajeYo : 50);
+
     const ccItems = [];
     const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
-    const recurGroupId = (consumo.tipo !== 'SIMPLE') ? 'CC_REC_' + crypto.randomUUID() : null;
+    const recurGroupId = (tipo !== 'SIMPLE') ? 'CC_REC_' + crypto.randomUUID() : null;
 
-    if (consumo.tipo === 'SIMPLE') {
+    if (tipo === 'SIMPLE') {
       const fechaISO = fechaBase.toISOString().split('T')[0];
       ccItems.push({
         id_cc_consumo: crypto.randomUUID(),
@@ -50,9 +55,9 @@ export default async function handler(req, res) {
         descripcion: consumo.descripcion,
         importe: consumo.importe,
         pagador: consumo.pagador,
-        porcentaje_imputado: consumo.porcentajeImputado
+        porcentaje_imputado: porcentajeImputado
       });
-    } else if (consumo.tipo === 'CUOTAS') {
+    } else if (tipo === 'CUOTAS') {
       const cuotasARegistrar = (consumo.cuotaTotal - consumo.cuotaActual) + 1;
       for (let i = 0; i < cuotasARegistrar; i++) {
         const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
@@ -65,13 +70,13 @@ export default async function handler(req, res) {
           descripcion: consumo.descripcion,
           importe: consumo.importe,
           pagador: consumo.pagador,
-          porcentaje_imputado: consumo.porcentajeImputado,
+          porcentaje_imputado: porcentajeImputado,
           recur_group_id: recurGroupId,
           nro_cuota: consumo.cuotaActual + i,
           total_cuotas: consumo.cuotaTotal
         });
       }
-    } else if (consumo.tipo === 'RECURRENTE') {
+    } else if (tipo === 'RECURRENTE') {
       for (let i = 0; i < consumo.periodos; i++) {
         const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
         ccItems.push({
@@ -83,7 +88,7 @@ export default async function handler(req, res) {
           descripcion: consumo.descripcion,
           importe: consumo.importe,
           pagador: consumo.pagador,
-          porcentaje_imputado: consumo.porcentajeImputado,
+          porcentaje_imputado: porcentajeImputado,
           recur_group_id: recurGroupId
         });
       }

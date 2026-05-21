@@ -170,4 +170,18 @@ export class BaseModule {
 // Attach BaseModule globally to preserve compatibility
 window.BaseModule = BaseModule;
 
+App.updateAccountSelectorVisibility = function(vistaId) {
+  const activeVista = vistaId || document.querySelector('.vista-container.active')?.id;
+  const selectWrap = document.getElementById('account-select-ui');
+  if (!selectWrap) return;
+  const isConfig = (activeVista === 'vista-admin');
+  const isDashboard = (activeVista === 'vista-dashboard');
+  let showSelector = !isConfig;
+  if (isDashboard) {
+    const dashDetail = document.getElementById('dash-detail-view');
+    showSelector = !!(dashDetail && dashDetail.style.display !== 'none');
+  }
+  selectWrap.style.display = showSelector ? 'flex' : 'none';
+};
+
 App.log('app-bootstrap', 'init', `Namespace App v${APP_VERSION} registrado`);

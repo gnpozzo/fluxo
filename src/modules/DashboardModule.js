@@ -145,11 +145,13 @@ export class DashboardModule extends BaseModule {
     if (dEl) dEl.style.display = '';
     this.#renderDetailNav(cuentaId);
     this.#cargarDetail();
+    App.updateAccountSelectorVisibility();
   }
 
   #exitToPortfolio() {
     this.#viewMode = 'portfolio';
     this.#cargarPortfolio();
+    App.updateAccountSelectorVisibility();
   }
 
   #renderDetailNav(cuentaId) {
@@ -410,7 +412,9 @@ export class DashboardModule extends BaseModule {
         if (pEl) pEl.style.display = 'none';
         if (dEl) dEl.style.display = '';
       }
+      this.#renderDetailNav(App.Store.cuenta);
       this.#cargarDetail();
+      App.updateAccountSelectorVisibility();
     });
     App.Events.on('data:changed', () => {
       this.cargar();

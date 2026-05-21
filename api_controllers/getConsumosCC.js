@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     let gastoOtro = 0;
     let saldoNeto = 0;
 
-    (consumos || []).forEach(c => {
+    const mappedConsumos = (consumos || []).map(c => {
       const miParte = (Number(c.importe || 0) * Number(c.porcentaje_imputado || 100)) / 100;
       if (c.pagador === 'YO') {
         gastoYo += Number(c.importe || 0);
@@ -28,12 +28,18 @@ export default async function handler(req, res) {
         gastoOtro += Number(c.importe || 0);
         saldoNeto -= miParte;
       }
+      return {
+        ...c,
+        id_consumo_cc: c.id_cc_consumo,
+        importe_total: Number(c.importe || 0),
+        mi_parte: miParte
+      };
     });
 
     return res.status(200).json({
       success: true,
       kpis: { saldoNeto, gastoYo, gastoOtro },
-      consumos: consumos || []
+      consumos: mappedConsumos
     });
 
   } catch (err) {

@@ -4,7 +4,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const idOperacion = Array.isArray(req.body) ? req.body[0] : req.body;
+    let idOperacion = Array.isArray(req.body) ? req.body[0] : req.body;
+    if (typeof idOperacion === 'object' && idOperacion !== null) {
+      idOperacion = idOperacion.id || idOperacion.id_inversion || idOperacion.idOperacion || idOperacion.id_operacion;
+    }
     
     if (!idOperacion) throw new Error('idOperacion requerido');
     
