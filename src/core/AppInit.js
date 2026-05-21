@@ -270,6 +270,7 @@ class AppInit {
     if (welcomeBar) {
       // Show welcome bar on dashboard, hide on admin
       welcomeBar.style.display = (vistaId === 'vista-admin') ? 'none' : '';
+      welcomeBar.classList.toggle('integrated', vistaId === 'vista-dashboard');
     }
 
     App.Events.emit('ui:tab-changed', { tabId: vistaId });

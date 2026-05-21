@@ -2521,15 +2521,21 @@ body {
 }
 
 .main-content {
-  padding: 24px 32px !important;
+  padding: 24px 40px !important;
   overflow-y: auto !important;
   flex: 1;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  max-width: 1280px !important;
-  margin: 0 auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
   background: var(--fondo) !important;
+}
+
+.main-content > .vista-container.active {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
 }
 
 @media (max-width: 768px) {
@@ -2540,7 +2546,7 @@ body {
 }
 
 .app-header {
-  height: 56px !important;
+  height: 64px !important;
   background: var(--superficie) !important;
   border-bottom: 1px solid var(--borde) !important;
   display: flex !important;
@@ -2562,7 +2568,7 @@ body {
 }
 
 .app-header-logo img {
-  height: 28px;
+  height: 42px !important;
   width: auto;
   object-fit: contain;
 }
@@ -2582,6 +2588,25 @@ body {
   margin-bottom: 20px !important;
   width: 100% !important;
   max-width: 100% !important;
+  transition: all 0.25s ease !important;
+}
+
+/* Integrated Welcome-Bar & Saldo-Card panel */
+.welcome-bar.integrated {
+  margin-bottom: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  padding: 24px 24px 16px 24px !important;
+}
+
+.welcome-bar.integrated + .vista-container.active .saldo-card {
+  margin-top: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+  padding: 12px 24px 24px 24px !important;
+  box-shadow: var(--sombra) !important;
 }
 
 .welcome-row {
@@ -2876,12 +2901,19 @@ body {
 .fab-group {
   position: absolute;
   bottom: 24px;
-  right: 24px;
+  right: 40px !important;
   z-index: 7990;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .fab-group {
+    right: 16px !important;
+    bottom: 16px !important;
+  }
 }
 
 .fab-button {
