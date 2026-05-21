@@ -671,7 +671,7 @@ class AppInit {
             titulo: 'Acerca de Fluxo',
             body: `
               <div style="text-align:center;padding:20px 10px;">
-                <img src="https://i.imgur.com/FLSwshY.png" alt="Fluxo Logo" style="width:140px;margin-bottom:16px;">
+                <img src="https://i.imgur.com/zbLZveO.png" alt="Fluxo Logo" style="width:170px;margin-bottom:16px;object-fit:contain;" class="modal-logo">
                 <p style="font-weight:600;margin-bottom:8px;">Fluxo — Gestión Inteligente de Finanzas</p>
                 <p style="font-size:0.85rem;color:var(--texto-2);margin-bottom:20px;">Versión 6.0.0 (Rediseño Mobile-First)</p>
                 <div style="border-top:1px solid var(--borde);padding-top:16px;font-size:0.82rem;color:var(--texto-2);">

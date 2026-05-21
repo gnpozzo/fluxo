@@ -15,9 +15,20 @@ export class GeminiChatController {
     App.log('GeminiChatController', 'constructor', 'Inicializando controlador Gemini');
   }
 
-  init() {
+  async init() {
     if (this.#initialized) return;
     this.#initialized = true;
+    
+    try {
+      const res = await fetch('/api/getConfig');
+      const config = await res.json();
+      if (config.geminiApiKey) {
+        this.#apiKey = config.geminiApiKey;
+      }
+    } catch (err) {
+      App.log('GeminiChatController', 'init', 'Error al obtener la API Key desde el servidor:', err);
+    }
+    
     this.#initUI();
   }
 
@@ -180,6 +191,14 @@ INSTRUCCIONES DE COMPORTAMIENTO:
     // 3. Mostrar indicador de escritura (loader)
     this.#showLoader();
     this.#scrollToBottom();
+
+    // Check if the API key is not configured or contains placeholder
+    if (!this.#apiKey || this.#apiKey.includes('daadBB') || this.#apiKey.trim() === '') {
+      this.#hideLoader();
+      this.#appendMessage('error', 'Error de conexión: No se pudo contactar a Gemini AI. Por favor configurá la API Key válida en las variables de entorno.');
+      this.#scrollToBottom();
+      return;
+    }
 
     try {
       const systemInstruction = this.#compileSystemInstruction();
