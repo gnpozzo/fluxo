@@ -2499,7 +2499,7 @@ button.btn-secundario:hover {
   display: none !important;
 }
 
-/* Center app in desktop view (mobile simulator container) */
+/* Center app in desktop view (responsive widescreen layout) */
 body {
   background-color: var(--fondo);
   height: 100vh;
@@ -2521,27 +2521,21 @@ body {
 }
 
 .main-content {
-  padding: 20px 16px !important;
+  padding: 24px 32px !important;
   overflow-y: auto !important;
   flex: 1;
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 600px !important;
+  max-width: 1280px !important;
   margin: 0 auto !important;
-  background: var(--superficie);
-  border-left: 1px solid var(--borde);
-  border-right: 1px solid var(--borde);
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.03);
+  background: var(--fondo) !important;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .main-content {
-    border-left: none;
-    border-right: none;
-    box-shadow: none;
+    padding: 16px 12px !important;
     max-width: 100vw !important;
-    padding: 16px !important;
   }
 }
 
