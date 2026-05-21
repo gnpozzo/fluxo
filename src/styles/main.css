@@ -513,20 +513,24 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 0 0 24px;
+  padding: 16px 24px;
   flex-wrap: wrap;
   max-width: var(--max-w, 1280px);
-  margin: 0 auto;
+  margin: 0 auto 24px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-lg, 16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
 }
 .welcome-greeting h2 {
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   font-weight: 700;
   color: var(--texto);
   margin: 0;
   letter-spacing: -0.02em;
 }
 .welcome-greeting p {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--texto-3);
   margin: 2px 0 0;
 }
@@ -561,8 +565,12 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   line-height: 1;
 }
 .currency-pill:first-child { border-right: 1px solid var(--borde); }
-.currency-pill.active {
+.currency-pill.active#pill-ars {
   background: var(--primary);
+  color: var(--btn-pri-text);
+}
+.currency-pill.active#pill-usd {
+  background: var(--verde);
   color: var(--btn-pri-text);
 }
 .currency-pill:hover:not(.active) {
@@ -2028,6 +2036,65 @@ button.btn-secundario:hover {
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 24px;
+}
+
+/* Dashboard Modules Quick Action Bar */
+.dash-modules-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-lg, 16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  margin: 12px 0 24px;
+  flex-wrap: wrap;
+}
+.dash-modules-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: var(--r, 8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  min-width: 90px;
+}
+.dash-modules-nav-btn:hover {
+  background: var(--bg-tab-hover, rgba(0, 0, 0, 0.02));
+  transform: translateY(-4px);
+}
+.dash-modules-nav-btn:active {
+  transform: translateY(-1px);
+}
+.dash-modules-nav-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+.dash-modules-nav-btn:hover .dash-modules-nav-icon {
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+  transform: scale(1.05);
+}
+.dash-modules-nav-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--texto-2);
+  transition: color 0.2s ease;
+}
+.dash-modules-nav-btn:hover .dash-modules-nav-label {
+  color: var(--texto);
 }
 
 /* Card de módulo secundario */

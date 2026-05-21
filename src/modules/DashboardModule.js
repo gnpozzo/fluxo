@@ -158,10 +158,7 @@ export class DashboardModule extends BaseModule {
     const nav = document.getElementById('dash-detail-nav');
     if (!nav) return;
     const cuentas = App.Store.cuentas;
-    const idx = cuentas.findIndex(c => c.id_cuenta_principal === cuentaId);
-    const current = cuentas[idx];
-    const prev = idx > 0 ? cuentas[idx - 1] : null;
-    const next = idx < cuentas.length - 1 ? cuentas[idx + 1] : null;
+    const current = cuentas.find(c => c.id_cuenta_principal === cuentaId);
 
     nav.innerHTML = `
       <button class="btn btn-ghost btn-sm dash-back-btn" id="dash-back-portfolio">
@@ -169,24 +166,12 @@ export class DashboardModule extends BaseModule {
         Portfolio
       </button>
       <div class="dash-detail-nav-center">
-        ${prev ? `<button class="dash-nav-arrow" id="dash-nav-prev" title="Ir a ${App.Utils.escapeHtml(prev.nombre)}">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>` : '<div style="width:32px"></div>'}
         <span class="dash-detail-nav-title">${App.Utils.escapeHtml(current?.nombre || '')}</span>
-        ${next ? `<button class="dash-nav-arrow" id="dash-nav-next" title="Ir a ${App.Utils.escapeHtml(next.nombre)}">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
-        </button>` : '<div style="width:32px"></div>'}
       </div>
     `;
 
     // Bind nav events
     document.getElementById('dash-back-portfolio')?.addEventListener('click', () => this.#exitToPortfolio());
-    if (prev) {
-      document.getElementById('dash-nav-prev')?.addEventListener('click', () => this.#enterDetailMode(prev.id_cuenta_principal));
-    }
-    if (next) {
-      document.getElementById('dash-nav-next')?.addEventListener('click', () => this.#enterDetailMode(next.id_cuenta_principal));
-    }
   }
 
   async #cargarDetail() {
@@ -200,6 +185,80 @@ export class DashboardModule extends BaseModule {
     // Update nav
     this.#renderDetailNav(cuenta);
 
+    // Render Quick Action Bar based on active modules in this account
+    const navContainer = document.getElementById('dash-modules-nav');
+    if (navContainer && cuentaObj) {
+      const activeModules = [];
+      if (cuentaObj.modulo_tarjetas_activo) {
+        activeModules.push({
+          id: 'tarjetas',
+          label: 'Tarjetas',
+          vista: 'vista-tarjetas',
+          color: 'var(--rojo)',
+          bg: 'var(--rojo-tint)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`
+        });
+      }
+      if (cuentaObj.modulo_cc_activo) {
+        activeModules.push({
+          id: 'cc',
+          label: 'Gastos Comp.',
+          vista: 'vista-cc',
+          color: 'var(--verde)',
+          bg: 'var(--verde-tint)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
+        });
+      }
+      if (cuentaObj.modulo_ahorro_activo) {
+        activeModules.push({
+          id: 'ahorro',
+          label: 'Ahorro',
+          vista: 'vista-ahorro',
+          color: 'var(--amarillo-text)',
+          bg: 'var(--amarillo-tint)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`
+        });
+      }
+      if (cuentaObj.modulo_inversiones_activo) {
+        activeModules.push({
+          id: 'inversiones',
+          label: 'Inversiones',
+          vista: 'vista-inversiones',
+          color: 'var(--cyan, #0ea5e9)',
+          bg: 'rgba(14, 165, 233, 0.1)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`
+        });
+      }
+
+      navContainer.innerHTML = activeModules.map(m => `
+        <button class="dash-modules-nav-btn" data-vista="${m.vista}">
+          <div class="dash-modules-nav-icon" style="background:${m.bg}; color:${m.color};">
+            ${m.svg}
+          </div>
+          <span class="dash-modules-nav-label">${m.label}</span>
+        </button>
+      `).join('');
+
+      // Bind click event for each navigation button
+      navContainer.querySelectorAll('.dash-modules-nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const vista = btn.dataset.vista;
+          document.querySelector(`[data-vista="${vista}"]`)?.click();
+        });
+      });
+    }
+
+    // Toggle detailed module card scorecards based on active settings
+    const cardTarjetas = document.getElementById('dash-card-tarjetas');
+    const cardCC = document.getElementById('dash-card-cc');
+    const cardAhorro = document.getElementById('dash-card-ahorro');
+    const cardInversiones = document.getElementById('dash-card-inversiones');
+
+    if (cardTarjetas) cardTarjetas.style.display = cuentaObj?.modulo_tarjetas_activo ? '' : 'none';
+    if (cardCC) cardCC.style.display = cuentaObj?.modulo_cc_activo ? '' : 'none';
+    if (cardAhorro) cardAhorro.style.display = cuentaObj?.modulo_ahorro_activo ? '' : 'none';
+    if (cardInversiones) cardInversiones.style.display = cuentaObj?.modulo_inversiones_activo ? '' : 'none';
+
     this.#mostrarKpiSkeletons();
 
     try {
@@ -210,9 +269,19 @@ export class DashboardModule extends BaseModule {
         (freshData) => { if (freshData?.success) this._render(freshData); }
       );
       this._render(resp.data);
-      this.#loadTarjetas(cuenta, fechaInicio, fechaFin);
-      this.#loadCC(cuenta, fechaInicio, fechaFin);
-      this.#loadAhorro(cuenta, fechaInicio, fechaFin);
+      
+      if (cuentaObj?.modulo_tarjetas_activo) {
+        this.#loadTarjetas(cuenta, fechaInicio, fechaFin);
+      }
+      if (cuentaObj?.modulo_cc_activo) {
+        this.#loadCC(cuenta, fechaInicio, fechaFin);
+      }
+      if (cuentaObj?.modulo_ahorro_activo) {
+        this.#loadAhorro(cuenta, fechaInicio, fechaFin);
+      }
+      if (cuentaObj?.modulo_inversiones_activo) {
+        this.#loadInversiones(cuenta);
+      }
     } catch (err) {
       App.error('DashboardModule', 'cargar', 'Error', err);
       App.Toast.error('Error al cargar dashboard: ' + (err.message || 'Error desconocido'));
@@ -256,6 +325,9 @@ export class DashboardModule extends BaseModule {
       <div id="dash-detail-nav" class="dash-detail-nav"></div>
       <!-- ═══ KPIs PRINCIPALES ═══ -->
       <div class="kpi-grid" id="dash-kpi-grid"></div>
+
+      <!-- ═══ BARRA DE ACCESO RÁPIDO A MÓDULOS ═══ -->
+      <div class="dash-modules-nav" id="dash-modules-nav"></div>
 
       <!-- ═══ MOVIMIENTOS DEL MES (Acordeón) ═══ -->
       <div class="dash-section" id="dash-mov-section">
@@ -322,6 +394,17 @@ export class DashboardModule extends BaseModule {
           <div class="dash-mc-body">
             <div class="dash-mc-kpi-row"><div><span class="dash-mc-kpi-label">Total ahorros</span><span class="dash-mc-kpi-value" id="dash-ahorro-total">—</span></div></div>
             <button id="dash-ahorro-detail" class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px">Ver alcancías</button>
+          </div>
+        </div>
+        <!-- Inversiones -->
+        <div class="dash-module-card" id="dash-card-inversiones">
+          <div class="dash-mc-header">
+            <span class="dash-section-icon" style="background:rgba(14, 165, 233, 0.1);color:var(--cyan, #0ea5e9)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+            <span class="dash-mc-title">INVERSIONES</span>
+          </div>
+          <div class="dash-mc-body">
+            <div class="dash-mc-kpi-row"><div><span class="dash-mc-kpi-label">Valor actual</span><span class="dash-mc-kpi-value" id="dash-inversiones-valor">—</span></div></div>
+            <button id="dash-inversiones-detail" class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px">Ver inversiones</button>
           </div>
         </div>
       </div>
@@ -395,6 +478,11 @@ export class DashboardModule extends BaseModule {
     // Alcancías (Chanchito) detail
     document.getElementById('dash-ahorro-detail')?.addEventListener('click', () => {
       document.querySelector('[data-vista="vista-ahorro"]')?.click();
+    });
+
+    // Inversiones detail
+    document.getElementById('dash-inversiones-detail')?.addEventListener('click', () => {
+      document.querySelector('[data-vista="vista-inversiones"]')?.click();
     });
   }
 
@@ -653,6 +741,24 @@ export class DashboardModule extends BaseModule {
       );
       if (resp.data?.success) applyAhorro(resp.data);
     } catch (e) { App.error('Dashboard', '#loadAhorro', e.message, e); }
+  }
+
+  // --- SECCIÓN 8B: INVERSIONES ---
+
+  async #loadInversiones(cuenta) {
+    const applyInversiones = (data) => {
+      this._inversionesData = data;
+      const valorActual = (data.kpis?.valorActual || 0);
+      const el = document.getElementById('dash-inversiones-valor');
+      if (el) el.textContent = App.Utils.formatearMoneda(valorActual);
+    };
+    try {
+      const resp = await App.API.swr(
+        'api_getPortfolio', [cuenta], App.API.defaultTtl,
+        (fresh) => { if (fresh?.success) applyInversiones(fresh); }
+      );
+      if (resp.data?.success) applyInversiones(resp.data);
+    } catch (e) { App.error('Dashboard', '#loadInversiones', e.message, e); }
   }
 
   #abrirModalDetalleMov(row) {
