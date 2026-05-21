@@ -19,6 +19,7 @@ window.App.API = API;
 
 import './core/AppStore.js';
 import './core/AppUtils.js';
+import './core/AppGemini.js';
 
 // 3. UI Components
 import { ToastManager } from './components/Toast.js';

@@ -15,12 +15,11 @@ export class DashboardModule extends BaseModule {
   get _updateEndpoint() { return null; }
   get _deleteEndpoint() { return null; }
 
-  #kpiIngresos = null;
-  #kpiEgresos  = null;
-  #kpiResult   = null;
   #movData     = [];
   #accordionOpen = false;
-  #viewMode = 'portfolio'; // 'portfolio' | 'detail'
+  #viewMode = 'detail'; // 'portfolio' | 'detail'
+
+  get movData() { return this.#movData; }
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -32,11 +31,7 @@ export class DashboardModule extends BaseModule {
   }
 
   async cargar() {
-    if (this.#viewMode === 'portfolio') {
-      await this.#cargarPortfolio();
-    } else {
-      await this.#cargarDetail();
-    }
+    await this.#cargarDetail();
   }
 
   async #cargarPortfolio() {
@@ -182,9 +177,6 @@ export class DashboardModule extends BaseModule {
     const cuentaObj      = App.Store.cuentas.find(c => c.id_cuenta_principal === cuenta);
     const requiereAjuste = cuentaObj?.requiere_ajuste_cc_tc ?? false;
 
-    // Update nav
-    this.#renderDetailNav(cuenta);
-
     // Render Quick Action Bar based on active modules in this account
     const navContainer = document.getElementById('dash-modules-nav');
     if (navContainer && cuentaObj) {
@@ -295,10 +287,22 @@ export class DashboardModule extends BaseModule {
 
     const { kpis, movimientos } = data;
 
-    this.#kpiIngresos?.setValue(kpis.ingresos);
-    this.#kpiEgresos?.setValue(kpis.egresos);
-    this.#kpiResult?.setValue(kpis.resultado, { invertido: false });
-       setTimeout(() => { if (window.renderChart) window.renderChart(kpis); }, 100);
+    const saldoValEl = document.getElementById('dash-saldo-val');
+    const breakdownIngresosEl = document.getElementById('dash-breakdown-ingresos');
+    const breakdownEgresosEl = document.getElementById('dash-breakdown-egresos');
+
+    if (saldoValEl) {
+      saldoValEl.textContent = App.Utils.formatearMoneda(kpis.resultado);
+      saldoValEl.classList.toggle('negativo', kpis.resultado < 0);
+    }
+    if (breakdownIngresosEl) {
+      breakdownIngresosEl.textContent = App.Utils.formatearMoneda(kpis.ingresos);
+    }
+    if (breakdownEgresosEl) {
+      breakdownEgresosEl.textContent = App.Utils.formatearMoneda(kpis.egresos);
+    }
+
+    setTimeout(() => { if (window.renderChart) window.renderChart(kpis); }, 100);
 
     this.#movData = movimientos || [];
     this.#renderMovTable();
@@ -311,22 +315,28 @@ export class DashboardModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
-      <!-- ═══ PORTFOLIO VIEW ═══ -->
-      <div id="dash-portfolio-view">
-        <div class="portfolio-header">
-          <h2 class="portfolio-title">Mi Portfolio</h2>
-          <p class="portfolio-subtitle">Seleccioná una cuenta para ver el detalle</p>
+      <!-- ═══ COLLAPSIBLE SALDO CARD ═══ -->
+      <div class="saldo-card" id="dash-saldo-card" role="button" aria-expanded="false" tabindex="0">
+        <div class="saldo-card-header">
+          <span class="saldo-label">Saldo</span>
+          <svg class="saldo-chevron dash-chevron" id="dash-saldo-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
-        <div class="portfolio-grid" id="dash-portfolio-grid"></div>
+        <div class="saldo-value" id="dash-saldo-val">$ 0,00</div>
+        <div class="saldo-breakdown collapsed" id="dash-saldo-breakdown">
+          <div class="breakdown-row">
+            <div class="breakdown-col">
+              <span class="breakdown-label">INGRESOS</span>
+              <span class="breakdown-val positivo" id="dash-breakdown-ingresos">$ 0,00</span>
+            </div>
+            <div class="breakdown-col">
+              <span class="breakdown-label">EGRESOS</span>
+              <span class="breakdown-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- ═══ DETAIL VIEW (hidden initially) ═══ -->
-      <div id="dash-detail-view" style="display:none">
-      <div id="dash-detail-nav" class="dash-detail-nav"></div>
-      <!-- ═══ KPIs PRINCIPALES ═══ -->
-      <div class="kpi-grid" id="dash-kpi-grid"></div>
-
-      <!-- ═══ BARRA DE ACCESO RÁPIDO A MÓDULOS ═══ -->
+      <!-- ═══ BOTONERA DE ACCESO RÁPIDO A MÓDULOS ═══ -->
       <div class="dash-modules-nav" id="dash-modules-nav"></div>
 
       <!-- ═══ MOVIMIENTOS DEL MES (Acordeón) ═══ -->
@@ -338,7 +348,7 @@ export class DashboardModule extends BaseModule {
             </span>
             <span class="dash-section-title">MOVIMIENTOS DEL MES</span>
           </div>
-          <svg class="dash-chevron" id="dash-mov-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <svg class="dash-chevron" id="dash-mov-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
         <div class="dash-section-body" id="dash-mov-body">
           <div id="dash-mov-table-preview"></div>
@@ -408,45 +418,21 @@ export class DashboardModule extends BaseModule {
           </div>
         </div>
       </div>
-
-      <!-- ═══ RESUMEN IA ═══ -->
-      <div class="ai-summary-card" id="dash-ai-summary">
-        <div class="ai-summary-header">
-          <div class="ai-summary-icon">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="#9B72CB" stroke="none"/>
-            </svg>
-          </div>
-          <span class="ai-summary-title">Análisis de tu cartera</span>
-          <span class="ai-summary-badge gemini-sparkle-anim">✨ Próximamente</span>
-        </div>
-        <div class="ai-summary-body">
-          <p>Pronto, la IA analizará tu composición de cartera, patrones de gastos y oportunidades de ahorro para darte recomendaciones personalizadas.</p>
-          <p style="font-size:0.82rem;color:var(--texto-3);font-style:italic">Powered by Gemini AI — integración en desarrollo.</p>
-        </div>
-      </div>
-      </div><!-- /dash-detail-view -->
     `;
-
-    // KPI Cards
-    const grid = document.getElementById('dash-kpi-grid');
-    this.#kpiIngresos = new App.KpiCard(grid, {
-      titulo: 'Ingresos', icono: 'trending_up', colorClass: 'kpi-green',
-      onFormat: App.Utils.formatearMoneda
-    });
-    this.#kpiEgresos = new App.KpiCard(grid, {
-      titulo: 'Egresos', icono: 'trending_down', colorClass: 'kpi-red',
-      onFormat: (v) => App.Utils.formatearMoneda(Math.abs(v))
-    });
-    this.#kpiResult = new App.KpiCard(grid, {
-      titulo: 'Balance Total', icono: 'scale', colorClass: 'kpi-blue',
-      onFormat: App.Utils.formatearMoneda
-    });
   }
 
   // --- SECCIÓN 4: LISTENERS ---
 
   _bindListeners() {
+    // Saldo card breakdown toggle
+    document.getElementById('dash-saldo-card')?.addEventListener('click', () => {
+      const breakdown = document.getElementById('dash-saldo-breakdown');
+      const chevron = document.getElementById('dash-saldo-chevron');
+      const isExpanded = breakdown?.classList.toggle('collapsed') === false;
+      chevron?.classList.toggle('rotated', isExpanded);
+      document.getElementById('dash-saldo-card')?.setAttribute('aria-expanded', isExpanded);
+    });
+
     // Acordeón movimientos
     document.getElementById('dash-mov-toggle')?.addEventListener('click', () => {
       const body = document.getElementById('dash-mov-body');
@@ -488,19 +474,9 @@ export class DashboardModule extends BaseModule {
 
   _subscribeEvents() {
     App.Events.on('store:mes-changed', () => {
-      // Reload whichever view is active
       this.cargar();
     });
     App.Events.on('store:cuenta-changed', () => {
-      // When account changes externally (topbar selector), go to detail mode
-      if (this.#viewMode === 'portfolio') {
-        this.#viewMode = 'detail';
-        const pEl = document.getElementById('dash-portfolio-view');
-        const dEl = document.getElementById('dash-detail-view');
-        if (pEl) pEl.style.display = 'none';
-        if (dEl) dEl.style.display = '';
-      }
-      this.#renderDetailNav(App.Store.cuenta);
       this.#cargarDetail();
       App.updateAccountSelectorVisibility();
     });
@@ -520,9 +496,12 @@ export class DashboardModule extends BaseModule {
   }
 
   #mostrarKpiSkeletons() {
-    this.#kpiIngresos?.showSkeleton();
-    this.#kpiEgresos?.showSkeleton();
-    this.#kpiResult?.showSkeleton();
+    const saldoValEl = document.getElementById('dash-saldo-val');
+    const breakdownIngresosEl = document.getElementById('dash-breakdown-ingresos');
+    const breakdownEgresosEl = document.getElementById('dash-breakdown-egresos');
+    if (saldoValEl) saldoValEl.textContent = '...';
+    if (breakdownIngresosEl) breakdownIngresosEl.textContent = '...';
+    if (breakdownEgresosEl) breakdownEgresosEl.textContent = '...';
   }
 
   #renderMovTable() {

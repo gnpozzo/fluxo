@@ -173,6 +173,9 @@ class AppInit {
       // Configurar Quick Add global
       this.#setupQuickAdd();
 
+      // Configurar credentials dropdown
+      this.#setupCredentialsDropdown();
+
       // Actualizar visibilidad de tabs según config de la cuenta
       this.#actualizarVisibilidadTabs(cuentaPred);
 
@@ -185,6 +188,11 @@ class AppInit {
       // Configurar Centro de Notificaciones
       this.#setupNotifications();
       this.#cargarNotificaciones();
+
+      // Inicializar Asistente Gemini AI
+      if (App.Gemini) {
+        App.Gemini.init();
+      }
 
       this.#ocultarLoader();
 
@@ -221,6 +229,12 @@ class AppInit {
   #navegarTab(vistaId) {
     // Ocultar todos los paneles de contenido
     document.querySelectorAll('.vista-container').forEach(v => v.classList.remove('active'));
+
+    // Control Back Button visibility
+    const backBtn = document.getElementById('btn-header-back');
+    if (backBtn) {
+      backBtn.style.display = (vistaId === 'vista-dashboard') ? 'none' : 'inline-flex';
+    }
 
     // Desactivar todos los nav items del sidebar
     document.querySelectorAll('.nav-item[data-vista]').forEach(b => {
@@ -406,6 +420,14 @@ class AppInit {
       btn.addEventListener('click', () => this.#navegarTab(btn.dataset.vista));
     });
 
+    // Bind header back button
+    const backBtn = document.getElementById('btn-header-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.#navegarTab('vista-dashboard');
+      });
+    }
+
     // Botón Admin — NO navega a ningún tab, simplemente abre el modal admin.
     const adminBtn = document.getElementById('btn-admin');
     if (adminBtn) {
@@ -546,10 +568,15 @@ class AppInit {
     try {
       const res = await App.API.call('api_getUserInfo');
       if (res?.success) {
-        // Formatear nombre: "gaston.pozzo" -> "Gaston Pozzo"
-        const usernamePart = res.email.split('@')[0];
-        const nombre = usernamePart.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-        const primerNombre = nombre.split(' ')[0] || nombre;
+        const metadata = res.user_metadata || {};
+        const email = res.email || '';
+        
+        let fullName = metadata.full_name || metadata.name;
+        if (!fullName) {
+          const usernamePart = email.split('@')[0];
+          fullName = usernamePart.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+        }
+        const primerNombre = fullName.split(' ')[0] || fullName;
 
         // Welcome greeting
         const elWelcome = document.getElementById('welcome-name');
@@ -560,22 +587,105 @@ class AppInit {
         // Nombre en topbar (hidden but accessible)
         const elNombre = document.getElementById('user-info-container');
         if (elNombre) {
-          elNombre.textContent = nombre;
-          elNombre.title       = res.email;
+          elNombre.textContent = fullName;
+          elNombre.title       = email;
         }
 
-        // Avatar: Imagen con iniciales
+        // Tooltip updates
+        const tooltip = document.getElementById('avatar-tooltip');
+        if (tooltip) {
+          tooltip.innerHTML = `<strong>${App.Utils.escapeHtml(fullName)}</strong><br>${App.Utils.escapeHtml(email)}`;
+        }
+
+        // Populate Dropdown Profile Info
+        const dName = document.getElementById('dropdown-user-name');
+        const dEmail = document.getElementById('dropdown-user-email');
+        if (dName) dName.textContent = fullName;
+        if (dEmail) dEmail.textContent = email;
+
+        // Avatar: Imagen con iniciales o Google photo
         const elAvatar = document.getElementById('topbar-avatar');
         if (elAvatar) {
-          elAvatar.innerHTML = `<img src="https://ui-avatars.com/api/?name=${encodeURIComponent(nombre)}&background=0F172A&color=fff&bold=true" alt="Avatar">`;
-          elAvatar.title       = res.email;
-          elAvatar.style.border = 'none';
-          elAvatar.style.background = 'transparent';
+          const avatarUrl = metadata.avatar_url || metadata.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=4F46E5&color=fff&bold=true`;
+          elAvatar.innerHTML = `<img src="${avatarUrl}" alt="Avatar">`;
         }
 
-        App.Store.setUsuario({ email: res.email });
+        App.Store.setUsuario({ email: email, name: fullName });
       }
     } catch (_) {}
+  }
+
+  #setupCredentialsDropdown() {
+    const avatar = document.getElementById('topbar-avatar');
+    const dropdown = document.getElementById('credentials-dropdown');
+    
+    if (avatar && dropdown) {
+      avatar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = dropdown.classList.toggle('open');
+        avatar.setAttribute('aria-expanded', isOpen);
+      });
+
+      avatar.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          avatar.click();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!avatar.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.classList.remove('open');
+          avatar.setAttribute('aria-expanded', 'false');
+        }
+      });
+      
+      document.getElementById('dropdown-opt-config')?.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        document.getElementById('btn-admin')?.click();
+      });
+
+      document.getElementById('dropdown-opt-theme')?.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        document.getElementById('btn-theme-toggle')?.click();
+        
+        const themeText = document.getElementById('dropdown-theme-text');
+        if (themeText) {
+          const currentTheme = document.documentElement.getAttribute('data-theme');
+          themeText.textContent = currentTheme === 'dark' ? 'Modo claro' : 'Modo oscuro';
+        }
+      });
+
+      document.getElementById('dropdown-opt-about')?.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        if (App.Modal) {
+          const m = new App.Modal('modal-about');
+          m.open({
+            titulo: 'Acerca de Fluxo',
+            body: `
+              <div style="text-align:center;padding:20px 10px;">
+                <img src="https://i.imgur.com/FLSwshY.png" alt="Fluxo Logo" style="width:140px;margin-bottom:16px;">
+                <p style="font-weight:600;margin-bottom:8px;">Fluxo — Gestión Inteligente de Finanzas</p>
+                <p style="font-size:0.85rem;color:var(--texto-2);margin-bottom:20px;">Versión 6.0.0 (Rediseño Mobile-First)</p>
+                <div style="border-top:1px solid var(--borde);padding-top:16px;font-size:0.82rem;color:var(--texto-2);">
+                  <p>Desarrollado con amor para la gestión financiera personal y familiar.</p>
+                  <p style="margin-top:8px;">© ${new Date().getFullYear()} Fluxo Inc.</p>
+                </div>
+              </div>
+            `,
+            confirmLabel: 'Aceptar',
+            cancelLabel: 'Cerrar'
+          });
+        } else {
+          alert('Fluxo v6.0.0 — Gestión Inteligente de Finanzas');
+        }
+      });
+
+      document.getElementById('dropdown-opt-logout')?.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+        document.getElementById('btn-logout')?.click();
+      });
+    }
   }
 
   #mostrarLoader() {

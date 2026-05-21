@@ -13,7 +13,8 @@ export default async function handler(req, res) {
     
     return res.status(200).json({
       success: true,
-      email: user.email
+      email: user.email,
+      user_metadata: user.user_metadata
     });
   } catch (err) {
     return res.status(200).json({ success: false, email: 'Usuario no disponible' });

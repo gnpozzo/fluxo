@@ -175,13 +175,7 @@ App.updateAccountSelectorVisibility = function(vistaId) {
   const selectWrap = document.getElementById('account-select-ui');
   if (!selectWrap) return;
   const isConfig = (activeVista === 'vista-admin');
-  const isDashboard = (activeVista === 'vista-dashboard');
-  let showSelector = !isConfig;
-  if (isDashboard) {
-    const dashDetail = document.getElementById('dash-detail-view');
-    showSelector = !!(dashDetail && dashDetail.style.display !== 'none');
-  }
-  selectWrap.style.display = showSelector ? 'flex' : 'none';
+  selectWrap.style.display = !isConfig ? 'flex' : 'none';
 };
 
 App.log('app-bootstrap', 'init', `Namespace App v${APP_VERSION} registrado`);
