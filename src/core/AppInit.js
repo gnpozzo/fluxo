@@ -420,10 +420,16 @@ class AppInit {
       btn.addEventListener('click', () => this.#navegarTab(btn.dataset.vista));
     });
 
-    // Bind header back button
+    // Bind header back button and logo
     const backBtn = document.getElementById('btn-header-back');
     if (backBtn) {
       backBtn.addEventListener('click', () => {
+        this.#navegarTab('vista-dashboard');
+      });
+    }
+    const headerLogo = document.getElementById('app-header-logo');
+    if (headerLogo) {
+      headerLogo.addEventListener('click', () => {
         this.#navegarTab('vista-dashboard');
       });
     }

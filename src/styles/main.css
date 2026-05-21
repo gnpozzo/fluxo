@@ -2502,9 +2502,6 @@ button.btn-secundario:hover {
 /* Center app in desktop view (mobile simulator container) */
 body {
   background-color: var(--fondo);
-  display: flex;
-  justify-content: center;
-  align-items: center;
   height: 100vh;
   overflow: hidden;
   margin: 0;
@@ -2512,28 +2509,15 @@ body {
 }
 
 .main-wrapper {
-  width: 100%;
-  max-width: 600px !important;
+  width: 100% !important;
+  max-width: 100% !important;
   height: 100vh;
-  margin: 0 auto !important;
-  background: var(--superficie);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
+  margin: 0 !important;
+  background: var(--fondo);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  border-left: 1px solid var(--borde);
-  border-right: 1px solid var(--borde);
-  margin-left: 0 !important;
-}
-
-@media (max-width: 600px) {
-  .main-wrapper {
-    border-left: none;
-    border-right: none;
-    max-width: 100vw !important;
-    height: 100vh;
-  }
 }
 
 .main-content {
@@ -2542,14 +2526,51 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 600px !important;
+  margin: 0 auto !important;
+  background: var(--superficie);
+  border-left: 1px solid var(--borde);
+  border-right: 1px solid var(--borde);
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.03);
+}
+
+@media (max-width: 600px) {
+  .main-content {
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+    max-width: 100vw !important;
+    padding: 16px !important;
+  }
 }
 
 .app-header {
-  padding: 0 16px !important;
+  height: 56px !important;
   background: var(--superficie) !important;
   border-bottom: 1px solid var(--borde) !important;
-  height: 56px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 24px !important;
   width: 100% !important;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.app-header-logo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.app-header-logo img {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
 }
 
 /* Welcome bar overrides (always stacked & centered) */
