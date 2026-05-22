@@ -185,6 +185,9 @@ class AppInit {
       // Configurar Currency Pills (Bimonetario)
       this.#setupCurrencyPills();
 
+      // Configurar Global Saldo Card
+      this.#setupGlobalSaldoCard();
+
       // Configurar Centro de Notificaciones
       this.#setupNotifications();
       this.#cargarNotificaciones();
@@ -253,6 +256,16 @@ class AppInit {
     }
 
     this.#tabActivo = vistaId;
+
+    // Renderizar botonera adaptativa de módulos
+    this.#renderModulesNav(vistaId);
+
+    // Mostrar/ocultar panel hero global según la vista (oculto en ajustes)
+    const heroPanel = document.getElementById('header-hero-panel');
+    if (heroPanel) {
+      heroPanel.classList.toggle('hidden', vistaId === 'vista-admin');
+    }
+
     const moduloId  = this.#tabMap[vistaId];
 
     if (moduloId && App.Modules[moduloId]) {
@@ -299,6 +312,7 @@ class AppInit {
         const cuentaObj = cuentas.find(c => c.id_cuenta_principal === nuevaId);
         if (cuentaObj) {
           this.#actualizarVisibilidadTabs(cuentaObj);
+          this.#renderModulesNav(this.#tabActivo);
 
           // Clear ALL loaded module caches so data reloads with the new account
           Object.keys(this.#tabMap).forEach(v => {
@@ -322,9 +336,10 @@ class AppInit {
   // --- SECCIÓN 3B: CURRENCY PILLS ---
 
   #setupCurrencyPills() {
+    const container = document.getElementById('currency-pills');
     const pillArs = document.getElementById('pill-ars');
     const pillUsd = document.getElementById('pill-usd');
-    if (!pillArs || !pillUsd) return;
+    if (!container || !pillArs || !pillUsd) return;
 
     // Inicializar estado (ARS activo por defecto)
     App.Store.setGlobalCurrency('ARS');
@@ -341,8 +356,160 @@ class AppInit {
       }
     };
 
-    pillArs.addEventListener('click', () => setActivePill('ARS'));
-    pillUsd.addEventListener('click', () => setActivePill('USD'));
+    container.addEventListener('click', (e) => {
+      const pill = e.target.closest('.currency-pill');
+      if (pill) {
+        setActivePill(pill.dataset.currency);
+      } else {
+        // Toggling currency if clicked on the track/knob area
+        const currentCurrency = App.Store.currency || 'ARS';
+        setActivePill(currentCurrency === 'ARS' ? 'USD' : 'ARS');
+      }
+    });
+  }
+
+  // --- SECCIÓN 3C: GLOBAL SALDO CARD ---
+
+  #setupGlobalSaldoCard() {
+    const card = document.getElementById('dash-saldo-card');
+    if (!card) return;
+    card.addEventListener('click', () => {
+      const breakdown = document.getElementById('dash-saldo-breakdown');
+      const chevron = document.getElementById('dash-saldo-chevron');
+      const isExpanded = breakdown?.classList.toggle('collapsed') === false;
+      chevron?.classList.toggle('rotated', isExpanded);
+      card.setAttribute('aria-expanded', isExpanded);
+    });
+  }
+
+  // --- SECCIÓN 3D: ADAPTIVE MODULES NAVIGATION ---
+
+  #renderModulesNav(vistaId) {
+    const navContainer = document.getElementById('dash-modules-nav');
+    if (!navContainer) return;
+
+    const cuentaId = App.Store.cuenta;
+    if (!cuentaId) {
+      navContainer.innerHTML = '';
+      return;
+    }
+
+    const cuentaObj = App.Store.cuentas.find(c => c.id_cuenta_principal === cuentaId);
+    if (!cuentaObj) {
+      navContainer.innerHTML = '';
+      return;
+    }
+
+    const modules = [];
+
+    if (cuentaObj.modulo_tarjetas_activo) {
+      if (vistaId === 'vista-tarjetas') {
+        modules.push({
+          id: 'dashboard',
+          label: 'Inicio',
+          vista: 'vista-dashboard',
+          color: 'var(--primary)',
+          bg: 'var(--primary-tint)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
+        });
+      } else {
+        modules.push({
+          id: 'tarjetas',
+          label: 'Tarjetas',
+          vista: 'vista-tarjetas',
+          color: 'var(--rojo)',
+          bg: 'var(--rojo-tint)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`
+        });
+      }
+    }
+
+    if (cuentaObj.modulo_cc_activo) {
+      if (vistaId === 'vista-cc') {
+        if (!modules.some(m => m.id === 'dashboard')) {
+          modules.push({
+            id: 'dashboard',
+            label: 'Inicio',
+            vista: 'vista-dashboard',
+            color: 'var(--primary)',
+            bg: 'var(--primary-tint)',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
+          });
+        }
+      } else {
+        modules.push({
+          id: 'cc',
+          label: 'Gastos Comp.',
+          vista: 'vista-cc',
+          color: 'var(--verde)',
+          bg: 'var(--verde-tint)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
+        });
+      }
+    }
+
+    if (cuentaObj.modulo_ahorro_activo) {
+      if (vistaId === 'vista-ahorro') {
+        if (!modules.some(m => m.id === 'dashboard')) {
+          modules.push({
+            id: 'dashboard',
+            label: 'Inicio',
+            vista: 'vista-dashboard',
+            color: 'var(--primary)',
+            bg: 'var(--primary-tint)',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
+          });
+        }
+      } else {
+        modules.push({
+          id: 'ahorro',
+          label: 'Ahorro',
+          vista: 'vista-ahorro',
+          color: 'var(--amarillo-text)',
+          bg: 'var(--amarillo-tint)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`
+        });
+      }
+    }
+
+    if (cuentaObj.modulo_inversiones_activo) {
+      if (vistaId === 'vista-inversiones') {
+        if (!modules.some(m => m.id === 'dashboard')) {
+          modules.push({
+            id: 'dashboard',
+            label: 'Inicio',
+            vista: 'vista-dashboard',
+            color: 'var(--primary)',
+            bg: 'var(--primary-tint)',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
+          });
+        }
+      } else {
+        modules.push({
+          id: 'inversiones',
+          label: 'Inversiones',
+          vista: 'vista-inversiones',
+          color: 'var(--cyan, #0ea5e9)',
+          bg: 'rgba(14, 165, 233, 0.1)',
+          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`
+        });
+      }
+    }
+
+    navContainer.innerHTML = modules.map(m => `
+      <button class="dash-modules-nav-btn" data-vista="${m.vista}">
+        <div class="dash-modules-nav-icon" style="background:${m.bg}; color:${m.color};">
+          ${m.svg}
+        </div>
+        <span class="dash-modules-nav-label">${m.label}</span>
+      </button>
+    `).join('');
+
+    navContainer.querySelectorAll('.dash-modules-nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.#navegarTab(btn.dataset.vista);
+      });
+    });
   }
 
   // --- SECCIÓN 4: TABS ---

@@ -2569,9 +2569,6 @@ body {
 }
 
 .app-header-logo {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -2625,54 +2622,12 @@ body {
   opacity: 0.8 !important;
 }
 
-/* Welcome bar overrides (always stacked & centered) */
-.welcome-bar {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 12px !important;
-  padding: 16px !important;
-  background: var(--superficie) !important;
-  border: 1px solid var(--borde) !important;
-  border-radius: var(--r-lg) !important;
-  box-shadow: var(--sombra) !important;
-  margin-bottom: 20px !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  transition: all 0.25s ease !important;
-}
-
-/* Integrated Welcome-Bar & Saldo-Card panel */
 /* ================================================================
-   INTEGRATED NAVY MODULE BLOCK (Brubank Aesthetic)
+   INTEGRATED NAVY HEADER & HERO PANEL AESTHETIC
    ================================================================ */
 
-/* 1. Welcome Bar (Top of combined block) */
-.welcome-bar.integrated {
-  background: #1D195D !important;
-  color: #ffffff !important;
-  margin-bottom: 0 !important;
-  border-radius: 0 !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 16px 24px !important;
-  margin-left: -40px !important;
-  margin-right: -40px !important;
-  margin-top: -24px !important;
-  width: calc(100% + 80px) !important;
-}
-@media (max-width: 768px) {
-  .welcome-bar.integrated {
-    margin-left: -12px !important;
-    margin-right: -12px !important;
-    margin-top: -16px !important;
-    width: calc(100% + 24px) !important;
-  }
-}
-
-/* 1a. Select & Month inputs adaptation to dark background */
-.welcome-bar.integrated .welcome-select-wrap {
+/* 1. Header Selectors and Inputs */
+.app-header .welcome-select-wrap {
   display: inline-block !important;
   position: relative !important;
   background: rgba(255, 255, 255, 0.08) !important;
@@ -2682,7 +2637,7 @@ body {
   margin: 0 !important;
 }
 
-.welcome-bar.integrated .welcome-select-wrap select {
+.app-header .welcome-select-wrap select {
   background: transparent !important;
   border: none !important;
   color: #ffffff !important;
@@ -2698,7 +2653,7 @@ body {
   min-width: 150px !important;
 }
 
-.welcome-bar.integrated .welcome-select-wrap input[type="month"] {
+.app-header .welcome-select-wrap input[type="month"] {
   background: transparent !important;
   border: none !important;
   color: #ffffff !important;
@@ -2712,7 +2667,7 @@ body {
   min-width: 150px !important;
 }
 
-.welcome-bar.integrated .welcome-select-wrap input[type="month"]::-webkit-calendar-picker-indicator {
+.app-header .welcome-select-wrap input[type="month"]::-webkit-calendar-picker-indicator {
   position: absolute !important;
   left: 0 !important;
   top: 0 !important;
@@ -2723,7 +2678,7 @@ body {
 }
 
 /* Position chevron on the right for Account Selector */
-.welcome-bar.integrated .welcome-select-wrap select + .ws-icon {
+.app-header .welcome-select-wrap select + .ws-icon {
   position: absolute !important;
   right: 12px !important;
   left: auto !important;
@@ -2737,7 +2692,7 @@ body {
 }
 
 /* Position calendar icon on the left for Month Selector */
-.welcome-bar.integrated .welcome-select-wrap .ws-icon:first-child {
+.app-header .welcome-select-wrap .ws-icon:first-child {
   position: absolute !important;
   left: 12px !important;
   right: auto !important;
@@ -2750,13 +2705,13 @@ body {
   flex-shrink: 0 !important;
 }
 
-.welcome-bar.integrated .welcome-select-wrap select option {
+.app-header .welcome-select-wrap select option {
   background: var(--superficie) !important;
   color: var(--texto) !important;
 }
 
-/* 1b. Currency Switch / Pills adaptation to mockup toggle style */
-.welcome-bar.integrated .currency-pills {
+/* 2. Currency Switch/Pills style inside header */
+.app-header .currency-pills {
   display: inline-flex !important;
   align-items: center !important;
   background: transparent !important;
@@ -2767,7 +2722,7 @@ body {
   margin: 8px 0 !important;
 }
 
-.welcome-bar.integrated .currency-pills::before {
+.app-header .currency-pills::before {
   content: '' !important;
   position: absolute !important;
   left: 50% !important;
@@ -2780,7 +2735,7 @@ body {
   transition: background 0.2s ease !important;
 }
 
-.welcome-bar.integrated .currency-pills::after {
+.app-header .currency-pills::after {
   content: '' !important;
   position: absolute !important;
   top: 50% !important;
@@ -2792,15 +2747,15 @@ body {
   transition: left 0.2s ease !important;
 }
 
-.welcome-bar.integrated:has(#pill-ars.active) .currency-pills::after {
+.app-header .currency-pills:has(#pill-ars.active)::after {
   left: calc(50% - 12px) !important;
 }
 
-.welcome-bar.integrated:has(#pill-usd.active) .currency-pills::after {
+.app-header .currency-pills:has(#pill-usd.active)::after {
   left: calc(50% + 2px) !important;
 }
 
-.welcome-bar.integrated .currency-pill {
+.app-header .currency-pill {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -2814,24 +2769,47 @@ body {
   flex-shrink: 0 !important;
 }
 
-.welcome-bar.integrated .currency-pill:first-child {
+.app-header .currency-pill:first-child {
   text-align: right !important;
   padding-right: 12px !important;
 }
 
-.welcome-bar.integrated .currency-pill:last-child {
+.app-header .currency-pill:last-child {
   text-align: left !important;
   padding-left: 12px !important;
 }
 
-.welcome-bar.integrated .currency-pill.active {
+.app-header .currency-pill.active {
   color: #ffffff !important;
   font-weight: bold !important;
 }
 
-/* 2. Saldo Card (Middle of combined block) */
-.welcome-bar.integrated + .vista-container.active .saldo-card {
+/* 3. Hero Panel Container */
+.header-hero-panel {
   background: #1D195D !important;
+  color: #ffffff !important;
+  padding: 16px 24px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.header-hero-panel.hidden {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .header-hero-panel {
+    padding: 12px 16px !important;
+  }
+}
+
+/* 4. Saldo Card inside Hero Panel */
+.header-hero-panel .saldo-card {
+  background: transparent !important;
   color: #ffffff !important;
   margin-top: 0 !important;
   margin-bottom: 0 !important;
@@ -2844,25 +2822,25 @@ body {
   justify-content: center !important;
   align-items: center !important;
   gap: 8px !important;
-  margin-left: -40px !important;
-  margin-right: -40px !important;
-  width: calc(100% + 80px) !important;
+  width: 100% !important;
+  max-width: 600px !important;
   text-align: center !important;
+  cursor: pointer !important;
+  outline: none !important;
 }
+
 @media (max-width: 768px) {
-  .welcome-bar.integrated + .vista-container.active .saldo-card {
-    margin-left: -12px !important;
-    margin-right: -12px !important;
-    width: calc(100% + 24px) !important;
+  .header-hero-panel .saldo-card {
+    padding: 12px 16px !important;
   }
 }
 
-.welcome-bar.integrated + .vista-container.active .saldo-card:hover {
+.header-hero-panel .saldo-card:hover {
   border-color: transparent !important;
   box-shadow: none !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .saldo-card-header {
+.header-hero-panel .saldo-card-header {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -2873,13 +2851,13 @@ body {
   border: none !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .saldo-label {
+.header-hero-panel .saldo-label {
   color: rgba(255, 255, 255, 0.8) !important;
   font-size: 1.1rem !important;
   font-weight: 500 !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .saldo-value {
+.header-hero-panel .saldo-value {
   color: #ffffff !important;
   font-size: 2.2rem !important;
   font-weight: 700 !important;
@@ -2889,12 +2867,12 @@ body {
   text-align: center !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .saldo-chevron {
+.header-hero-panel .saldo-chevron {
   color: rgba(255, 255, 255, 0.6) !important;
   margin-left: 2px !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .saldo-breakdown {
+.header-hero-panel .saldo-breakdown {
   width: 100% !important;
   background: rgba(255, 255, 255, 0.08) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -2908,7 +2886,7 @@ body {
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin-top 0.3s ease, padding 0.3s ease, border-color 0.3s ease !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .saldo-breakdown.collapsed {
+.header-hero-panel .saldo-breakdown.collapsed {
   max-height: 0 !important;
   opacity: 0 !important;
   margin-top: 0 !important;
@@ -2917,37 +2895,37 @@ body {
   border-color: transparent !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .breakdown-row {
+.header-hero-panel .breakdown-row {
   display: flex !important;
   justify-content: center !important;
   gap: 48px !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .breakdown-col {
+.header-hero-panel .breakdown-col {
   align-items: center !important;
   text-align: center !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .breakdown-label {
+.header-hero-panel .breakdown-label {
   color: rgba(255, 255, 255, 0.7) !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .breakdown-val.positivo {
+.header-hero-panel .breakdown-val.positivo {
   color: #34d399 !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .breakdown-val.negativo {
+.header-hero-panel .breakdown-val.negativo {
   color: #f87171 !important;
 }
 
-/* 3. Navigation Icon Bar (Bottom of combined block) */
-.welcome-bar.integrated + .vista-container.active .dash-modules-nav {
-  background: #1D195D !important;
+/* 5. Navigation Icons Bar inside Hero Panel */
+.header-hero-panel .dash-modules-nav {
+  background: transparent !important;
   margin-top: 0 !important;
-  margin-bottom: 32px !important;
+  margin-bottom: 0 !important;
   border-radius: 0 !important;
   border: none !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: none !important;
   padding: 12px 24px 28px 24px !important;
   display: flex !important;
   justify-content: center !important;
@@ -2958,21 +2936,21 @@ body {
   width: calc(100% + 80px) !important;
 }
 @media (max-width: 768px) {
-  .welcome-bar.integrated + .vista-container.active .dash-modules-nav {
+  .header-hero-panel .dash-modules-nav {
     margin-left: -12px !important;
     margin-right: -12px !important;
     width: calc(100% + 24px) !important;
   }
 }
 
-.welcome-bar.integrated + .vista-container.active .dash-modules-nav-label {
+.header-hero-panel .dash-modules-nav-label {
   color: #ffffff !important;
   font-weight: 500 !important;
   font-size: 0.85rem !important;
   margin-top: 6px !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .dash-modules-nav-btn {
+.header-hero-panel .dash-modules-nav-btn {
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -2981,7 +2959,7 @@ body {
   cursor: pointer !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .dash-modules-nav-icon {
+.header-hero-panel .dash-modules-nav-icon {
   background: #ffffff !important;
   color: #1D195D !important;
   width: 48px !important;
@@ -2995,7 +2973,7 @@ body {
   transition: all 0.2s ease !important;
 }
 
-.welcome-bar.integrated + .vista-container.active .dash-modules-nav-btn:hover .dash-modules-nav-icon {
+.header-hero-panel .dash-modules-nav-btn:hover .dash-modules-nav-icon {
   background: #f3f4f6 !important;
   color: #1D195D !important;
   transform: translateY(-2px) scale(1.05);

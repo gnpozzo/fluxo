@@ -177,69 +177,6 @@ export class DashboardModule extends BaseModule {
     const cuentaObj      = App.Store.cuentas.find(c => c.id_cuenta_principal === cuenta);
     const requiereAjuste = cuentaObj?.requiere_ajuste_cc_tc ?? false;
 
-    // Render Quick Action Bar based on active modules in this account
-    const navContainer = document.getElementById('dash-modules-nav');
-    if (navContainer && cuentaObj) {
-      const activeModules = [];
-      if (cuentaObj.modulo_tarjetas_activo) {
-        activeModules.push({
-          id: 'tarjetas',
-          label: 'Tarjetas',
-          vista: 'vista-tarjetas',
-          color: 'var(--rojo)',
-          bg: 'var(--rojo-tint)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`
-        });
-      }
-      if (cuentaObj.modulo_cc_activo) {
-        activeModules.push({
-          id: 'cc',
-          label: 'Gastos Comp.',
-          vista: 'vista-cc',
-          color: 'var(--verde)',
-          bg: 'var(--verde-tint)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
-        });
-      }
-      if (cuentaObj.modulo_ahorro_activo) {
-        activeModules.push({
-          id: 'ahorro',
-          label: 'Ahorro',
-          vista: 'vista-ahorro',
-          color: 'var(--amarillo-text)',
-          bg: 'var(--amarillo-tint)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`
-        });
-      }
-      if (cuentaObj.modulo_inversiones_activo) {
-        activeModules.push({
-          id: 'inversiones',
-          label: 'Inversiones',
-          vista: 'vista-inversiones',
-          color: 'var(--cyan, #0ea5e9)',
-          bg: 'rgba(14, 165, 233, 0.1)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`
-        });
-      }
-
-      navContainer.innerHTML = activeModules.map(m => `
-        <button class="dash-modules-nav-btn" data-vista="${m.vista}">
-          <div class="dash-modules-nav-icon" style="background:${m.bg}; color:${m.color};">
-            ${m.svg}
-          </div>
-          <span class="dash-modules-nav-label">${m.label}</span>
-        </button>
-      `).join('');
-
-      // Bind click event for each navigation button
-      navContainer.querySelectorAll('.dash-modules-nav-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const vista = btn.dataset.vista;
-          document.querySelector(`[data-vista="${vista}"]`)?.click();
-        });
-      });
-    }
-
     // Toggle detailed module card scorecards based on active settings
     const cardTarjetas = document.getElementById('dash-card-tarjetas');
     const cardCC = document.getElementById('dash-card-cc');
@@ -315,30 +252,6 @@ export class DashboardModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
-      <!-- ═══ COLLAPSIBLE SALDO CARD ═══ -->
-      <div class="saldo-card" id="dash-saldo-card" role="button" aria-expanded="false" tabindex="0">
-        <div class="saldo-card-header">
-          <span class="saldo-label">Mi saldo</span>
-          <svg class="saldo-chevron dash-chevron" id="dash-saldo-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-        <div class="saldo-value" id="dash-saldo-val">$ 0,00</div>
-        <div class="saldo-breakdown collapsed" id="dash-saldo-breakdown">
-          <div class="breakdown-row">
-            <div class="breakdown-col">
-              <span class="breakdown-label">INGRESOS</span>
-              <span class="breakdown-val positivo" id="dash-breakdown-ingresos">$ 0,00</span>
-            </div>
-            <div class="breakdown-col">
-              <span class="breakdown-label">EGRESOS</span>
-              <span class="breakdown-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ BOTONERA DE ACCESO RÁPIDO A MÓDULOS ═══ -->
-      <div class="dash-modules-nav" id="dash-modules-nav"></div>
-
       <!-- ═══ MOVIMIENTOS DEL MES (Acordeón) ═══ -->
       <div class="dash-section" id="dash-mov-section">
         <div class="dash-section-header" id="dash-mov-toggle">
@@ -424,15 +337,6 @@ export class DashboardModule extends BaseModule {
   // --- SECCIÓN 4: LISTENERS ---
 
   _bindListeners() {
-    // Saldo card breakdown toggle
-    document.getElementById('dash-saldo-card')?.addEventListener('click', () => {
-      const breakdown = document.getElementById('dash-saldo-breakdown');
-      const chevron = document.getElementById('dash-saldo-chevron');
-      const isExpanded = breakdown?.classList.toggle('collapsed') === false;
-      chevron?.classList.toggle('rotated', isExpanded);
-      document.getElementById('dash-saldo-card')?.setAttribute('aria-expanded', isExpanded);
-    });
-
     // Acordeón movimientos
     document.getElementById('dash-mov-toggle')?.addEventListener('click', () => {
       const body = document.getElementById('dash-mov-body');
@@ -479,6 +383,9 @@ export class DashboardModule extends BaseModule {
     App.Events.on('store:cuenta-changed', () => {
       this.#cargarDetail();
       App.updateAccountSelectorVisibility();
+    });
+    App.Events.on('store:moneda-changed', () => {
+      this.cargar();
     });
     App.Events.on('data:changed', () => {
       this.cargar();

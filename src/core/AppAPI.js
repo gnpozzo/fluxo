@@ -94,14 +94,20 @@ class ApiService {
         body: JSON.stringify(finalBody)
       });
 
+      let resObj = null;
+      try {
+        resObj = await response.json();
+      } catch (e) {
+        // Response is not JSON
+      }
+
       if (!response.ok) {
         if (response.status === 401 && window.App && window.App.Events) {
           window.App.Events.emit('auth:unauthorized');
         }
-        throw new Error(`HTTP Error: ${response.status} en ${endpoint}`);
+        const errMsg = resObj?.error || `HTTP Error: ${response.status} en ${endpoint}`;
+        throw new Error(errMsg);
       }
-
-      const resObj = await response.json();
       
       if (resObj.success === false) {
         throw new Error(resObj.error || 'Error genérico en el servidor');
