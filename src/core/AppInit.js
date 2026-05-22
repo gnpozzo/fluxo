@@ -434,7 +434,7 @@ class AppInit {
     if (cuentaObj.modulo_cc_activo && vistaId !== 'vista-cc') {
       modules.push({
         id: 'cc',
-        label: 'Gastos Comp.',
+        label: 'Gastos compartidos',
         vista: 'vista-cc',
         color: 'var(--verde)',
         bg: 'var(--verde-tint)',
@@ -445,7 +445,7 @@ class AppInit {
     if (cuentaObj.modulo_ahorro_activo && vistaId !== 'vista-ahorro') {
       modules.push({
         id: 'ahorro',
-        label: 'Ahorro',
+        label: 'Chanchito',
         vista: 'vista-ahorro',
         color: 'var(--amarillo-text)',
         bg: 'var(--amarillo-tint)',

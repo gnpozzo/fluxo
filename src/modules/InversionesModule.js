@@ -329,6 +329,13 @@ export class InversionesModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
+      <div class="module-view-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <span>Inversiones</span>
+      </div>
+
       <div class="kpi-grid" id="inv-kpi-grid"></div>
 
       <!-- Cotizaciones del Dólar -->

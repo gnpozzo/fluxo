@@ -252,6 +252,27 @@ export class DashboardModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
+      <!-- Collapsible Saldo Card -->
+      <div class="saldo-card" id="dash-saldo-card" role="button" aria-expanded="false" tabindex="0">
+        <div class="saldo-card-header">
+          <span class="saldo-label">Mi saldo</span>
+          <svg class="saldo-chevron dash-chevron" id="dash-saldo-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <div class="saldo-value" id="dash-saldo-val">$ 0,00</div>
+        <div class="saldo-breakdown collapsed" id="dash-saldo-breakdown">
+          <div class="breakdown-row">
+            <div class="breakdown-col">
+              <span class="breakdown-label">INGRESOS</span>
+              <span class="breakdown-val positivo" id="dash-breakdown-ingresos">$ 0,00</span>
+            </div>
+            <div class="breakdown-col">
+              <span class="breakdown-label">EGRESOS</span>
+              <span class="breakdown-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ═══ MOVIMIENTOS DEL MES (Acordeón) ═══ -->
       <div class="dash-section" id="dash-mov-section">
         <div class="dash-section-header" id="dash-mov-toggle">

@@ -2801,26 +2801,18 @@ body {
   display: none !important;
 }
 
-.header-hero-panel .saldo-card.hidden {
+#dash-saldo-card.hidden {
   display: none !important;
 }
 
-@media (max-width: 768px) {
-  .header-hero-panel {
-    padding: 12px 16px !important;
-  }
-}
-
-/* 4. Saldo Card inside Hero Panel */
-.header-hero-panel .saldo-card {
-  background: transparent !important;
+#dash-saldo-card {
+  background: linear-gradient(135deg, #1D195D 0%, #0c0a2a 100%) !important;
   color: #ffffff !important;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-  border-radius: 0 !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 12px 24px 20px 24px !important;
+  margin: 8px auto 24px auto !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.3) !important;
+  padding: 24px !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: center !important;
@@ -2831,20 +2823,23 @@ body {
   text-align: center !important;
   cursor: pointer !important;
   outline: none !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+
+#dash-saldo-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 16px 35px -8px rgba(0, 0, 0, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
 }
 
 @media (max-width: 768px) {
-  .header-hero-panel .saldo-card {
-    padding: 12px 16px !important;
+  #dash-saldo-card {
+    padding: 16px 20px !important;
+    margin-bottom: 16px !important;
   }
 }
 
-.header-hero-panel .saldo-card:hover {
-  border-color: transparent !important;
-  box-shadow: none !important;
-}
-
-.header-hero-panel .saldo-card-header {
+#dash-saldo-card .saldo-card-header {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -2855,13 +2850,13 @@ body {
   border: none !important;
 }
 
-.header-hero-panel .saldo-label {
+#dash-saldo-card .saldo-label {
   color: rgba(255, 255, 255, 0.8) !important;
   font-size: 1.1rem !important;
   font-weight: 500 !important;
 }
 
-.header-hero-panel .saldo-value {
+#dash-saldo-card .saldo-value {
   color: #ffffff !important;
   font-size: 2.2rem !important;
   font-weight: 700 !important;
@@ -2871,15 +2866,15 @@ body {
   text-align: center !important;
 }
 
-.header-hero-panel .saldo-chevron {
+#dash-saldo-card .saldo-chevron {
   color: rgba(255, 255, 255, 0.6) !important;
   margin-left: 2px !important;
 }
 
-.header-hero-panel .saldo-breakdown {
+#dash-saldo-card .saldo-breakdown {
   width: 100% !important;
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 12px !important;
   margin-top: 16px !important;
   padding: 14px 20px !important;
@@ -2890,7 +2885,7 @@ body {
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin-top 0.3s ease, padding 0.3s ease, border-color 0.3s ease !important;
 }
 
-.header-hero-panel .saldo-breakdown.collapsed {
+#dash-saldo-card .saldo-breakdown.collapsed {
   max-height: 0 !important;
   opacity: 0 !important;
   margin-top: 0 !important;
@@ -2899,27 +2894,52 @@ body {
   border-color: transparent !important;
 }
 
-.header-hero-panel .breakdown-row {
+#dash-saldo-card .breakdown-row {
   display: flex !important;
   justify-content: center !important;
   gap: 48px !important;
 }
 
-.header-hero-panel .breakdown-col {
+#dash-saldo-card .breakdown-col {
   align-items: center !important;
   text-align: center !important;
 }
 
-.header-hero-panel .breakdown-label {
+#dash-saldo-card .breakdown-label {
   color: rgba(255, 255, 255, 0.7) !important;
 }
 
-.header-hero-panel .breakdown-val.positivo {
+#dash-saldo-card .breakdown-val.positivo {
   color: #34d399 !important;
 }
 
-.header-hero-panel .breakdown-val.negativo {
+#dash-saldo-card .breakdown-val.negativo {
   color: #f87171 !important;
+}
+
+/* Module View Title */
+.module-view-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 24px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.module-view-title svg {
+  color: var(--primary);
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.module-view-title span {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--texto);
+  font-family: 'Outfit', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
 }
 
 /* 5. Navigation Icons Bar inside Hero Panel */

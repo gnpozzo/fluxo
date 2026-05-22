@@ -153,6 +153,14 @@ export class TarjetasModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
+      <div class="module-view-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+          <line x1="1" y1="10" x2="23" y2="10"/>
+        </svg>
+        <span>Tarjetas de Crédito</span>
+      </div>
+
       <!-- Card Selector Slider Wrapper -->
       <div class="tc-slider-container" style="position:relative; display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:var(--space-3); width:100%;">
         <button id="tc-slide-prev" class="tc-slide-arrow" aria-label="Tarjeta Anterior">
