@@ -290,9 +290,6 @@ export class DashboardModule extends BaseModule {
                   <div class="tc-card-row tc-card-top">
                     <span class="tc-card-issuer-name">SANTANDER</span>
                   </div>
-                  <div class="tc-card-row tc-card-middle">
-                    <div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>
-                  </div>
                   <div class="tc-card-row tc-card-bottom">
                     <div class="tc-card-bottom-left">
                       <span class="tc-card-number">**** ••••</span>
@@ -603,21 +600,12 @@ export class DashboardModule extends BaseModule {
         
         <div class="tc-card-row tc-card-top">
           <span class="tc-card-issuer-name">${App.Utils.escapeHtml(cardIssuer)}</span>
-          ${flameLogo}
-        </div>
-        
-        <div class="tc-card-row tc-card-middle">
-          ${cardChip}
-          ${contactlessWave}
         </div>
         
         <div class="tc-card-row tc-card-bottom">
           <div class="tc-card-bottom-left">
             <span class="tc-card-number">**** ${last4}</span>
             <span class="tc-card-amount">${App.Utils.formatearMoneda(subtotal)}</span>
-          </div>
-          <div class="tc-card-bottom-right">
-            ${brandLogoHtml}
           </div>
         </div>
       </div>
