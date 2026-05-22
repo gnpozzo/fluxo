@@ -236,7 +236,7 @@ class AppInit {
     // Control Back Button visibility
     const backBtn = document.getElementById('btn-header-back');
     if (backBtn) {
-      backBtn.style.display = (vistaId === 'vista-dashboard') ? 'none' : 'inline-flex';
+      backBtn.style.display = 'none';
     }
 
     // Desactivar todos los nav items del sidebar
@@ -402,98 +402,60 @@ class AppInit {
 
     const modules = [];
 
-    if (cuentaObj.modulo_tarjetas_activo) {
-      if (vistaId === 'vista-tarjetas') {
-        modules.push({
-          id: 'dashboard',
-          label: 'Inicio',
-          vista: 'vista-dashboard',
-          color: 'var(--primary)',
-          bg: 'var(--primary-tint)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
-        });
-      } else {
-        modules.push({
-          id: 'tarjetas',
-          label: 'Tarjetas',
-          vista: 'vista-tarjetas',
-          color: 'var(--rojo)',
-          bg: 'var(--rojo-tint)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`
-        });
-      }
+    // Dashboard button always placed first when navigating inside other modules
+    if (vistaId !== 'vista-dashboard') {
+      modules.push({
+        id: 'dashboard',
+        label: 'Inicio',
+        vista: 'vista-dashboard',
+        color: 'var(--primary)',
+        bg: 'var(--primary-tint)',
+        svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
+      });
     }
 
-    if (cuentaObj.modulo_cc_activo) {
-      if (vistaId === 'vista-cc') {
-        if (!modules.some(m => m.id === 'dashboard')) {
-          modules.push({
-            id: 'dashboard',
-            label: 'Inicio',
-            vista: 'vista-dashboard',
-            color: 'var(--primary)',
-            bg: 'var(--primary-tint)',
-            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
-          });
-        }
-      } else {
-        modules.push({
-          id: 'cc',
-          label: 'Gastos Comp.',
-          vista: 'vista-cc',
-          color: 'var(--verde)',
-          bg: 'var(--verde-tint)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
-        });
-      }
+    if (cuentaObj.modulo_tarjetas_activo && vistaId !== 'vista-tarjetas') {
+      modules.push({
+        id: 'tarjetas',
+        label: 'Tarjetas',
+        vista: 'vista-tarjetas',
+        color: 'var(--rojo)',
+        bg: 'var(--rojo-tint)',
+        svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`
+      });
     }
 
-    if (cuentaObj.modulo_ahorro_activo) {
-      if (vistaId === 'vista-ahorro') {
-        if (!modules.some(m => m.id === 'dashboard')) {
-          modules.push({
-            id: 'dashboard',
-            label: 'Inicio',
-            vista: 'vista-dashboard',
-            color: 'var(--primary)',
-            bg: 'var(--primary-tint)',
-            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
-          });
-        }
-      } else {
-        modules.push({
-          id: 'ahorro',
-          label: 'Ahorro',
-          vista: 'vista-ahorro',
-          color: 'var(--amarillo-text)',
-          bg: 'var(--amarillo-tint)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`
-        });
-      }
+    if (cuentaObj.modulo_cc_activo && vistaId !== 'vista-cc') {
+      modules.push({
+        id: 'cc',
+        label: 'Gastos Comp.',
+        vista: 'vista-cc',
+        color: 'var(--verde)',
+        bg: 'var(--verde-tint)',
+        svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
+      });
     }
 
-    if (cuentaObj.modulo_inversiones_activo) {
-      if (vistaId === 'vista-inversiones') {
-        if (!modules.some(m => m.id === 'dashboard')) {
-          modules.push({
-            id: 'dashboard',
-            label: 'Inicio',
-            vista: 'vista-dashboard',
-            color: 'var(--primary)',
-            bg: 'var(--primary-tint)',
-            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
-          });
-        }
-      } else {
-        modules.push({
-          id: 'inversiones',
-          label: 'Inversiones',
-          vista: 'vista-inversiones',
-          color: 'var(--cyan, #0ea5e9)',
-          bg: 'rgba(14, 165, 233, 0.1)',
-          svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`
-        });
-      }
+    if (cuentaObj.modulo_ahorro_activo && vistaId !== 'vista-ahorro') {
+      modules.push({
+        id: 'ahorro',
+        label: 'Ahorro',
+        vista: 'vista-ahorro',
+        color: 'var(--amarillo-text)',
+        bg: 'var(--amarillo-tint)',
+        svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`
+      });
+    }
+
+    if (cuentaObj.modulo_inversiones_activo && vistaId !== 'vista-inversiones') {
+      modules.push({
+        id: 'inversiones',
+        label: 'Inversiones',
+        vista: 'vista-inversiones',
+        color: 'var(--cyan, #0ea5e9)',
+        bg: 'rgba(14, 165, 233, 0.1)',
+        svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`
+      });
     }
 
     navContainer.innerHTML = modules.map(m => `
