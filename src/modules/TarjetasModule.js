@@ -155,8 +155,24 @@ export class TarjetasModule extends BaseModule {
     vista.innerHTML = `
       <div class="kpi-grid" id="tc-kpi-grid"></div>
 
-      <!-- Card Selector -->
-      <div id="tc-card-selector" style="display:flex;gap:10px;overflow-x:auto;padding:4px 0;margin-bottom:var(--space-3)"></div>
+      <!-- Card Selector Slider Wrapper -->
+      <div class="tc-slider-container" style="position:relative; display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:var(--space-3); width:100%;">
+        <button id="tc-slide-prev" class="tc-slide-arrow" aria-label="Tarjeta Anterior">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px; display:block;">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        
+        <div id="tc-card-selector" class="tc-card-list">
+          <!-- Cards are dynamically rendered here -->
+        </div>
+        
+        <button id="tc-slide-next" class="tc-slide-arrow" aria-label="Siguiente Tarjeta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px; display:block;">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
 
       <div class="section-header" style="margin-bottom:var(--space-3)">
         <div class="acciones-container" id="tc-acciones"></div>
@@ -470,6 +486,12 @@ export class TarjetasModule extends BaseModule {
           document.getElementById('tc-btn-mes')?.classList.replace('btn-primary', 'btn-ghost');
           document.getElementById('tc-proy-wrap')?.classList.remove('hidden');
           document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
+        } else if (btn.id === 'tc-slide-prev') {
+          const selectorEl = document.getElementById('tc-card-selector');
+          selectorEl?.scrollBy({ left: -240, behavior: 'smooth' });
+        } else if (btn.id === 'tc-slide-next') {
+          const selectorEl = document.getElementById('tc-card-selector');
+          selectorEl?.scrollBy({ left: 240, behavior: 'smooth' });
         }
       });
     }
@@ -582,13 +604,61 @@ export class TarjetasModule extends BaseModule {
       subtotals[tid] = (subtotals[tid] || 0) + Number(c.importe || 0);
     });
 
-    // "Todas" pill
-    const allPill = `<button class="tc-card-pill ${!this.#selectedTcId ? 'active' : ''}"
+    const getBrandLogoHtml = (brandName) => {
+      const name = (brandName || '').toUpperCase();
+      if (name.includes('VISA')) {
+        return `<svg viewBox="0 0 48 16" width="36" height="12" fill="#ffffff" style="opacity:0.95; display:block;"><path d="M18.2 1.2L15.3 15h-2.8L9.7 4.1C9.2 3.6 8.7 3.3 8 3.2L5 3v-.4h4.6c.6 0 1.1.4 1.2 1L12 11.2l3.5-10h2.7zm9.6 9.4c0-2.5-3.5-2.6-3.5-3.7 0-.3.3-.7 1-.8.3 0 1.3-.1 2.4.4l.4-2.5C27.4 3.7 26.3 3.4 25 3.4c-2.8 0-4.8 1.5-4.8 3.6 0 2.8 3.9 3 3.9 4.5 0 .5-.5.9-1.2.9-1.6 0-2.7-.7-2.7-.7l-.4 2.6c.7.3 2.1.6 3.5.6 3 0 5.2-1.5 5.2-3.7zM38.8 15h2.4L43.3 1.2h-2.4L38.8 15zm-9.3-13.8L27.2 15h2.6l1.6-4.4h6.3l.6 4.4h2.3L37.2 1.2H29.5zm2.3 7.2l2-5.5 1.1 5.5H31.8zM4.6 1.2L.2 11.9v.2c.4 1.1 1.5 1.7 2.6 1.7H11L12.3 8 7.6 1.2H4.6z" /></svg>`;
+      }
+      if (name.includes('AMEX') || name.includes('AMERICAN')) {
+        return `<div style="font-family:'Inter', sans-serif;font-weight:900;font-style:italic;font-size:0.75rem;letter-spacing:0.5px;color:#0070d2;background:#ffffff;padding:2px 4px;border-radius:2px;line-height:1;display:inline-block;box-shadow: 0 1px 3px rgba(0,0,0,0.2);">AMEX</div>`;
+      }
+      return `<svg viewBox="0 0 32 20" width="28" height="18" style="display:block;"><circle cx="10" cy="10" r="10" fill="#EB001B"/><circle cx="22" cy="10" r="10" fill="#F79E1B" opacity="0.85"/></svg>`;
+    };
+
+    const flameLogo = `<svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" style="display:block;">
+      <path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z" />
+    </svg>`;
+
+    const contactlessWave = `<svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
+      <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
+      <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
+      <path d="M11 4a15 15 0 0 1 0 16" opacity="0.7"/>
+      <path d="M14 2a18 18 0 0 1 0 20"/>
+    </svg>`;
+
+    const cardChip = `<div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>`;
+
+    // "Todas" / Consolidado premium card
+    const isAllActive = !this.#selectedTcId;
+    const totalConsol = this.#allConsumos.reduce((s, c) => s + Number(c.importe || 0), 0);
+    const allPill = `<button class="tc-card-pill ${isAllActive ? 'active' : ''}"
       data-tc-filter="all"
-      style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;border-radius:12px;border:2px solid ${!this.#selectedTcId ? 'var(--primary)' : 'transparent'};background:var(--superficie);box-shadow:0 4px 12px rgba(0,0,0,0.05);cursor:pointer;min-width:160px;transition:all .15s;font-family:inherit">
-      <span style="font-size:0.8rem;font-weight:700;color:var(--texto);text-transform:uppercase">Consolidado</span>
-      <span style="font-size:0.7rem;color:var(--texto-3)">Todas las tarjetas</span>
-      <span style="font-size:1.1rem;font-weight:800;color:var(--texto);margin-top:10px">${App.Utils.formatearMoneda(this.#allConsumos.reduce((s, c) => s + Number(c.importe || 0), 0))}</span>
+      style="background: linear-gradient(135deg, #1D195D 0%, #0f0d36 100%)">
+      <div class="tc-card-shimmer"></div>
+      
+      <div class="tc-card-row tc-card-top">
+        <span class="tc-card-issuer-name">CONSOLIDADO</span>
+        <svg class="tc-card-issuer-logo" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+      </div>
+      
+      <div class="tc-card-row tc-card-middle">
+        ${cardChip}
+        ${contactlessWave}
+      </div>
+      
+      <div class="tc-card-row tc-card-bottom">
+        <div class="tc-card-bottom-left">
+          <span class="tc-card-number">**** ALL</span>
+          <span class="tc-card-amount">${App.Utils.formatearMoneda(totalConsol)}</span>
+        </div>
+        <div class="tc-card-bottom-right">
+          <div style="font-family:'Inter', sans-serif;font-weight:900;font-size:0.65rem;letter-spacing:1px;color:#fff;opacity:0.9">FLUXO</div>
+        </div>
+      </div>
     </button>`;
 
     const pills = this.#tarjetas.map(tc => {
@@ -596,44 +666,54 @@ export class TarjetasModule extends BaseModule {
       const last4 = tc.ultimos_4_digitos || tc.ultimos_4 || '••••';
       const sub = subtotals[tc.id_tarjeta] || 0;
       
-      const marca = (tc.marca || tc.nombre || '').toUpperCase();
+      const rawMarca = tc.marca || (tc.nombre || '').split(' ')[0] || 'Visa';
+      const brandLogoHtml = getBrandLogoHtml(rawMarca);
+      
+      const cardIssuer = ((tc.marca || tc.nombre || '').split(' ')[0] + ' ' + (tc.banco || 'SANTANDER')).toUpperCase();
+      
       let gradient;
       if (tc.color && tc.color.startsWith('#')) {
-        gradient = `linear-gradient(135deg, ${tc.color} 0%, rgba(0,0,0,0.6) 150%)`;
+        gradient = `linear-gradient(135deg, ${tc.color} 0%, rgba(15, 23, 42, 0.85) 100%)`;
       } else {
         switch(tc.color) {
-          case 'red':    gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)'; break;
-          case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #e67e22 100%)'; break;
-          case 'purple': gradient = 'linear-gradient(135deg, #4a235a 0%, #8e44ad 100%)'; break;
-          case 'green':  gradient = 'linear-gradient(135deg, #145a32 0%, #27ae60 100%)'; break;
-          case 'dark':   gradient = 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)'; break;
-          case 'black':  gradient = 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)'; break;
-          case 'silver': gradient = 'linear-gradient(135deg, #bdc3c7 0%, #e2e2e2 100%)'; break;
-          case 'gold':   gradient = 'linear-gradient(135deg, #b8860b 0%, #ffd700 100%)'; break;
+          case 'red':    gradient = 'linear-gradient(135deg, #c41e3a 0%, #60020f 100%)'; break;
+          case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #7e2a00 100%)'; break;
+          case 'purple': gradient = 'linear-gradient(135deg, #7d26cd 0%, #3a006f 100%)'; break;
+          case 'green':  gradient = 'linear-gradient(135deg, #1e7e34 0%, #0b3c15 100%)'; break;
+          case 'dark':   gradient = 'linear-gradient(135deg, #343a40 0%, #1a1d20 100%)'; break;
+          case 'black':  gradient = 'linear-gradient(135deg, #212529 0%, #000000 100%)'; break;
+          case 'silver': gradient = 'linear-gradient(135deg, #a8b2c1 0%, #5a6268 100%)'; break;
+          case 'gold':   gradient = 'linear-gradient(135deg, #daa520 0%, #8b6508 100%)'; break;
           case 'blue':
           default:
-            if (!tc.color && marca.includes('MASTER')) gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
-            else gradient = 'linear-gradient(135deg, #1D195D 0%, #151249 100%)';
+            gradient = 'linear-gradient(135deg, #1D195D 0%, #0c0a2a 100%)';
             break;
         }
       }
 
       return `<button class="tc-card-pill ${isActive ? 'active' : ''}"
         data-tc-filter="${tc.id_tarjeta}"
-        style="display:flex;flex-direction:column;align-items:flex-start;padding:12px;border-radius:12px;border:2px solid ${isActive ? 'var(--primary)' : 'transparent'};background:${gradient};color:#fff;box-shadow:0 4px 15px rgba(0,0,0,0.15);cursor:pointer;min-width:180px;transition:all .15s;font-family:'Courier New', monospace;position:relative;overflow:hidden">
+        style="background:${gradient}">
+        <div class="tc-card-shimmer"></div>
         
-        <!-- Decoration -->
-        <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent 50%);pointer-events:none"></div>
-        
-        <div style="display:flex;justify-content:space-between;width:100%;align-items:center;margin-bottom:8px;position:relative;z-index:1">
-           <svg width="24" height="16" viewBox="0 0 28 20" fill="#FFD700" style="opacity:0.9"><rect width="28" height="20" rx="3"/></svg>
-           <span style="font-family:'Inter', sans-serif;font-weight:800;font-size:0.8rem;font-style:italic;opacity:0.9">${App.Utils.escapeHtml(marca)}</span>
+        <div class="tc-card-row tc-card-top">
+          <span class="tc-card-issuer-name">${App.Utils.escapeHtml(cardIssuer)}</span>
+          ${flameLogo}
         </div>
-        <span style="font-size:1.1rem;letter-spacing:2px;text-shadow:1px 1px 1px rgba(0,0,0,0.3);position:relative;z-index:1;margin-bottom:6px">•••• ${last4}</span>
         
-        <div style="display:flex;justify-content:space-between;width:100%;font-family:'Inter', sans-serif;position:relative;z-index:1;align-items:flex-end">
-           <span style="font-size:0.6rem;text-transform:uppercase;opacity:0.8">${App.Utils.escapeHtml(tc.nombre)}</span>
-           <span style="font-size:0.9rem;font-weight:700">${App.Utils.formatearMoneda(sub)}</span>
+        <div class="tc-card-row tc-card-middle">
+          ${cardChip}
+          ${contactlessWave}
+        </div>
+        
+        <div class="tc-card-row tc-card-bottom">
+          <div class="tc-card-bottom-left">
+            <span class="tc-card-number">**** ${last4}</span>
+            <span class="tc-card-amount">${App.Utils.formatearMoneda(sub)}</span>
+          </div>
+          <div class="tc-card-bottom-right">
+            ${brandLogoHtml}
+          </div>
         </div>
       </button>`;
     }).join('');
