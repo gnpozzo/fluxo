@@ -153,8 +153,6 @@ export class TarjetasModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
-      <div class="kpi-grid" id="tc-kpi-grid"></div>
-
       <!-- Card Selector Slider Wrapper -->
       <div class="tc-slider-container" style="position:relative; display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:var(--space-3); width:100%;">
         <button id="tc-slide-prev" class="tc-slide-arrow" aria-label="Tarjeta Anterior">
@@ -173,6 +171,8 @@ export class TarjetasModule extends BaseModule {
           </svg>
         </button>
       </div>
+
+      <div class="kpi-grid" id="tc-kpi-grid"></div>
 
       <div class="section-header" style="margin-bottom:var(--space-3)">
         <div class="acciones-container" id="tc-acciones"></div>
@@ -495,6 +495,25 @@ export class TarjetasModule extends BaseModule {
         }
       });
     }
+
+    // Update slider arrows on window resize if the view is active
+    window.addEventListener('resize', () => {
+      const vistaEl = document.getElementById(this.vistaId);
+      if (vistaEl && vistaEl.classList.contains('active')) {
+        this.#updateSliderArrows();
+      }
+    });
+  }
+
+  _subscribeEvents() {
+    super._subscribeEvents();
+    if (App.Events) {
+      App.Events.on('ui:tab-changed', (payload) => {
+        if (payload && payload.tabId === this.vistaId) {
+          this.#updateSliderArrows();
+        }
+      });
+    }
   }
 
   // --- SECCIÓN 7: DETAIL MODAL & HELPERS ---
@@ -597,6 +616,31 @@ export class TarjetasModule extends BaseModule {
       return;
     }
 
+    // Helper visual elements
+    const getBrandLogoHtml = (brandName) => {
+      const name = (brandName || '').toUpperCase();
+      if (name.includes('VISA')) {
+        return `<svg viewBox="0 0 48 16" width="36" height="12" fill="#ffffff" style="opacity:0.95; display:block;"><path d="M18.2 1.2L15.3 15h-2.8L9.7 4.1C9.2 3.6 8.7 3.3 8 3.2L5 3v-.4h4.6c.6 0 1.1.4 1.2 1L12 11.2l3.5-10h2.7zm9.6 9.4c0-2.5-3.5-2.6-3.5-3.7 0-.3.3-.7 1-.8.3 0 1.3-.1 2.4.4l.4-2.5C27.4 3.7 26.3 3.4 25 3.4c-2.8 0-4.8 1.5-4.8 3.6 0 2.8 3.9 3 3.9 4.5 0 .5-.5.9-1.2.9-1.6 0-2.7-.7-2.7-.7l-.4 2.6c.7.3 2.1.6 3.5.6 3 0 5.2-1.5 5.2-3.7zM38.8 15h2.4L43.3 1.2h-2.4L38.8 15zm-9.3-13.8L27.2 15h2.6l1.6-4.4h6.3l.6 4.4h2.3L37.2 1.2H29.5zm2.3 7.2l2-5.5 1.1 5.5H31.8zM4.6 1.2L.2 11.9v.2c.4 1.1 1.5 1.7 2.6 1.7H11L12.3 8 7.6 1.2H4.6z" /></svg>`;
+      }
+      if (name.includes('AMEX') || name.includes('AMERICAN')) {
+        return `<div style="font-family:'Inter', sans-serif;font-weight:900;font-style:italic;font-size:0.75rem;letter-spacing:0.5px;color:#0070d2;background:#ffffff;padding:2px 4px;border-radius:2px;line-height:1;display:inline-block;box-shadow: 0 1px 3px rgba(0,0,0,0.2);">AMEX</div>`;
+      }
+      return `<svg viewBox="0 0 32 20" width="28" height="18" style="display:block;"><circle cx="10" cy="10" r="10" fill="#EB001B"/><circle cx="22" cy="10" r="10" fill="#F79E1B" opacity="0.85"/></svg>`;
+    };
+
+    const flameLogo = `<svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" style="display:block;">
+      <path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z" />
+    </svg>`;
+
+    const contactlessWave = `<svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
+      <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
+      <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
+      <path d="M11 4a15 15 0 0 1 0 16" opacity="0.7"/>
+      <path d="M14 2a18 18 0 0 1 0 20"/>
+    </svg>`;
+
+    const cardChip = `<div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>`;
+
     // Calculate subtotal per card
     const subtotals = {};
     this.#allConsumos.forEach(c => {
@@ -614,12 +658,21 @@ export class TarjetasModule extends BaseModule {
       
       <div class="tc-card-row tc-card-top">
         <span class="tc-card-issuer-name">CONSOLIDADO</span>
+        ${flameLogo}
       </div>
       
+      <div class="tc-card-row tc-card-middle">
+        ${cardChip}
+        ${contactlessWave}
+      </div>
+
       <div class="tc-card-row tc-card-bottom">
         <div class="tc-card-bottom-left">
           <span class="tc-card-number">**** ALL</span>
           <span class="tc-card-amount">${App.Utils.formatearMoneda(totalConsol)}</span>
+        </div>
+        <div class="tc-card-bottom-right">
+          <div style="width:28px; height:18px;"></div>
         </div>
       </div>
     </button>`;
@@ -658,12 +711,21 @@ export class TarjetasModule extends BaseModule {
         
         <div class="tc-card-row tc-card-top">
           <span class="tc-card-issuer-name">${App.Utils.escapeHtml(cardIssuer)}</span>
+          ${flameLogo}
         </div>
         
+        <div class="tc-card-row tc-card-middle">
+          ${cardChip}
+          ${contactlessWave}
+        </div>
+
         <div class="tc-card-row tc-card-bottom">
           <div class="tc-card-bottom-left">
             <span class="tc-card-number">**** ${last4}</span>
             <span class="tc-card-amount">${App.Utils.formatearMoneda(sub)}</span>
+          </div>
+          <div class="tc-card-bottom-right">
+            ${getBrandLogoHtml(tc.marca || tc.nombre)}
           </div>
         </div>
       </button>`;
@@ -680,6 +742,8 @@ export class TarjetasModule extends BaseModule {
         this.#filterConsumosByCard();
       });
     });
+
+    this.#updateSliderArrows();
   }
 
   #filterConsumosByCard() {
@@ -688,6 +752,22 @@ export class TarjetasModule extends BaseModule {
     } else {
       const filtered = this.#allConsumos.filter(c => c.id_tarjeta === this.#selectedTcId);
       this.#table?.load(filtered);
+    }
+  }
+
+  #updateSliderArrows() {
+    const list = document.getElementById('tc-card-selector');
+    const prevBtn = document.getElementById('tc-slide-prev');
+    const nextBtn = document.getElementById('tc-slide-next');
+    if (!list || !prevBtn || !nextBtn) return;
+
+    const hasOverflow = list.scrollWidth > list.clientWidth;
+    if (hasOverflow) {
+      prevBtn.classList.remove('hidden');
+      nextBtn.classList.remove('hidden');
+    } else {
+      prevBtn.classList.add('hidden');
+      nextBtn.classList.add('hidden');
     }
   }
 }
