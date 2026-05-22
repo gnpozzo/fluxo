@@ -284,11 +284,21 @@ export class DashboardModule extends BaseModule {
             <div class="dash-mc-kpi-row" style="margin-bottom:12px"><div><span class="dash-mc-kpi-label">Total consumos</span><span class="dash-mc-kpi-value negativo" id="dash-tc-total">—</span></div></div>
             <div class="dash-tc-carousel">
               <button class="dash-tc-arrow" id="dash-tc-prev" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
-              <div class="dash-tc-visual" id="dash-tc-visual">
-                <div class="dash-tc-plastic">
-                  <div class="dash-tc-plastic-top"><svg width="28" height="20" viewBox="0 0 28 20" fill="#FFD700"><rect width="28" height="20" rx="3"/></svg><span class="dash-tc-plastic-brand" id="dash-tc-brand">—</span></div>
-                  <div class="dash-tc-plastic-number" id="dash-tc-number">•••• •••• •••• ••••</div>
-                  <div class="dash-tc-plastic-bottom"><span id="dash-tc-holder">—</span><span id="dash-tc-vto">—</span></div>
+              <div class="dash-tc-visual" id="dash-tc-visual" style="display:flex; justify-content:center; align-items:center;">
+                <div class="tc-card-pill" style="background: linear-gradient(135deg, #1D195D 0%, #0c0a2a 100%); cursor: default; margin: 0 auto; user-select: none;">
+                  <div class="tc-card-shimmer"></div>
+                  <div class="tc-card-row tc-card-top">
+                    <span class="tc-card-issuer-name">SANTANDER</span>
+                  </div>
+                  <div class="tc-card-row tc-card-middle">
+                    <div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>
+                  </div>
+                  <div class="tc-card-row tc-card-bottom">
+                    <div class="tc-card-bottom-left">
+                      <span class="tc-card-number">**** ••••</span>
+                      <span class="tc-card-amount">$0,00</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <button class="dash-tc-arrow" id="dash-tc-next" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
@@ -535,52 +545,91 @@ export class DashboardModule extends BaseModule {
   #updateTcVisual() {
     const tc = this._tcList?.[this._tcIndex];
     if (!tc) return;
-    const marca = (tc.marca || tc.nombre || '').toUpperCase();
+    const rawMarca = tc.marca || (tc.nombre || '').split(' ')[0] || 'Visa';
+    const cardIssuer = ((tc.marca || tc.nombre || '').split(' ')[0] + ' ' + (tc.banco || 'SANTANDER')).toUpperCase();
+    const last4 = tc.ultimos_4_digitos || tc.ultimos_4 || '••••';
     
     let gradient;
     if (tc.color && tc.color.startsWith('#')) {
-      gradient = `linear-gradient(135deg, ${tc.color} 0%, rgba(0,0,0,0.6) 150%)`;
+      gradient = `linear-gradient(135deg, ${tc.color} 0%, rgba(15, 23, 42, 0.85) 100%)`;
     } else {
       switch(tc.color) {
-        case 'red':    gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)'; break;
-        case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #e67e22 100%)'; break;
-        case 'purple': gradient = 'linear-gradient(135deg, #4a235a 0%, #8e44ad 100%)'; break;
-        case 'green':  gradient = 'linear-gradient(135deg, #145a32 0%, #27ae60 100%)'; break;
-        case 'dark':   gradient = 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)'; break;
-        case 'black':  gradient = 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)'; break;
-        case 'silver': gradient = 'linear-gradient(135deg, #bdc3c7 0%, #e2e2e2 100%)'; break;
-        case 'gold':   gradient = 'linear-gradient(135deg, #b8860b 0%, #ffd700 100%)'; break;
+        case 'red':    gradient = 'linear-gradient(135deg, #c41e3a 0%, #60020f 100%)'; break;
+        case 'orange': gradient = 'linear-gradient(135deg, #d35400 0%, #7e2a00 100%)'; break;
+        case 'purple': gradient = 'linear-gradient(135deg, #7d26cd 0%, #3a006f 100%)'; break;
+        case 'green':  gradient = 'linear-gradient(135deg, #1e7e34 0%, #0b3c15 100%)'; break;
+        case 'dark':   gradient = 'linear-gradient(135deg, #343a40 0%, #1a1d20 100%)'; break;
+        case 'black':  gradient = 'linear-gradient(135deg, #212529 0%, #000000 100%)'; break;
+        case 'silver': gradient = 'linear-gradient(135deg, #a8b2c1 0%, #5a6268 100%)'; break;
+        case 'gold':   gradient = 'linear-gradient(135deg, #daa520 0%, #8b6508 100%)'; break;
         case 'blue':
         default:
-          if (!tc.color && marca.includes('MASTER')) {
-             gradient = 'linear-gradient(135deg, #1a1a2e 0%, #c41e3a 100%)';
-          } else {
-             gradient = 'linear-gradient(135deg, #1D195D 0%, #151249 100%)';
-          }
+          gradient = 'linear-gradient(135deg, #1D195D 0%, #0c0a2a 100%)';
           break;
       }
     }
 
-    const plastic = document.querySelector('.dash-tc-plastic');
-    if (plastic) plastic.style.background = gradient;
+    const getBrandLogoHtml = (brandName) => {
+      const name = (brandName || '').toUpperCase();
+      if (name.includes('VISA')) {
+        return `<svg viewBox="0 0 48 16" width="36" height="12" fill="#ffffff" style="opacity:0.95; display:block;"><path d="M18.2 1.2L15.3 15h-2.8L9.7 4.1C9.2 3.6 8.7 3.3 8 3.2L5 3v-.4h4.6c.6 0 1.1.4 1.2 1L12 11.2l3.5-10h2.7zm9.6 9.4c0-2.5-3.5-2.6-3.5-3.7 0-.3.3-.7 1-.8.3 0 1.3-.1 2.4.4l.4-2.5C27.4 3.7 26.3 3.4 25 3.4c-2.8 0-4.8 1.5-4.8 3.6 0 2.8 3.9 3 3.9 4.5 0 .5-.5.9-1.2.9-1.6 0-2.7-.7-2.7-.7l-.4 2.6c.7.3 2.1.6 3.5.6 3 0 5.2-1.5 5.2-3.7zM38.8 15h2.4L43.3 1.2h-2.4L38.8 15zm-9.3-13.8L27.2 15h2.6l1.6-4.4h6.3l.6 4.4h2.3L37.2 1.2H29.5zm2.3 7.2l2-5.5 1.1 5.5H31.8zM4.6 1.2L.2 11.9v.2c.4 1.1 1.5 1.7 2.6 1.7H11L12.3 8 7.6 1.2H4.6z" /></svg>`;
+      }
+      if (name.includes('AMEX') || name.includes('AMERICAN')) {
+        return `<div style="font-family:'Inter', sans-serif;font-weight:900;font-style:italic;font-size:0.75rem;letter-spacing:0.5px;color:#0070d2;background:#ffffff;padding:2px 4px;border-radius:2px;line-height:1;display:inline-block;box-shadow: 0 1px 3px rgba(0,0,0,0.2);">AMEX</div>`;
+      }
+      return `<svg viewBox="0 0 32 20" width="28" height="18" style="display:block;"><circle cx="10" cy="10" r="10" fill="#EB001B"/><circle cx="22" cy="10" r="10" fill="#F79E1B" opacity="0.85"/></svg>`;
+    };
 
-    const brandEl = document.getElementById('dash-tc-brand');
-    if (brandEl) brandEl.textContent = marca;
+    const flameLogo = `<svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" style="display:block;">
+      <path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z" />
+    </svg>`;
 
-    const numberEl = document.getElementById('dash-tc-number');
-    const last4 = tc.ultimos_4 || '••••';
-    if (numberEl) numberEl.textContent = `•••• •••• •••• ${last4}`;
+    const contactlessWave = `<svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
+      <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
+      <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
+      <path d="M11 4a15 15 0 0 1 0 16" opacity="0.7"/>
+      <path d="M14 2a18 18 0 0 1 0 20"/>
+    </svg>`;
 
-    const holderEl = document.getElementById('dash-tc-holder');
-    if (holderEl) holderEl.textContent = tc.nombre || 'Titular';
+    const cardChip = `<div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>`;
+    const brandLogoHtml = getBrandLogoHtml(rawMarca);
 
-    const vtoEl = document.getElementById('dash-tc-vto');
-    if (vtoEl) vtoEl.textContent = tc.vencimiento || '—/—';
+    const cardData = this._tcConsumos?.[tc.id_tarjeta];
+    const subtotal = cardData?.total || 0;
+
+    const cardHtml = `
+      <div class="tc-card-pill" style="background:${gradient}; cursor:default; margin: 0 auto; user-select: none;">
+        <div class="tc-card-shimmer"></div>
+        
+        <div class="tc-card-row tc-card-top">
+          <span class="tc-card-issuer-name">${App.Utils.escapeHtml(cardIssuer)}</span>
+          ${flameLogo}
+        </div>
+        
+        <div class="tc-card-row tc-card-middle">
+          ${cardChip}
+          ${contactlessWave}
+        </div>
+        
+        <div class="tc-card-row tc-card-bottom">
+          <div class="tc-card-bottom-left">
+            <span class="tc-card-number">**** ${last4}</span>
+            <span class="tc-card-amount">${App.Utils.formatearMoneda(subtotal)}</span>
+          </div>
+          <div class="tc-card-bottom-right">
+            ${brandLogoHtml}
+          </div>
+        </div>
+      </div>
+    `;
+
+    const visualEl = document.getElementById('dash-tc-visual');
+    if (visualEl) {
+      visualEl.innerHTML = cardHtml;
+    }
 
     // Show per-card subtotal
     const subtotalEl = document.getElementById('dash-tc-subtotal');
-    const cardData = this._tcConsumos?.[tc.id_tarjeta];
-    const subtotal = cardData?.total || 0;
     if (subtotalEl) {
       subtotalEl.textContent = `Subtotal: ${App.Utils.formatearMoneda(subtotal)}`;
     }
