@@ -45,12 +45,21 @@ export class CCModule extends BaseModule {
     this.#table?.showSkeleton(5);
 
     try {
-      const resp = await App.API.swr(
-        'api_getConsumosCC',
-        [cuenta, fechaInicio, fechaFin],
-        App.API.defaultTtl,
-        (freshData) => { if (freshData && freshData.success) this._render(freshData); }
-      );
+      const [resp, respUsers] = await Promise.all([
+        App.API.swr(
+          'api_getConsumosCC',
+          [cuenta, fechaInicio, fechaFin],
+          App.API.defaultTtl,
+          (freshData) => { if (freshData && freshData.success) this._render(freshData); }
+        ),
+        App.API.call('api_admin_getCtaCorrienteUsuarios').catch(() => null)
+      ]);
+
+      if (respUsers?.success) {
+        this.#usuarios = respUsers.data || [];
+        window._appUsuariosCC = this.#usuarios;
+      }
+
       this._render(resp.data);
       App.Store.markModuloLoaded(this.moduleId);
     } catch (err) {
@@ -69,9 +78,9 @@ export class CCModule extends BaseModule {
 
     const { kpis, consumos } = data;
 
-    // Categorías y usuarios desde globales (cargados en boot)
+    // Categorías y usuarios desde globales (cargados en boot o refrescados en cargar)
     if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
-    if (!this.#usuarios.length)   this.#usuarios   = window._appUsuariosCC || [];
+    this.#usuarios = window._appUsuariosCC || [];
 
     this.#kpiYo?.setValue(kpis.gastoYo);
     this.#kpiOtro?.setValue(kpis.gastoOtro);
@@ -173,7 +182,8 @@ export class CCModule extends BaseModule {
       .map(c => `<option value="${c.id_categoria}" ${data?.id_categoria === c.id_categoria ? 'selected':''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
       .join('');
 
-    const optsU = this.#usuarios
+    const otherUsers = this.#usuarios.filter(u => !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
+    const optsU = otherUsers
       .map(u => `<option value="${u.id_usuario}" ${data?.id_usuario === u.id_usuario ? 'selected':''}>${App.Utils.escapeHtml(u.nombre)}</option>`)
       .join('');
 

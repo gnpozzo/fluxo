@@ -177,13 +177,18 @@
           </div>
 
           <!-- Notificaciones (Header) -->
-          <button id="btn-notifications" class="header-bell-btn" title="Notificaciones" aria-label="Notificaciones" style="position:relative;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-            <span id="badge-notifications" style="display:none; position:absolute; top:-2px; right:-2px; width:10px; height:10px; background:var(--rojo); border-radius:50%; border:2px solid var(--superficie);"></span>
-          </button>
+          <div class="notifications-dropdown-container" id="notifications-dropdown-container">
+            <button id="btn-notifications" class="header-bell-btn" title="Notificaciones" aria-label="Notificaciones" style="position:relative;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span id="badge-notifications" style="display:none; position:absolute; top:-2px; right:-2px; width:10px; height:10px; background:var(--rojo); border-radius:50%; border:2px solid var(--superficie);"></span>
+            </button>
+            <div class="notifications-dropdown" id="notifications-dropdown">
+              <!-- Rendered dynamically in AppInit.js -->
+            </div>
+          </div>
 
           <!-- Credentials Dropdown Container -->
           <div class="credentials-container" id="credentials-container">

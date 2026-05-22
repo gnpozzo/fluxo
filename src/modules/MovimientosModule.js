@@ -52,12 +52,18 @@ export class MovimientosModule extends BaseModule {
     this.#table?.showSkeleton(6);
 
     try {
-      const resp = await App.API.swr(
-        'api_getDashboardData',
-        [cuenta, fechaInicio, fechaFin, requiereAjuste],
-        App.API.defaultTtl,
-        (freshData) => { if (freshData && freshData.success) this._render(freshData); }
-      );
+      const [resp, respUsers] = await Promise.all([
+        App.API.swr(
+          'api_getDashboardData',
+          [cuenta, fechaInicio, fechaFin, requiereAjuste],
+          App.API.defaultTtl,
+          (freshData) => { if (freshData && freshData.success) this._render(freshData); }
+        ),
+        App.API.call('api_admin_getCtaCorrienteUsuarios').catch(() => null)
+      ]);
+      if (respUsers?.success) {
+        window._appUsuariosCC = respUsers.data || [];
+      }
       this._render(resp.data);
       App.Store.markModuloLoaded(this.moduleId);
     } catch (err) {
@@ -214,7 +220,8 @@ export class MovimientosModule extends BaseModule {
       .filter(c => c.tipo_mov === tipo && c.activa);
 
     const usuariosCC = window._appUsuariosCC || [];
-    const optsU = usuariosCC
+    const otherUsers = usuariosCC.filter(u => !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
+    const optsU = otherUsers
       .map(u => `<option value="${u.id_usuario}">${App.Utils.escapeHtml(u.nombre)}</option>`)
       .join('');
 

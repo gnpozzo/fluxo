@@ -301,7 +301,7 @@ export class AdminModule extends BaseModule {
             <tbody>
               ${users.map(u => `
                 <tr>
-                  <td>${App.Utils.escapeHtml(u.nombre)}</td>
+                  <td>${App.Utils.escapeHtml(u.nombre)}${u.es_yo ? ' <strong style="color:var(--primary)">(Yo)</strong>' : ''}</td>
                   <td class="text-right">
                     <button class="btn-accion" onclick="App.Modules.admin._editUsuarioCC('${u.id_usuario}')" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
@@ -628,6 +628,12 @@ export class AdminModule extends BaseModule {
             <label>Nombre <span class="required-mark">*</span></label>
             <input class="input" name="nombre" value="${App.Utils.escapeHtml(data?.nombre || '')}" required>
           </div>
+          <div class="form-group full-width">
+            <label class="form-switch">
+              <input type="checkbox" class="toggle-switch" name="es_yo" ${data?.es_yo ? 'checked' : ''}>
+              <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Este contacto soy yo</span>
+            </label>
+          </div>
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
@@ -635,10 +641,14 @@ export class AdminModule extends BaseModule {
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
+        d.es_yo = (d.es_yo === 'on' || d.es_yo === true);
         modal.setLoading(true);
         try {
           await App.API.call('api_admin_saveCtaCorrienteUsuario', d);
           App.API.invalidatePattern('api_admin_getCtaCorrienteUsuarios');
+          App.API.invalidatePattern('api_getInitialData');
+          App.Store.invalidateModulo('cc');
+          App.Store.invalidateModulo('movimientos');
           App.Toast.success('Usuario guardado.');
           modal.close();
           this.#renderUsuariosCC();
@@ -694,6 +704,9 @@ export class AdminModule extends BaseModule {
     try {
       await App.API.call('api_admin_deleteCtaCorrienteUsuario', id);
       App.API.invalidatePattern('api_admin_getCtaCorrienteUsuarios');
+      App.API.invalidatePattern('api_getInitialData');
+      App.Store.invalidateModulo('cc');
+      App.Store.invalidateModulo('movimientos');
       App.Toast.success('Usuario eliminado.');
       this.#renderUsuariosCC();
     } catch (e) { App.Toast.error(e.message); }

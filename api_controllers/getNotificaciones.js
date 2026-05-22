@@ -42,7 +42,8 @@ export default async function handler(req, res) {
                icono: 'check_circle',
                titulo: 'Última Cuota en Tarjeta',
                mensaje: 'El consumo "' + c.descripcion + '" finaliza este mes.',
-               importe: c.importe
+               importe: c.importe,
+               fecha: c.fecha || (trimmed + '-01')
             });
          } else if (c.cuota_total > 1 && c.cuota_actual === 1) {
             notificaciones.push({
@@ -51,7 +52,8 @@ export default async function handler(req, res) {
                icono: 'fiber_new',
                titulo: 'Nuevo Consumo en Cuotas',
                mensaje: 'Inicia la 1° cuota de "' + c.descripcion + '".',
-               importe: c.importe
+               importe: c.importe,
+               fecha: c.fecha || (trimmed + '-01')
             });
          }
       });

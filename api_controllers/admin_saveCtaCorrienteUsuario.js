@@ -14,6 +14,14 @@ export default async function handler(req, res) {
       payload.id_usuario = crypto.randomUUID();
     }
     
+    if (payload.es_yo === true || payload.es_yo === 'true') {
+      const { error: resetError } = await supabase
+        .from('cta_corriente_usuarios')
+        .update({ es_yo: false })
+        .neq('id_usuario', payload.id_usuario);
+      if (resetError) throw resetError;
+    }
+    
     const { data, error } = await supabase.from('cta_corriente_usuarios').upsert(payload).select().single();
     if (error) throw error;
     

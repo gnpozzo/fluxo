@@ -645,44 +645,223 @@ class AppInit {
 
   #notificacionesMes = [];
 
+  #getReadNotificationIds() {
+    try {
+      const read = localStorage.getItem('fluxo_read_notifications');
+      return read ? JSON.parse(read) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  #markNotificationAsRead(id) {
+    try {
+      const read = this.#getReadNotificationIds();
+      if (!read.includes(id)) {
+        read.push(id);
+        localStorage.setItem('fluxo_read_notifications', JSON.stringify(read));
+      }
+    } catch (e) {
+      console.error('Error marking notification as read:', e);
+    }
+  }
+
+  #actualizarBadgeNotifications() {
+    const badge = document.getElementById('badge-notifications');
+    if (!badge) return;
+    const readIds = this.#getReadNotificationIds();
+    const unread = this.#notificacionesMes.filter(n => !readIds.includes(n.id));
+    badge.style.display = unread.length > 0 ? 'block' : 'none';
+  }
+
+  #renderNotificationsDropdown() {
+    const dropdown = document.getElementById('notifications-dropdown');
+    if (!dropdown) return;
+
+    const readIds = this.#getReadNotificationIds();
+    const unread = this.#notificacionesMes.filter(n => !readIds.includes(n.id));
+
+    let bodyHtml = '';
+    if (unread.length === 0) {
+      bodyHtml = '<div style="padding:24px; color:var(--texto-3); text-align:center; font-size:0.85rem;">No hay nuevas notificaciones</div>';
+    } else {
+      bodyHtml = unread.map(n => `
+        <div class="notification-item" data-id="${n.id}">
+          <div class="notification-icon-wrapper ${n.tipo === 'info' ? 'info' : 'ingreso'}">
+            ${App.Icons?.get(n.icono, 'icon-md') || ''}
+          </div>
+          <div class="notification-content">
+            <h4 class="notification-title">${App.Utils.escapeHtml(n.titulo)}</h4>
+            <p class="notification-message">${App.Utils.escapeHtml(n.mensaje)}</p>
+            <div class="notification-amount">${App.Utils.formatearMoneda(n.importe)}</div>
+          </div>
+          <div class="notification-badge-unread"></div>
+        </div>
+      `).join('');
+    }
+
+    dropdown.innerHTML = `
+      <div class="notifications-dropdown-header">
+        <span>Notificaciones</span>
+        <span style="font-size:0.8rem; font-weight:normal; color:var(--texto-2);">${unread.length} pendientes</span>
+      </div>
+      <div class="notifications-dropdown-body">
+        ${bodyHtml}
+      </div>
+      <div class="notifications-dropdown-footer">
+        <button class="btn-notifications-center" id="btn-notifications-center">Centro de notificaciones</button>
+      </div>
+    `;
+
+    // Bind event listeners to notification items
+    dropdown.querySelectorAll('.notification-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = item.dataset.id;
+        this.#markNotificationAsRead(id);
+        App.Toast.success('Notificación marcada como leída');
+        this.#actualizarBadgeNotifications();
+        this.#renderNotificationsDropdown();
+      });
+    });
+
+    // Bind event listener to footer button
+    document.getElementById('btn-notifications-center')?.addEventListener('click', () => {
+      dropdown.classList.remove('open');
+      this.#abrirCentroNotificaciones();
+    });
+  }
+
+  #abrirCentroNotificaciones() {
+    const cuenta = App.Store.cuenta;
+    if (!cuenta) return;
+
+    const m = new App.Modal('modal-notifications');
+    m.open({
+      titulo: 'Centro de Notificaciones',
+      icono: 'info',
+      body: '<div style="padding:40px; text-align:center;"><div class="spinner"></div><p style="margin-top:12px;color:var(--texto-3);">Cargando historial...</p></div>',
+      confirmLabel: '',
+      cancelLabel: 'Cerrar'
+    });
+
+    const cb = m.el.querySelector('.modal-confirm');
+    if (cb) cb.style.display = 'none';
+    const xb = m.el.querySelector('.modal-cancel');
+    if (xb) { xb.classList.replace('btn-ghost', 'btn-outline'); xb.style.borderRadius = 'var(--r)'; }
+
+    const baseMonth = App.Store.mes || new Date().toISOString().substring(0, 7);
+    const [y, mo] = baseMonth.split('-').map(Number);
+    const months = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(y, mo - 1 - i, 1);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      months.push(`${yyyy}-${mm}`);
+    }
+
+    Promise.all(months.map(month => App.API.call('api_getNotificaciones', cuenta, month).catch(() => null)))
+      .then(responses => {
+        let allNotif = [];
+        responses.forEach(res => {
+          if (res && res.success && Array.isArray(res.data)) {
+            allNotif = allNotif.concat(res.data);
+          }
+        });
+
+        // Deduplicate
+        const seen = new Set();
+        allNotif = allNotif.filter(n => {
+          if (seen.has(n.id)) return false;
+          seen.add(n.id);
+          return true;
+        });
+
+        // Sort descending by date
+        allNotif.sort((a, b) => {
+          const dateA = a.fecha || '0000-00-00';
+          const dateB = b.fecha || '0000-00-00';
+          return dateB.localeCompare(dateA);
+        });
+
+        const readIds = this.#getReadNotificationIds();
+
+        let contentHtml = '';
+        if (allNotif.length === 0) {
+          contentHtml = '<div style="padding:24px; color:var(--texto-3); text-align:center;">No hay notificaciones registradas en los últimos 6 meses.</div>';
+        } else {
+          contentHtml = '<div style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; padding-right:4px;">' +
+            allNotif.map(n => {
+              const isRead = readIds.includes(n.id);
+              return `
+                <div class="notification-item ${isRead ? 'read-in-history' : ''}" style="border:1px solid var(--borde); border-radius:var(--r); padding:12px; background:var(--superficie); display:flex; gap:12px; align-items:center; cursor:pointer;" data-id="${n.id}">
+                  <div class="notification-icon-wrapper ${n.tipo === 'info' ? 'info' : 'ingreso'}">
+                    ${App.Icons?.get(n.icono, 'icon-md') || ''}
+                  </div>
+                  <div style="flex-grow:1">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <h4 style="margin:0; font-size:0.9rem; color:var(--texto); font-weight:700;">${App.Utils.escapeHtml(n.titulo)}</h4>
+                      <span style="font-size:0.75rem; color:var(--texto-3);">${App.Utils.formatearFecha(n.fecha)}</span>
+                    </div>
+                    <p style="margin:4px 0 0; font-size:0.8rem; color:var(--texto-2); line-height:1.3;">${App.Utils.escapeHtml(n.mensaje)}</p>
+                    <div style="margin-top:6px; font-weight:600; font-size:0.85rem; color:${n.tipo === 'info' ? 'var(--color-info)' : 'var(--color-success)'}">
+                      ${App.Utils.formatearMoneda(n.importe)}
+                    </div>
+                  </div>
+                  ${!isRead ? '<div class="notification-badge-unread"></div>' : ''}
+                </div>
+              `;
+            }).join('') +
+            '</div>';
+        }
+
+        const bodyEl = m.el.querySelector('.modal-body');
+        if (bodyEl) {
+          bodyEl.innerHTML = contentHtml;
+          bodyEl.querySelectorAll('.notification-item').forEach(item => {
+            item.addEventListener('click', () => {
+              const id = item.dataset.id;
+              const currentRead = this.#getReadNotificationIds();
+              if (!currentRead.includes(id)) {
+                this.#markNotificationAsRead(id);
+                App.Toast.success('Notificación marcada como leída');
+                this.#actualizarBadgeNotifications();
+                item.classList.add('read-in-history');
+                item.querySelector('.notification-badge-unread')?.remove();
+              }
+            });
+          });
+        }
+      })
+      .catch(err => {
+        console.error('Error loading notification history:', err);
+        const bodyEl = m.el.querySelector('.modal-body');
+        if (bodyEl) {
+          bodyEl.innerHTML = `<p class="negativo" style="text-align:center;">Error al cargar el historial: ${App.Utils.escapeHtml(err.message)}</p>`;
+        }
+      });
+  }
+
   #setupNotifications() {
     const btnNotif = document.getElementById('btn-notifications');
-    if (!btnNotif) return;
+    const dropdown = document.getElementById('notifications-dropdown');
+    if (!btnNotif || !dropdown) return;
 
-    btnNotif.addEventListener('click', () => {
-      const m = new App.Modal('modal-notifications');
-      let bodyHtml = '<div style="padding:10px 0; color:var(--texto-3); text-align:center;">No hay notificaciones para este mes.</div>';
-      
-      if (this.#notificacionesMes && this.#notificacionesMes.length > 0) {
-        bodyHtml = '<div style="display:flex; flex-direction:column; gap:12px;">' + 
-          this.#notificacionesMes.map(n => `
-            <div style="display:flex; gap:12px; padding:12px; border-radius:var(--r); background:var(--superficie); border:1px solid var(--borde);">
-              <div style="width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; background: ${n.tipo==='info'?'var(--color-info-bg)':'var(--color-success-bg)'}; color: ${n.tipo==='info'?'var(--color-info)':'var(--color-success)'}">
-                ${App.Icons?.get(n.icono, 'icon-md') || ''}
-              </div>
-              <div style="flex-grow:1">
-                <h4 style="margin:0; font-size:0.9rem; color:var(--texto);">${n.titulo}</h4>
-                <p style="margin:4px 0 0; font-size:0.8rem; color:var(--texto-2);">${n.mensaje}</p>
-                <div style="margin-top:6px; font-weight:600; font-size:0.85rem; color:${n.tipo==='info'?'var(--color-info)':'var(--color-success)'}">
-                  ${App.Utils.formatearMoneda(n.importe)}
-                </div>
-              </div>
-            </div>
-          `).join('') +
-        '</div>';
+    btnNotif.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('credentials-dropdown')?.classList.remove('open');
+      document.getElementById('topbar-avatar')?.setAttribute('aria-expanded', 'false');
+
+      const isOpen = dropdown.classList.toggle('open');
+      if (isOpen) {
+        this.#renderNotificationsDropdown();
       }
+    });
 
-      m.open({
-        titulo: 'Centro de Notificaciones',
-        body: bodyHtml,
-        confirmLabel: '',
-        cancelLabel: 'Cerrar'
-      });
-      // hide confirm btn
-      const cb = m.el.querySelector('.modal-confirm');
-      if (cb) cb.style.display = 'none';
-      const xb = m.el.querySelector('.modal-cancel');
-      if (xb) { xb.classList.replace('btn-ghost', 'btn-outline'); xb.style.borderRadius = 'var(--r)'; }
+    document.addEventListener('click', (e) => {
+      if (!btnNotif.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
     });
   }
 
@@ -698,10 +877,7 @@ class AppInit {
          } else {
            this.#notificacionesMes = [];
          }
-         const badge = document.getElementById('badge-notifications');
-         if (badge) {
-           badge.style.display = this.#notificacionesMes.length > 0 ? 'block' : 'none';
-         }
+         this.#actualizarBadgeNotifications();
       })
       .catch((e) => { console.error('Error notificaciones:', e); });
   }
@@ -764,6 +940,7 @@ class AppInit {
     if (avatar && dropdown) {
       avatar.addEventListener('click', (e) => {
         e.stopPropagation();
+        document.getElementById('notifications-dropdown')?.classList.remove('open');
         const isOpen = dropdown.classList.toggle('open');
         avatar.setAttribute('aria-expanded', isOpen);
       });
