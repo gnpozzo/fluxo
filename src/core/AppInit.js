@@ -266,6 +266,12 @@ class AppInit {
       heroPanel.classList.toggle('hidden', vistaId === 'vista-admin');
     }
 
+    // Mostrar/ocultar saldo card (solo se muestra en el Dashboard)
+    const saldoCard = document.getElementById('dash-saldo-card');
+    if (saldoCard) {
+      saldoCard.classList.toggle('hidden', vistaId !== 'vista-dashboard');
+    }
+
     const moduloId  = this.#tabMap[vistaId];
 
     if (moduloId && App.Modules[moduloId]) {
@@ -406,7 +412,7 @@ class AppInit {
     if (vistaId !== 'vista-dashboard') {
       modules.push({
         id: 'dashboard',
-        label: 'Inicio',
+        label: 'Dashboard',
         vista: 'vista-dashboard',
         color: 'var(--primary)',
         bg: 'var(--primary-tint)',
