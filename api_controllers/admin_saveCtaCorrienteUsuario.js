@@ -19,11 +19,23 @@ export default async function handler(req, res) {
         .from('cta_corriente_usuarios')
         .update({ es_yo: false })
         .neq('id_usuario', payload.id_usuario);
-      if (resetError) throw resetError;
+      if (resetError && (!resetError.message || (!resetError.message.includes('es_yo') && !resetError.message.includes('does not exist')))) {
+        throw resetError;
+      }
     }
     
-    const { data, error } = await supabase.from('cta_corriente_usuarios').upsert(payload).select().single();
-    if (error) throw error;
+    let { data, error } = await supabase.from('cta_corriente_usuarios').upsert(payload).select().single();
+    if (error) {
+      if (error.message && (error.message.includes('es_yo') || error.message.includes('does not exist'))) {
+        const cleanPayload = { ...payload };
+        delete cleanPayload.es_yo;
+        const fallbackRes = await supabase.from('cta_corriente_usuarios').upsert(cleanPayload).select().single();
+        if (fallbackRes.error) throw fallbackRes.error;
+        data = { ...fallbackRes.data, es_yo: false };
+      } else {
+        throw error;
+      }
+    }
     
     return res.status(200).json({ success: true, data, isNew });
   } catch (err) {
