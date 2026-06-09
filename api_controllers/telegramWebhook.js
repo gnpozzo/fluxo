@@ -221,6 +221,11 @@ ${JSON.stringify(subcuentas.map(s => ({ id: s.id_subcuenta, nombre: s.nombre, mo
 
 Fecha de referencia: ${todayStr} (Año-Mes-Día)
 
+VOCABULARIO Y CLASIFICACIÓN CLAVE (MUY IMPORTANTE):
+- "gasto" o "gastos": Se refiere a gastos comunes / movimientos de cuentas principales (medio de pago: efectivo, débito o transferencia). Se clasifica como tipo_registro: "movimiento".
+- "consumo" o "consumos": Se refiere a consumos con tarjeta de crédito. Se clasifica como tipo_registro: "tarjeta".
+- "gasto compartido" o "gastos compartidos": Se refiere a gastos divididos o compartidos con contactos (clearing). Se clasifica como tipo_registro: "cc".
+
 COMPORTAMIENTO DE DIÁLOGO GUIADO (MUY IMPORTANTE):
 1. Si el usuario te indica registrar un movimiento (gasto/ingreso), ahorro, inversión o consumo con tarjeta pero la información está INCOMPLETA, no asumas defaults. Debes responder de forma conversacional indicando opciones del sistema y solicitando lo que falta:
    - Para movimientos (ingreso/egreso común): requiere saber la cuenta principal, si es recurrente o simple, y si desea hacer split (distribuir con otra cuenta principal).
