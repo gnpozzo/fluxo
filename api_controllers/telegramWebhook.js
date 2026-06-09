@@ -74,6 +74,22 @@ async function callGemini(key, modelName, systemInstruction, history, responseMi
   return text;
 }
 
+function getWorkingDayDate(year, month, targetWorkingDay) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let workingDaysCount = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const checkD = new Date(year, month - 1, day);
+    const dayOfWeek = checkD.getDay(); // 0 is Sunday, 6 is Saturday
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDaysCount++;
+      if (workingDaysCount === targetWorkingDay) {
+        return checkD;
+      }
+    }
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -251,13 +267,14 @@ Tipos de registro disponibles:
 - "cc": si cargas un gasto compartido con un contacto.
 - "ahorro": si cargas un depósito o extracción en un chanchito.
 - "inversion": si cargas una compra o venta de activos (inversiones).
+- "recordatorio": si configura, lista o borra recordatorios/notificaciones.
 - "query": si el usuario consulta saldo, cartera, resumen, proyecciones.
 - "update": si modifica o borra un registro previo.
 - "conversational": si falta información o es una charla casual.
 
 Formato de JSON a retornar:
 {
-  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "ahorro" | "inversion" | "query" | "update" | "conversational",
+  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "ahorro" | "inversion" | "recordatorio" | "query" | "update" | "conversational",
   "reply_message": "Respuesta conversacional o pregunta amigable (solo cuando tipo_registro es conversational o query)",
   "buttons": [ // Opcional (solo en tipo_registro: conversational). Matriz de textos para botones nativos. Cada sub-array es una fila de botones en Telegram. Ej: [["Visa", "Amex"], ["Cancelar"]]
     ["Opción A", "Opción B"],
@@ -334,6 +351,17 @@ Estructura de "payload" por "tipo_registro":
     "moneda": "ARS" o "USD",
     "cantidad": número,
     "precio": número
+  }
+- Si tipo_registro es "recordatorio":
+  {
+    "action": "create" | "list" | "delete",
+    "idRecordatorio": "primeros 4 caracteres del ID del recordatorio (ej. 'a7b8', solo si action es delete)",
+    "mensaje": "Mensaje del recordatorio (ej. 'pagar escuela', solo si action es create)",
+    "frecuencia": "UNICA" | "MENSUAL" | "DIAS_HABILES" (solo si action es create),
+    "diaMes": número (1-31, solo si frecuencia es MENSUAL y action es create),
+    "diaHabil": número (1-20, solo si frecuencia es DIAS_HABILES y action es create),
+    "fecha": "YYYY-MM-DD" (solo si frecuencia es UNICA y action es create),
+    "canales": "TELEGRAM" | "APP" | "MAIL" (separados por coma, ej. "TELEGRAM,APP,MAIL", solo si action es create)
   }
 - Si tipo_registro es "query":
   {
@@ -822,6 +850,177 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
           messageId
         );
         return res.status(200).json({ success: false, error: 'Record not found' });
+      }
+    }
+
+    if (parsedResult.tipo_registro === 'recordatorio') {
+      const payload = parsedResult.payload || parsedResult;
+      const { action } = payload;
+
+      if (action === 'create') {
+        const { mensaje, frecuencia, diaMes, diaHabil, canales, fecha } = payload;
+        const defaultAccount = cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        
+        // Calculate next date (fecha_proxima)
+        const [todayY, todayM, todayD] = todayStr.split('-').map(Number);
+        let fechaProxima = null;
+
+        if (frecuencia === 'UNICA') {
+          fechaProxima = fecha || todayStr;
+        } else if (frecuencia === 'MENSUAL') {
+          const targetDay = Number(diaMes) || 1;
+          if (targetDay > todayD) {
+            fechaProxima = `${todayY}-${String(todayM).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+          } else {
+            let nextM = todayM + 1;
+            let nextY = todayY;
+            if (nextM > 12) {
+              nextM = 1;
+              nextY += 1;
+            }
+            fechaProxima = `${nextY}-${String(nextM).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+          }
+        } else if (frecuencia === 'DIAS_HABILES') {
+          const targetWorkingDay = Number(diaHabil) || 5;
+          // Calculate for current month first
+          const currentMonthDate = getWorkingDayDate(todayY, todayM, targetWorkingDay);
+          if (currentMonthDate) {
+            const currentMonthDateStr = currentMonthDate.toISOString().split('T')[0];
+            if (currentMonthDateStr >= todayStr) {
+              fechaProxima = currentMonthDateStr;
+            }
+          }
+          // If not set, calculate for next month
+          if (!fechaProxima) {
+            let nextM = todayM + 1;
+            let nextY = todayY;
+            if (nextM > 12) {
+              nextM = 1;
+              nextY += 1;
+            }
+            const nextMonthDate = getWorkingDayDate(nextY, nextM, targetWorkingDay);
+            if (nextMonthDate) {
+              fechaProxima = nextMonthDate.toISOString().split('T')[0];
+            } else {
+              fechaProxima = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+            }
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('recordatorios')
+          .insert({
+            id_cuenta_principal: defaultAccount,
+            chat_id: String(chatId),
+            mensaje,
+            frecuencia,
+            dia_mes: frecuencia === 'MENSUAL' ? Number(diaMes) : null,
+            dia_habil: frecuencia === 'DIAS_HABILES' ? Number(diaHabil) : null,
+            fecha_proxima: fechaProxima,
+            canales: canales || 'TELEGRAM',
+            activa: true
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        const freqText = frecuencia === 'MENSUAL' 
+          ? `el día ${diaMes} de cada mes` 
+          : frecuencia === 'DIAS_HABILES' 
+            ? `el ${diaHabil}° día hábil de cada mes` 
+            : `una sola vez (el ${fechaProxima})`;
+
+        await sendTelegramMessage(
+          botToken,
+          chatId,
+          `🔔 <b>Recordatorio creado con éxito</b>\n\n` +
+          `📝 Mensaje: "<i>${mensaje}</i>"\n` +
+          `📅 Frecuencia: ${freqText}\n` +
+          `📢 Canales: <code>${canales || 'TELEGRAM'}</code>\n` +
+          `⏭️ Próxima ejecución: <code>${fechaProxima}</code>\n` +
+          `🆔 ID para borrar: <code>${data.id_recordatorio.substring(0, 4)}</code>`,
+          messageId
+        );
+        return res.status(200).json({ success: true, type: 'recordatorio_created' });
+
+      } else if (action === 'list') {
+        const { data: list, error } = await supabase
+          .from('recordatorios')
+          .select('*')
+          .eq('chat_id', String(chatId))
+          .eq('activa', true)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (!list || list.length === 0) {
+          await sendTelegramMessage(
+            botToken,
+            chatId,
+            `🔔 No tienes ningún recordatorio activo configurado.`,
+            messageId
+          );
+          return res.status(200).json({ success: true, type: 'recordatorio_listed_empty' });
+        }
+
+        let msg = `🔔 <b>Tus Recordatorios Activos</b>\n\n`;
+        list.forEach(r => {
+          const idShort = r.id_recordatorio.substring(0, 4);
+          const freqText = r.frecuencia === 'MENSUAL' 
+            ? `el día ${r.dia_mes} de cada mes` 
+            : r.frecuencia === 'DIAS_HABILES' 
+              ? `el ${r.dia_habil}° día hábil de cada mes` 
+              : `única vez (el ${r.fecha_proxima})`;
+
+          msg += `🆔 <code>${idShort}</code>: "<i>${r.mensaje}</i>"\n` +
+                 `   📅 Frecuencia: ${freqText}\n` +
+                 `   📢 Canales: <code>${r.canales}</code>\n` +
+                 `   ⏭️ Próxima fecha: <code>${r.fecha_proxima}</code>\n\n`;
+        });
+
+        msg += `💡 Para eliminar uno, puedes decirme: "<i>Eliminá el recordatorio [ID]</i>" (ej: <code>Eliminá el recordatorio ${list[0].id_recordatorio.substring(0, 4)}</code>).`;
+
+        await sendTelegramMessage(botToken, chatId, msg, messageId);
+        return res.status(200).json({ success: true, type: 'recordatorio_listed' });
+
+      } else if (action === 'delete') {
+        const { idRecordatorio } = payload;
+        if (!idRecordatorio) {
+          await sendTelegramMessage(botToken, chatId, `⚠️ Por favor indica el ID de 4 dígitos del recordatorio a eliminar.`, messageId);
+          return res.status(200).json({ success: false, error: 'No ID provided' });
+        }
+
+        const { data: list, error: selErr } = await supabase
+          .from('recordatorios')
+          .select('*')
+          .eq('chat_id', String(chatId));
+
+        if (selErr) throw selErr;
+
+        const matched = (list || []).filter(r => r.id_recordatorio.toLowerCase().startsWith(idRecordatorio.toLowerCase()));
+
+        if (matched.length === 0) {
+          await sendTelegramMessage(botToken, chatId, `⚠️ No se encontró ningún recordatorio que comience con el ID <code>${idRecordatorio}</code>.`, messageId);
+          return res.status(200).json({ success: false, error: 'Recordatorio not found' });
+        }
+
+        const toDelete = matched[0];
+        const { error: delErr } = await supabase
+          .from('recordatorios')
+          .delete()
+          .eq('id_recordatorio', toDelete.id_recordatorio);
+
+        if (delErr) throw delErr;
+
+        await sendTelegramMessage(
+          botToken,
+          chatId,
+          `🗑️ <b>Recordatorio eliminado con éxito</b>\n\n` +
+          `Se borró: "<i>${toDelete.mensaje}</i>" (ID: <code>${toDelete.id_recordatorio.substring(0, 4)}</code>).`,
+          messageId
+        );
+        return res.status(200).json({ success: true, type: 'recordatorio_deleted' });
       }
     }
 

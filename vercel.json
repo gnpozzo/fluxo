@@ -29,5 +29,11 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api?endpoint=$1" },
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/sendReminders",
+      "schedule": "0 9 * * *"
+    }
   ]
 }
