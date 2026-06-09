@@ -39,6 +39,7 @@ import updateAhorro from '../api_controllers/updateAhorro.js';
 import updateConsumoCC from '../api_controllers/updateConsumoCC.js';
 import updateConsumoTC from '../api_controllers/updateConsumoTC.js';
 import updateMovimiento from '../api_controllers/updateMovimiento.js';
+import telegramWebhook from '../api_controllers/telegramWebhook.js';
 
 
 export default async function handler(req, res) {
@@ -86,6 +87,7 @@ export default async function handler(req, res) {
     case 'updateConsumoCC': return await updateConsumoCC(req, res);
     case 'updateConsumoTC': return await updateConsumoTC(req, res);
     case 'updateMovimiento': return await updateMovimiento(req, res);
+    case 'telegramWebhook': return await telegramWebhook(req, res);
 
     default:
       return res.status(404).json({ success: false, error: 'Endpoint not found: ' + endpoint });

@@ -1,8 +1,13 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import crypto from 'crypto';
 
 function addMonthsSafe(date, months) {
   const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
+  const day = d.getUTCDate();
+  d.setUTCMonth(d.getUTCMonth() + months);
+  if (d.getUTCDate() !== day) {
+    d.setUTCDate(0);
+  }
   return d;
 }
 
@@ -36,8 +41,9 @@ export default async function handler(req, res) {
     const tcRows = [];
     const movRows = [];
     const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
+    const tipo = consumo.tipoConsumo || consumo.tipo;
 
-    if (consumo.tipo === 'SIMPLE') {
+    if (tipo === 'SIMPLE' || tipo === 'COMUN') {
       const idConsumo = crypto.randomUUID();
       const fechaISO = fechaBase.toISOString().split('T')[0];
       tcRows.push({
@@ -61,7 +67,7 @@ export default async function handler(req, res) {
           id_consumo_tarjeta_origen: idConsumo
         });
       }
-    } else if (consumo.tipo === 'CUOTAS') {
+    } else if (tipo === 'CUOTAS') {
       const installmentGroupId = 'INSTL_' + crypto.randomUUID();
       const cuotasARegistrar = (consumo.cuotaTotal - consumo.cuotaActual) + 1;
       for (let i = 0; i < cuotasARegistrar; i++) {
@@ -95,7 +101,7 @@ export default async function handler(req, res) {
           });
         }
       }
-    } else if (consumo.tipo === 'RECURRENTE') {
+    } else if (tipo === 'RECURRENTE') {
       const recurGroupId = 'REC_TC_' + crypto.randomUUID();
       for (let i = 0; i < consumo.periodos; i++) {
         const idConsumo = crypto.randomUUID();

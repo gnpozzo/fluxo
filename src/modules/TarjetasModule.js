@@ -110,12 +110,17 @@ export class TarjetasModule extends BaseModule {
 
     // Store filtered consumos for card selector filtering
     this.#allConsumos = filteredConsumos;
-    this.#selectedTcId = null;
+    
+    // Preserve selected card ID if it remains valid
+    const validCard = this.#tarjetas.some(t => t.id_tarjeta === this.#selectedTcId);
+    if (!validCard) {
+      this.#selectedTcId = null;
+    }
 
     // Build the card selector pills
     this.#renderCardSelector();
 
-    this.#table?.load(filteredConsumos);
+    this.#filterConsumosByCard();
     App.log('TarjetasModule', '_render', `${filteredConsumos.length} consumos (filtered from ${(consumos || []).length})`);
   }
 
@@ -260,8 +265,9 @@ export class TarjetasModule extends BaseModule {
   }
 
   #buildFormHtml(data) {
+    const defaultTcId = data?.id_tarjeta || this.#selectedTcId || '';
     const optsT = this.#tarjetas
-      .map(t => `<option value="${t.id_tarjeta}" ${data?.id_tarjeta === t.id_tarjeta ? 'selected' : ''}>
+      .map(t => `<option value="${t.id_tarjeta}" ${t.id_tarjeta === defaultTcId ? 'selected' : ''}>
         ${App.Utils.escapeHtml(t.nombre)}
       </option>`).join('');
 

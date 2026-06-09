@@ -3,7 +3,11 @@ import crypto from 'crypto';
 
 function addMonthsSafe(date, months) {
   const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
+  const day = d.getUTCDate();
+  d.setUTCMonth(d.getUTCMonth() + months);
+  if (d.getUTCDate() !== day) {
+    d.setUTCDate(0);
+  }
   return d;
 }
 
