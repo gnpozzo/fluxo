@@ -6,7 +6,7 @@ import createAhorro from './createAhorro.js';
 import createInversion from './createInversion.js';
 
 
-async function sendTelegramMessage(token, chatId, text, replyToMessageId = null) {
+async function sendTelegramMessage(token, chatId, text, replyToMessageId = null, replyMarkup = null) {
   const body = {
     chat_id: chatId,
     text: text,
@@ -14,6 +14,9 @@ async function sendTelegramMessage(token, chatId, text, replyToMessageId = null)
   };
   if (replyToMessageId) {
     body.reply_to_message_id = replyToMessageId;
+  }
+  if (replyMarkup) {
+    body.reply_markup = replyMarkup;
   }
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -165,7 +168,7 @@ export default async function handler(req, res) {
       try {
         await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
       } catch (err) {}
-      await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar?', messageId);
+      await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar?', messageId, { remove_keyboard: true });
       return res.status(200).json({ success: true, message: 'Session reset' });
     }
 
@@ -222,7 +225,13 @@ COMPORTAMIENTO DE DIÁLOGO GUIADO (MUY IMPORTANTE):
      - Si es recurrente: pregunta durante cuántos meses.
    - Para ahorros (ahorro): requiere saber el chanchito de destino (subcuenta), cuenta de origen, importe, moneda, y si es un depósito o extracción.
    - Para inversiones (inversion): requiere saber si es compra o venta, ticker, cantidad nominal, precio unitario, moneda (ARS/USD), y cuenta/broker desde donde opera.
-2. Si faltan datos clave, debes devolver el JSON con "tipo_registro": "conversational", listando las opciones de cuentas, tarjetas o chanchitos según el caso, y explicando amigablemente qué falta definir.
+2. Si faltan datos clave, debes devolver el JSON con "tipo_registro": "conversational", explicando amigablemente qué falta definir. Además, DEBES generar una matriz de botones en el campo "buttons" para guiar táctilmente al usuario con las opciones permitidas:
+   - Si preguntas por cuentas: lista las cuentas principales disponibles. Ejemplo: [["Cuenta Personal", "Negocio (Ejemplo)"], ["Cancelar"]]
+   - Si preguntas por tarjetas: lista las tarjetas de crédito disponibles. Ejemplo: [["Visa (Banco Ejemplo)", "Amex (Banco Ejemplo)"], ["Cancelar"]]
+   - Si preguntas por chanchitos: lista las subcuentas de ahorro disponibles. Ejemplo: [["Viaje", "Emergencias"], ["Cancelar"]]
+   - Si preguntas por categorías: lista 3 o 4 categorías de egresos o ingresos sugeridas. Ejemplo: [["Supermercado", "Servicios", "Ocio"], ["Cancelar"]]
+   - Si preguntas por el tipo de consumo/transacción: lista las opciones de tipo. Ejemplo: [["Simple", "Cuotas", "Recurrente"], ["Cancelar"]]
+   - Si preguntas por confirmaciones, splits o recurrentes: usa botones apropiados como [["Sí", "No"], ["Cancelar"]].
 3. Solo cuando tengas todos los datos esenciales, devuelve el JSON estructurado correspondiente.
 
 Tipos de registro disponibles:
@@ -239,6 +248,10 @@ Formato de JSON a retornar:
 {
   "tipo_registro": "movimiento" | "tarjeta" | "cc" | "ahorro" | "inversion" | "query" | "update" | "conversational",
   "reply_message": "Respuesta conversacional o pregunta amigable (solo cuando tipo_registro es conversational o query)",
+  "buttons": [ // Opcional (solo en tipo_registro: conversational). Matriz de textos para botones nativos. Cada sub-array es una fila de botones en Telegram. Ej: [["Visa", "Amex"], ["Cancelar"]]
+    ["Opción A", "Opción B"],
+    ["Cancelar"]
+  ],
   "payload": { ... campos del tipo elegido ... }
 }
 
@@ -374,7 +387,21 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
     // Handle conversational replies (saving state)
     if (parsedResult.tipo_registro === 'conversational') {
       const reply = parsedResult.reply_message || 'Hola, ¿en qué te puedo ayudar hoy?';
-      await sendTelegramMessage(botToken, chatId, reply, messageId);
+      let replyMarkup = null;
+      if (Array.isArray(parsedResult.buttons) && parsedResult.buttons.length > 0) {
+        replyMarkup = {
+          keyboard: parsedResult.buttons.map(row => {
+            if (Array.isArray(row)) {
+              return row.map(btn => ({ text: String(btn) }));
+            } else {
+              return [{ text: String(row) }];
+            }
+          }),
+          resize_keyboard: true,
+          one_time_keyboard: true
+        };
+      }
+      await sendTelegramMessage(botToken, chatId, reply, messageId, replyMarkup);
       
       if (hasSessionTable) {
         history.push({
@@ -871,11 +898,11 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
 
     if (responseStatus === 200 && responseData?.success) {
       const successMsg = `✅ <b>Cargado con éxito</b>\n\n${detailText}`;
-      await sendTelegramMessage(botToken, chatId, successMsg, messageId);
+      await sendTelegramMessage(botToken, chatId, successMsg, messageId, { remove_keyboard: true });
       return res.status(200).json({ success: true, data: responseData });
     } else {
       const errMsg = responseData?.error || 'Error desconocido al insertar en base de datos.';
-      await sendTelegramMessage(botToken, chatId, `❌ <b>Error al cargar transacción</b>\n\n${errMsg}`, messageId);
+      await sendTelegramMessage(botToken, chatId, `❌ <b>Error al cargar transacción</b>\n\n${errMsg}`, messageId, { remove_keyboard: true });
       return res.status(200).json({ success: false, error: errMsg });
     }
   } catch (err) {
