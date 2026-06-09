@@ -179,13 +179,18 @@ export default async function handler(req, res) {
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Support canceling or restarting conversation session
-    if (messageText.toLowerCase() === 'cancelar' || messageText.toLowerCase() === 'reiniciar' || messageText.toLowerCase() === '/cancel') {
+    // Support canceling, restarting or help command session reset
+    const isResetCommand = ['cancelar', 'reiniciar', '/cancel', '/ayuda', '/help', '/start', 'ayuda', 'help', 'tutorial'].includes(messageText.toLowerCase().trim());
+    if (isResetCommand) {
       try {
         await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
       } catch (err) {}
-      await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar?', messageId, { remove_keyboard: true });
-      return res.status(200).json({ success: true, message: 'Session reset' });
+      
+      // If it's a cancel/reset command, send reset message. If it's help/tutorial, let Gemini process it state-free!
+      if (messageText.toLowerCase() === 'cancelar' || messageText.toLowerCase() === 'reiniciar' || messageText.toLowerCase() === '/cancel') {
+        await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar?', messageId, { remove_keyboard: true });
+        return res.status(200).json({ success: true, message: 'Session reset' });
+      }
     }
 
     const [cuentasRes, categoriasRes, tarjetasRes, contactosRes, subcuentasRes] = await Promise.all([
@@ -236,6 +241,29 @@ Subcuentas de ahorro (Chanchitos) disponibles:
 ${JSON.stringify(subcuentas.map(s => ({ id: s.id_subcuenta, nombre: s.nombre, moneda: s.moneda, idCuentaPrincipal: s.id_cuenta_principal })))}
 
 Fecha de referencia: ${todayStr} (Año-Mes-Día)
+
+TUTORIAL Y PREGUNTAS SOBRE LA APP (MANUAL DE USUARIO):
+Si el usuario escribe "/ayuda", "/help", "tutorial", "ayuda", o hace preguntas generales sobre el funcionamiento de la aplicación, debes actuar como un experto en el manual de usuario de Fluxo.
+Responde de manera conversacional, muy estructurada y amigable (tipo_registro: "conversational").
+Aquí está el resumen del manual de usuario para responder preguntas:
+1. Módulo Movimientos: Es el libro contable mensual. Soporta gastos comunes (efectivo/débito/transferencia), gastos en cuotas (se proyectan a futuro de forma automática y finalizan solas) y recurrentes (suscripciones que se repiten mes a mes). Permite carga distribuida (Split) de ingresos entre cuentas con un porcentaje (ej. 70% personal, 30% familiar) sumando máximo 100%. Soporta modificar/eliminar "Solo este movimiento" o "Toda la serie a futuro" al editar series.
+2. Módulo Tarjetas: Permite ver la deuda total de tarjetas de crédito. Aísla qué parte te pertenece a vos y qué parte es de otros presupuestos. Muestra cuotas, débitos y consumos por tarjeta antes del cierre y vencimiento.
+3. Módulo Gastos Compartidos (Cuentas Corrientes/Clearing): Organiza saldos con contactos (ej. "Bichi"). Si pagas algo por otro, indicas el Split (porcentaje) para que el clearing determine quién le debe a quién y saldar la deuda.
+4. Módulo Ahorro (Chanchitos): Subcuentas o bóvedas en pesos (ARS) o dólares (USD) ubicadas físicamente en bancos, brokers o efectivo. Consolida el valor bimonetario neto.
+5. Módulo Inversiones: Sigue el rendimiento del portfolio. Incluye carga de compras/ventas de activos (tickers) y un Monitor Global en tiempo real (Yahoo Finance / data912) que agrupa: Mundo (Índices, UST, Crypto, Commodities), Bonos Soberanos USD (AL30, GD30, etc.), Renta Fija Pesos (LECAPs, BONCAPs), Obligaciones Negociables (ONs), y CEDEARs más operados. También muestra cotizaciones del Dólar MEP, CCL, Blue y Riesgo País.
+6. Barra Superior: Contiene el Selector de Mes, Selector de Entorno Presupuestario (Multi-cuenta: Personal, Familiar, Negocios), switch ARS/USD (conversión bimonetaria global en tiempo real usando el MEP), modo claro/oscuro, campana de notificaciones (alertas de cuotas finales, nuevos consumos y recordatorios activos), y el Panel de Ajustes (ABM de cuentas, tarjetas, categorías, subcuentas y contactos).
+7. Integraciones externas: Dólar y mercados en tiempo real desde dolarapi.com y rendimientos.co (Yahoo Finance + data912).
+8. Comandos y ejemplos del Bot de Telegram:
+   - Registrar Gasto/Ingreso: "gasto de 5000 en super con debito", "ingreso de 120000 sueldo", "gasto mensual de 8000 en netflix", "consumo visa de 30000 en 3 cuotas".
+   - Split de Ingresos: "ingreso de 100000 split 70% cuenta personal y 30% cuenta hogar".
+   - Gastos Compartidos: "gasto de 6000 pagado por mi para Bichi al 50%" o "gasto de 8000 pagado por Juan al 50%".
+   - Ahorros: "depósito de 100 usd en chanchito Viaje desde cuenta personal" o "extracción de 20000 ars de chanchito emergencias".
+   - Inversiones: "compra de 10 nominales de AL30 a 55 usd en broker" o "venta de 5 nominales de GGAL a 3200 ars".
+   - Recordatorios/Alertas: "Todos los meses el 5to dia habil recordame pagar la escuela por telegram y app", "Mostrame mis recordatorios" o "Eliminá el recordatorio [ID_CORTO]".
+   - Consultas de datos: "cuánto gasté este mes en supermercado?", "mostrame últimos movimientos", "saldo de mis chanchitos", "cartera de inversiones", "proyección de la tarjeta".
+   - Modificación/Borrado: "modificá el último gasto de super y poné 4500", "eliminá el de recién".
+
+Si el usuario pide ayuda explícitamente, responde con un tutorial estructurado mostrando los comandos principales y agregando un enlace a la app usando la etiqueta HTML: <a href="${appUrl}"><b>Ir a la App</b></a>. No uses bloques de código markdown, responde directamente en formato de texto enriquecido HTML.
 
 VOCABULARIO Y CLASIFICACIÓN CLAVE (MUY IMPORTANTE):
 - "gasto" o "gastos": Se refiere a gastos comunes / movimientos de cuentas principales (medio de pago: efectivo, débito o transferencia). Se clasifica como tipo_registro: "movimiento".
