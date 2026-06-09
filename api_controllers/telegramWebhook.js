@@ -162,7 +162,9 @@ export default async function handler(req, res) {
 
     // Support canceling or restarting conversation session
     if (messageText.toLowerCase() === 'cancelar' || messageText.toLowerCase() === 'reiniciar' || messageText.toLowerCase() === '/cancel') {
-      await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId)).catch(() => {});
+      try {
+        await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
+      } catch (err) {}
       await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar?', messageId);
       return res.status(200).json({ success: true, message: 'Session reset' });
     }
@@ -379,18 +381,24 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
           role: 'model',
           parts: [{ text: contentText }]
         });
-        await supabase.from('bot_sessions').upsert({
-          chat_id: String(chatId),
-          history: history,
-          updated_at: new Date().toISOString()
-        }).catch(e => console.error('[telegramWebhook session save error]', e.message));
+        try {
+          await supabase.from('bot_sessions').upsert({
+            chat_id: String(chatId),
+            history: history,
+            updated_at: new Date().toISOString()
+          });
+        } catch (e) {
+          console.error('[telegramWebhook session save error]', e.message);
+        }
       }
       return res.status(200).json({ success: true, type: 'conversational' });
     }
 
     // Clear session on successful transactional load, update or query
     if (hasSessionTable) {
-      await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId)).catch(() => {});
+      try {
+        await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
+      } catch (err) {}
     }
 
     // Handle user queries (ida y vuelta / pass info of the app)
