@@ -180,7 +180,7 @@ export default async function handler(req, res) {
 
     // Build instruction prompt for Gemini
     const systemInstruction = `
-Eres un asistente de parsing financiero en español. Tu tarea es extraer la información de transacciones enviadas por el usuario, o clasificar sus preguntas sobre saldos y gastos, y devolver un objeto JSON estructurado que coincida con las APIs de nuestro sistema.
+Eres un asistente de parsing financiero en español. Tu tarea es extraer la información de transacciones enviadas por el usuario, clasificar sus preguntas sobre saldos y gastos, o clasificar sus solicitudes de modificación o eliminación de registros, y devolver un objeto JSON estructurado que coincida con las APIs de nuestro sistema.
 
 A continuación, se presenta la lista de registros activos en la base de datos:
 
@@ -205,7 +205,8 @@ Instrucciones de clasificación:
    - "movimiento": si menciona cargar un gasto común o un ingreso en cuenta.
    - "query": si el usuario está haciendo una pregunta sobre sus finanzas (saldos, gastos del mes, ingresos del mes, últimos movimientos registrados, consumos en tarjetas de crédito, o proyecciones de gastos futuros).
      Ejemplos: "¿Cuánto dinero me queda?", "¿Cuánto gasté en supermercado?", "mostrame los últimos gastos", "cuánto tengo que pagar de tarjeta?", "haceme una proyección de los próximos meses".
-   - "conversational": si no es una carga de datos ni una consulta a sus finanzas, sino un saludo, despedida, agradecimiento, etc.
+   - "update": si el usuario solicita modificar, corregir, editar o eliminar/borrar una transacción cargada previamente (ej: "corregí el monto de nafta a 6000", "modificá el último supermercado a 4000 pesos", "borrá el último gasto de netflix", "eliminar la compra de recién").
+   - "conversational": si no es una carga de datos, consulta ni modificación, sino un saludo, despedida, agradecimiento, etc.
 
 2. Mapeo inteligente de entidades:
    - Categoría: Selecciona el "id" de la categoría que mejor corresponda semánticamente (ej: "comida" -> "Supermercado").
@@ -216,7 +217,7 @@ Instrucciones de clasificación:
 3. Formato de JSON a retornar:
 El JSON devuelto debe tener exactamente esta estructura de campos principales:
 {
-  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "query" | "conversational",
+  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "query" | "update" | "conversational",
   "reply_message": "Una respuesta cordial en español pidiendo más detalles (solo si tipo_registro es conversational)",
   "payload": {
      ... aquí van los campos específicos según el tipo_registro ...
@@ -266,6 +267,19 @@ Estructura del "payload" según el "tipo_registro":
     "idCuenta": "id de la cuenta consultada (UUID, opcional, por defecto usar la predeterminada)",
     "idCategoria": "id de la categoría (UUID, opcional, solo si consulta por una categoría en particular)",
     "mes": "YYYY-MM" (el mes de consulta en formato año-mes. Ejemplo: "este mes" -> "2026-06", "el mes pasado" -> "2026-05")
+  }
+- Si tipo_registro es "update":
+  {
+    "action": "modify" o "delete",
+    "target_table": "movimientos" (para gastos comunes o ingresos) | "consumos_tc" (para consumos con tarjeta de crédito) | "cc_consumos" (para gastos compartidos),
+    "search_term": "palabra clave para buscar la transacción, ej: 'nafta', 'coto', 'netflix'. Dejar vacío si solo dice 'el último' o 'el de recién'",
+    "updates": {
+       // solo los campos a modificar (para acción "modify"):
+       "importe": número (nuevo monto si se solicita cambiar),
+       "descripcion": "nueva descripción si se solicita cambiar",
+       "fecha": "YYYY-MM-DD" (nueva fecha si se solicita cambiar),
+       "idCategoria": "id de la nueva categoría (UUID)"
+    }
   }
 
 IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estructura, sin Markdown (no utilices bloques de código \`\`\`json ni texto adicional).
@@ -484,6 +498,102 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
       
       await sendTelegramMessage(botToken, chatId, answerText, messageId);
       return res.status(200).json({ success: true, type: 'query_answered' });
+    }
+
+    // Handle modification and deletion updates directly
+    if (parsedResult.tipo_registro === 'update') {
+      const payload = parsedResult.payload || parsedResult;
+      const { action, target_table, search_term, updates } = payload;
+      
+      const accountId = cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+      const idColumn = target_table === 'movimientos' 
+        ? 'id_movimiento' 
+        : (target_table === 'consumos_tc' ? 'id_consumo_tarjeta' : 'id_cc_consumo');
+      
+      let catId = null;
+      if (search_term) {
+        const matchedCat = categorias.find(c => c.nombre.toLowerCase().includes(search_term.toLowerCase()));
+        if (matchedCat) {
+          catId = matchedCat.id_categoria;
+        }
+      }
+
+      // Query latest record to modify
+      let query = supabase.from(target_table).select('*');
+      if (target_table === 'movimientos' || target_table === 'cc_consumos') {
+        query = query.eq('id_cuenta_principal', accountId);
+      }
+      
+      if (search_term) {
+        if (catId) {
+          query = query.or(`descripcion.ilike.%${search_term}%,id_categoria.eq.${catId}`);
+        } else {
+          query = query.ilike('descripcion', `%${search_term}%`);
+        }
+      }
+      
+      const { data: rows, error: selErr } = await query.order('fecha', { ascending: false }).limit(1);
+      if (selErr) throw selErr;
+
+      if (rows && rows.length > 0) {
+        const row = rows[0];
+        const rowId = row[idColumn];
+        
+        if (action === 'delete') {
+          const { error: delErr } = await supabase.from(target_table).delete().eq(idColumn, rowId);
+          if (delErr) throw delErr;
+          
+          await sendTelegramMessage(
+            botToken, 
+            chatId, 
+            `🗑️ <b>Eliminado con éxito</b>\n\nSe borró el registro de <b>${row.descripcion}</b> por <code>$${Math.abs(Number(row.importe))}</code> (Fecha: <code>${row.fecha}</code>).`, 
+            messageId
+          );
+          return res.status(200).json({ success: true, type: 'record_deleted' });
+        } else {
+          // Map properties from payload updates
+          const mappedUpdates = {};
+          if (updates.importe !== undefined) mappedUpdates.importe = updates.importe;
+          if (updates.descripcion !== undefined) mappedUpdates.descripcion = updates.descripcion;
+          if (updates.fecha !== undefined) mappedUpdates.fecha = updates.fecha;
+          if (updates.idCategoria !== undefined) mappedUpdates.id_categoria = updates.idCategoria;
+          
+          const { error: updErr } = await supabase.from(target_table).update(mappedUpdates).eq(idColumn, rowId);
+          if (updErr) throw updErr;
+          
+          let changesText = '';
+          if (mappedUpdates.importe !== undefined) {
+            changesText += `💵 Importe: <code>$${Math.abs(Number(row.importe))}</code> ➡️ <code>$${mappedUpdates.importe}</code>\n`;
+          }
+          if (mappedUpdates.descripcion !== undefined) {
+            changesText += `📄 Concepto: "<i>${row.descripcion}</i>" ➡️ "<i>${mappedUpdates.descripcion}</i>"\n`;
+          }
+          if (mappedUpdates.fecha !== undefined) {
+            changesText += `📅 Fecha: <code>${row.fecha}</code> ➡️ <code>${mappedUpdates.fecha}</code>\n`;
+          }
+          if (mappedUpdates.id_categoria !== undefined) {
+            const oldCatName = categorias.find(c => c.id_categoria === row.id_categoria)?.nombre || 'Desconocida';
+            const newCatName = categorias.find(c => c.id_categoria === mappedUpdates.id_categoria)?.nombre || 'Desconocida';
+            changesText += `📂 Categoría: <b>${oldCatName}</b> ➡️ <b>${newCatName}</b>\n`;
+          }
+          
+          await sendTelegramMessage(
+            botToken, 
+            chatId, 
+            `✅ <b>Modificado con éxito</b>\n\nSe actualizó el registro de <b>${mappedUpdates.descripcion || row.descripcion}</b>:\n${changesText}`, 
+            messageId
+          );
+          return res.status(200).json({ success: true, type: 'record_updated' });
+        }
+      } else {
+        await sendTelegramMessage(
+          botToken, 
+          chatId, 
+          `⚠️ No se encontró ningún registro reciente ${search_term ? `que coincida con "${search_term}"` : ''} para modificar o eliminar.`, 
+          messageId
+        );
+        return res.status(200).json({ success: false, error: 'Record not found' });
+      }
     }
 
     // Handle transactional loads
