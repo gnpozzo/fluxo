@@ -7,7 +7,7 @@ async function sendTelegramMessage(token, chatId, text, replyToMessageId = null)
   const body = {
     chat_id: chatId,
     text: text,
-    parse_mode: 'Markdown'
+    parse_mode: 'HTML'
   };
   if (replyToMessageId) {
     body.reply_to_message_id = replyToMessageId;
@@ -218,7 +218,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       return res.status(200).json({ success: false, error: 'GEMINI_API_KEY not configured' });
     }
 
-    const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: {
@@ -303,7 +303,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       const catName = categorias.find(c => c.id_categoria === payload.idCategoria)?.nombre || 'Desconocida';
       const ctaName = cuentas.find(c => c.id_cuenta_principal === payload.idCuenta)?.nombre || 'Desconocida';
       
-      detailText = `📝 *Gasto/Ingreso Común*\n` +
+      detailText = `📝 <b>Gasto/Ingreso Común</b>\n` +
                    `💵 Importe: $${payload.importe}\n` +
                    `📂 Categoría: ${catName}\n` +
                    `💼 Cuenta: ${ctaName}\n` +
@@ -317,7 +317,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       const cuotaInfo = isCuotas ? ` (Cuota ${payload.cuotaActual}/${payload.cuotaTotal})` : '';
       const catName = categorias.find(c => c.id_categoria === payload.idCategoria)?.nombre || 'Desconocida';
       
-      detailText = `💳 *Consumo con Tarjeta*\n` +
+      detailText = `💳 <b>Consumo con Tarjeta</b>\n` +
                    `💵 Importe: $${payload.importe}${cuotaInfo}\n` +
                    `💳 Tarjeta: ${cardName}\n` +
                    `📂 Categoría: ${catName}\n` +
@@ -329,7 +329,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       const contactName = contactos.find(u => u.id_usuario === payload.idUsuario)?.nombre || 'Desconocido';
       const catName = categorias.find(c => c.id_categoria === payload.idCategoria)?.nombre || 'Desconocida';
       
-      detailText = `👥 *Gasto Compartido*\n` +
+      detailText = `👥 <b>Gasto Compartido</b>\n` +
                    `💵 Importe: $${payload.importe}\n` +
                    `👤 Contacto: ${contactName}\n` +
                    `💳 Pagador: ${payload.pagador === 'YO' ? 'Vos' : contactName}\n` +
@@ -345,12 +345,12 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
     }
 
     if (responseStatus === 200 && responseData?.success) {
-      const successMsg = `✅ *Cargado con éxito*\n\n${detailText}`;
+      const successMsg = `✅ <b>Cargado con éxito</b>\n\n${detailText}`;
       await sendTelegramMessage(botToken, chatId, successMsg, messageId);
       return res.status(200).json({ success: true, data: responseData });
     } else {
       const errMsg = responseData?.error || 'Error desconocido al insertar en base de datos.';
-      await sendTelegramMessage(botToken, chatId, `❌ *Error al cargar transacción*\n\n${errMsg}`, messageId);
+      await sendTelegramMessage(botToken, chatId, `❌ <b>Error al cargar transacción</b>\n\n${errMsg}`, messageId);
       return res.status(200).json({ success: false, error: errMsg });
     }
   } catch (err) {
@@ -361,7 +361,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       const chatId = body?.message?.chat?.id;
       const messageId = body?.message?.message_id;
       if (botToken && chatId) {
-        await sendTelegramMessage(botToken, chatId, `❌ *Error interno en el bot*\n\n${err.message}`, messageId);
+        await sendTelegramMessage(botToken, chatId, `❌ <b>Error interno en el bot</b>\n\n<code>${err.message}</code>`, messageId);
       }
     } catch (msgErr) {
       console.error('[telegramWebhook Failed sending error back]', msgErr.message);
