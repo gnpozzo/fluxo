@@ -59,10 +59,69 @@ export default async function handler(req, res) {
       });
     }
 
+    // Fetch active reminders for the account that have APP channel
+    const { data: recordatorios, error: recError } = await supabase
+      .from('recordatorios')
+      .select('*')
+      .eq('id_cuenta_principal', cuenta)
+      .eq('activa', true)
+      .like('canales', '%APP%');
+
+    if (recError) throw recError;
+
+    if (recordatorios && recordatorios.length > 0) {
+      recordatorios.forEach(r => {
+        let computedDateStr = null;
+        if (r.frecuencia === 'UNICA') {
+          if (r.fecha_proxima && r.fecha_proxima.startsWith(trimmed)) {
+            computedDateStr = r.fecha_proxima;
+          }
+        } else if (r.frecuencia === 'MENSUAL') {
+          computedDateStr = `${trimmed}-${String(r.dia_mes || 1).padStart(2, '0')}`;
+        } else if (r.frecuencia === 'DIAS_HABILES') {
+          const targetWorkingDay = r.dia_habil || 5;
+          const matchedDate = getWorkingDayDate(y, m, targetWorkingDay);
+          if (matchedDate) {
+            computedDateStr = matchedDate.toISOString().split('T')[0];
+          } else {
+            computedDateStr = `${trimmed}-01`;
+          }
+        }
+
+        if (computedDateStr) {
+          notificaciones.push({
+            id: r.id_recordatorio + '_' + trimmed,
+            tipo: 'info',
+            icono: 'clock',
+            titulo: 'Recordatorio',
+            mensaje: r.mensaje,
+            importe: 0,
+            fecha: computedDateStr
+          });
+        }
+      });
+    }
+
     return res.status(200).json({ success: true, data: notificaciones });
   } catch (err) {
     console.error('[API -> getNotificaciones Error]', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
+}
+
+function getWorkingDayDate(year, month, targetWorkingDay) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let workingDaysCount = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const checkD = new Date(year, month - 1, day);
+    const dayOfWeek = checkD.getDay(); // 0 is Sunday, 6 is Saturday
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDaysCount++;
+      if (workingDaysCount === targetWorkingDay) {
+        return checkD;
+      }
+    }
+  }
+  return null;
 }
 

@@ -45,9 +45,11 @@ export default async function handler(req, res) {
     const sentIds = [];
 
     for (const r of (reminders || [])) {
-      // 1. Send Telegram Message
-      const formattedMsg = `🔔 <b>Recordatorio Financiero</b>\n\n${r.mensaje}`;
-      await sendTelegramMessage(botToken, r.chat_id, formattedMsg);
+      // 1. Send Telegram Message if TELEGRAM channel is configured
+      if (r.canales && r.canales.toUpperCase().includes('TELEGRAM')) {
+        const formattedMsg = `🔔 <b>Recordatorio Financiero</b>\n\n${r.mensaje}`;
+        await sendTelegramMessage(botToken, r.chat_id, formattedMsg);
+      }
 
       // 2. Calculate next execution date
       let nextDate = null;
