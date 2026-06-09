@@ -335,7 +335,7 @@ Estructura de "payload" por "tipo_registro":
   {
     "action": "modify" o "delete",
     "target_table": "movimientos" | "consumos_tc" | "cc_consumos",
-    "search_term": "búsqueda por descripción",
+    "search_term": "búsqueda por descripción (dejar vacío o null si se refiere al último de recién, el último cargado, o el de recién)",
     "updates": { ... campos modificables ... }
   }
 
@@ -717,7 +717,23 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
         query = query.eq('id_cuenta_principal', accountId);
       }
       
+      let isLastTerm = false;
       if (search_term) {
+        const cleanTerm = search_term.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const lastPhrases = [
+          'ultimo', 'el ultimo', 'la ultima', 'la de recien', 'el de recien', 
+          'recien', 'ultimo gasto', 'ultima transaccion', 'el que acabo de cargar', 
+          'el de recién', 'último', 'recién', 'el que acabo de subir', 'ultimo consumo',
+          'ultimo gasto cargado'
+        ];
+        if (lastPhrases.includes(cleanTerm) || cleanTerm.includes('ultimo') || cleanTerm.includes('recien') || cleanTerm === '') {
+          isLastTerm = true;
+        }
+      } else {
+        isLastTerm = true;
+      }
+
+      if (search_term && !isLastTerm) {
         if (catId) {
           query = query.or(`descripcion.ilike.%${search_term}%,id_categoria.eq.${catId}`);
         } else {
@@ -725,7 +741,17 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
         }
       }
       
-      const { data: rows, error: selErr } = await query.order('fecha', { ascending: false }).limit(1);
+      let resultQuery = query.order('created_at', { ascending: false }).limit(1);
+      let { data: rows, error: selErr } = await resultQuery;
+      
+      if (selErr) {
+        console.warn('[telegramWebhook] order by created_at failed, falling back to fecha', selErr.message);
+        resultQuery = query.order('fecha', { ascending: false }).limit(1);
+        const fbRes = await resultQuery;
+        rows = fbRes.data;
+        selErr = fbRes.error;
+      }
+      
       if (selErr) throw selErr;
 
       if (rows && rows.length > 0) {
