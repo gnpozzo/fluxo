@@ -6,7 +6,7 @@
 
 CREATE TABLE IF NOT EXISTS public.recordatorios (
     id_recordatorio UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_cuenta_principal UUID REFERENCES public.cuentas_principales(id_cuenta_principal) ON DELETE CASCADE,
+    id_cuenta_principal TEXT REFERENCES public.cuentas_principales(id_cuenta_principal) ON DELETE CASCADE,
     chat_id TEXT NOT NULL,
     mensaje TEXT NOT NULL,
     frecuencia TEXT NOT NULL DEFAULT 'MENSUAL', -- 'UNICA', 'MENSUAL', 'DIAS_HABILES'
