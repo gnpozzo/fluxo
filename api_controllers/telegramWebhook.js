@@ -2,6 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import createMovimiento from './createMovimiento.js';
 import createConsumoTC from './createConsumoTC.js';
 import createConsumoCC from './createConsumoCC.js';
+import createAhorro from './createAhorro.js';
+import createInversion from './createInversion.js';
+
 
 async function sendTelegramMessage(token, chatId, text, replyToMessageId = null) {
   const body = {
@@ -27,19 +30,15 @@ async function sendTelegramMessage(token, chatId, text, replyToMessageId = null)
   }
 }
 
-async function callGemini(key, modelName, systemInstruction, promptText, responseMimeType = null) {
+async function callGemini(key, modelName, systemInstruction, history, responseMimeType = null) {
   const payload = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: (systemInstruction ? systemInstruction + '\n\n' : '') + promptText
-          }
-        ]
-      }
-    ]
+    contents: history
   };
+  if (systemInstruction) {
+    payload.systemInstruction = {
+      parts: [{ text: systemInstruction }]
+    };
+  }
   if (responseMimeType) {
     payload.generationConfig = { responseMimeType };
   }
@@ -152,19 +151,28 @@ export default async function handler(req, res) {
     // Fetch context from Supabase (cards, categories, accounts, contacts)
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
     
-    if (!supabaseUrl || !serviceKey) {
-      await sendTelegramMessage(botToken, chatId, '⚠️ Error de configuración: Supabase no configurado.', messageId);
-      return res.status(200).json({ success: false, error: 'Supabase configs missing' });
+    if (!supabaseUrl || !serviceKey || !geminiKey) {
+      await sendTelegramMessage(botToken, chatId, '⚠️ Error de configuración: Supabase o Gemini no configurado.', messageId);
+      return res.status(200).json({ success: false, error: 'Configs missing' });
     }
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const [cuentasRes, categoriasRes, tarjetasRes, contactosRes] = await Promise.all([
+    // Support canceling or restarting conversation session
+    if (messageText.toLowerCase() === 'cancelar' || messageText.toLowerCase() === 'reiniciar' || messageText.toLowerCase() === '/cancel') {
+      await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId)).catch(() => {});
+      await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar?', messageId);
+      return res.status(200).json({ success: true, message: 'Session reset' });
+    }
+
+    const [cuentasRes, categoriasRes, tarjetasRes, contactosRes, subcuentasRes] = await Promise.all([
       supabase.from('cuentas_principales').select('id_cuenta_principal,nombre,moneda_principal,es_predeterminada').eq('activa', true),
       supabase.from('categorias').select('id_categoria,nombre,tipo_mov').eq('activa', true),
       supabase.from('tarjetas').select('id_tarjeta,nombre,banco,ultimos_4_digitos,id_cuenta_principal').eq('activa', true),
-      supabase.from('cta_corriente_usuarios').select('id_usuario,nombre')
+      supabase.from('cta_corriente_usuarios').select('id_usuario,nombre'),
+      supabase.from('ahorro_subcuentas').select('id_subcuenta,nombre,moneda,id_cuenta_principal')
     ]);
 
     if (cuentasRes.error || categoriasRes.error || tarjetasRes.error || contactosRes.error) {
@@ -175,12 +183,13 @@ export default async function handler(req, res) {
     const categorias = categoriasRes.data || [];
     const tarjetas = tarjetasRes.data || [];
     const contactos = contactosRes.data || [];
+    const subcuentas = subcuentasRes?.data || [];
 
     const todayStr = new Date().toISOString().split('T')[0];
 
     // Build instruction prompt for Gemini
     const systemInstruction = `
-Eres un asistente de parsing financiero en español. Tu tarea es extraer la información de transacciones enviadas por el usuario, clasificar sus preguntas sobre saldos y gastos, o clasificar sus solicitudes de modificación o eliminación de registros, y devolver un objeto JSON estructurado que coincida con las APIs de nuestro sistema.
+Eres un asistente de conversación y carga de transacciones financieras en español. Tu tarea es guiar al usuario paso a paso para completar la carga de gastos, ingresos, consumos en tarjetas de crédito, gastos compartidos (CC), ahorros o inversiones, u ofrecer información de la base de datos de manera amigable.
 
 A continuación, se presenta la lista de registros activos en la base de datos:
 
@@ -196,120 +205,192 @@ ${JSON.stringify(tarjetas.map(t => ({ id: t.id_tarjeta, nombre: t.nombre, banco:
 Contactos (cuenta corriente) disponibles:
 ${JSON.stringify(contactos.map(u => ({ id: u.id_usuario, nombre: u.nombre })))}
 
-Fecha actual de referencia: ${todayStr} (Año-Mes-Día)
+Subcuentas de ahorro (Chanchitos) disponibles:
+${JSON.stringify(subcuentas.map(s => ({ id: s.id_subcuenta, nombre: s.nombre, moneda: s.moneda, idCuentaPrincipal: s.id_cuenta_principal })))}
 
-Instrucciones de clasificación:
-1. Determina el "tipo_registro" de la transacción o consulta:
-   - "tarjeta": si menciona cargar un consumo en tarjeta de crédito.
-   - "cc": si menciona cargar un gasto compartido.
-   - "movimiento": si menciona cargar un gasto común o un ingreso en cuenta.
-   - "query": si el usuario está haciendo una pregunta sobre sus finanzas (saldos, gastos del mes, ingresos del mes, últimos movimientos registrados, consumos en tarjetas de crédito, o proyecciones de gastos futuros).
-     Ejemplos: "¿Cuánto dinero me queda?", "¿Cuánto gasté en supermercado?", "mostrame los últimos gastos", "cuánto tengo que pagar de tarjeta?", "haceme una proyección de los próximos meses".
-   - "update": si el usuario solicita modificar, corregir, editar o eliminar/borrar una transacción cargada previamente (ej: "corregí el monto de nafta a 6000", "modificá el último supermercado a 4000 pesos", "borrá el último gasto de netflix", "eliminar la compra de recién").
-   - "conversational": si no es una carga de datos, consulta ni modificación, sino un saludo, despedida, agradecimiento, etc.
+Fecha de referencia: ${todayStr} (Año-Mes-Día)
 
-2. Mapeo inteligente de entidades:
-   - Categoría: Selecciona el "id" de la categoría que mejor corresponda semánticamente (ej: "comida" -> "Supermercado").
-   - Tarjeta: Selecciona el "id" de la tarjeta si es un consumo de tarjeta.
-   - Cuenta: Selecciona el "id" de la cuenta. Si no se especifica cuál, selecciona el ID de la cuenta marcada como predeterminada ("predeterminada": true), o la primera.
-   - Contacto: Para transacciones tipo "cc", mapea al "id" del contacto.
+COMPORTAMIENTO DE DIÁLOGO GUIADO (MUY IMPORTANTE):
+1. Si el usuario te indica registrar un movimiento (gasto/ingreso), ahorro, inversión o consumo con tarjeta pero la información está INCOMPLETA, no asumas defaults. Debes responder de forma conversacional indicando opciones del sistema y solicitando lo que falta:
+   - Para movimientos (ingreso/egreso común): requiere saber la cuenta principal, si es recurrente o simple, y si desea hacer split (distribuir con otra cuenta principal).
+     - Si es recurrente: pregunta frecuencia (MENSUAL, BIMESTRAL, TRIMESTRAL, SEMESTRAL, ANUAL) y períodos (cuántos meses/ciclos).
+     - Si desea hacer split: pregunta con qué cuenta principal desea hacer split y en qué porcentaje.
+   - Para consumos de tarjeta de crédito (tarjeta): requiere saber qué tarjeta, si es en 1 pago, cuotas o recurrente.
+     - Si es en cuotas: pregunta en cuántas cuotas.
+     - Si es recurrente: pregunta durante cuántos meses.
+   - Para ahorros (ahorro): requiere saber el chanchito de destino (subcuenta), cuenta de origen, importe, moneda, y si es un depósito o extracción.
+   - Para inversiones (inversion): requiere saber si es compra o venta, ticker, cantidad nominal, precio unitario, moneda (ARS/USD), y cuenta/broker desde donde opera.
+2. Si faltan datos clave, debes devolver el JSON con "tipo_registro": "conversational", listando las opciones de cuentas, tarjetas o chanchitos según el caso, y explicando amigablemente qué falta definir.
+3. Solo cuando tengas todos los datos esenciales, devuelve el JSON estructurado correspondiente.
 
-3. Formato de JSON a retornar:
-El JSON devuelto debe tener exactamente esta estructura de campos principales:
+Tipos de registro disponibles:
+- "movimiento": si cargas un ingreso/egreso de cuenta principal.
+- "tarjeta": si cargas un consumo en tarjeta de crédito.
+- "cc": si cargas un gasto compartido con un contacto.
+- "ahorro": si cargas un depósito o extracción en un chanchito.
+- "inversion": si cargas una compra o venta de activos (inversiones).
+- "query": si el usuario consulta saldo, cartera, resumen, proyecciones.
+- "update": si modifica o borra un registro previo.
+- "conversational": si falta información o es una charla casual.
+
+Formato de JSON a retornar:
 {
-  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "query" | "update" | "conversational",
-  "reply_message": "Una respuesta cordial en español pidiendo más detalles (solo si tipo_registro es conversational)",
-  "payload": {
-     ... aquí van los campos específicos según el tipo_registro ...
-  }
+  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "ahorro" | "inversion" | "query" | "update" | "conversational",
+  "reply_message": "Respuesta conversacional o pregunta amigable (solo cuando tipo_registro es conversational o query)",
+  "payload": { ... campos del tipo elegido ... }
 }
 
-Estructura del "payload" según el "tipo_registro":
+Estructura de "payload" por "tipo_registro":
 - Si tipo_registro es "movimiento":
   {
-    "idCuenta": "id de la cuenta elegida (UUID)",
-    "fecha": "fecha de la transacción en formato YYYY-MM-DD",
-    "idCategoria": "id de la categoría elegida (UUID)",
+    "idCuenta": "UUID de la cuenta principal",
+    "fecha": "YYYY-MM-DD",
+    "idCategoria": "UUID de la categoría",
     "tipo": "EGRESO" o "INGRESO",
-    "descripcion": "Descripción concisa del gasto/ingreso",
-    "importe": número (monto total de la transacción),
+    "descripcion": "Detalle conciso",
+    "importe": número (monto total),
     "medioPago": "Efectivo", "Débito", "Transferencia" u "Otro",
-    "tipoConsumo": "SIMPLE"
+    "tipoConsumo": "SIMPLE" | "RECURRENTE" | "CUOTAS",
+    "frecuencia": "MENSUAL" | "BIMESTRAL" | "TRIMESTRAL" | "SEMESTRAL" | "ANUAL", // Solo si es RECURRENTE
+    "periodos": número (total de repeticiones, ej: 12), // Solo si es RECURRENTE
+    "cuotaActual": número, // Solo si es CUOTAS
+    "cuotaTotal": número, // Solo si es CUOTAS
+    "esSplit": boolean (si desea distribuir),
+    "splitDestinos": [ // Solo si esSplit es true
+      { "cuenta": "UUID de la cuenta destino", "pct": número (porcentaje de 1 a 100) }
+    ]
   }
 - Si tipo_registro es "tarjeta":
   {
-    "idTarjeta": "id de la tarjeta elegida (UUID)",
-    "idCuentaImputar": "idCuentaImputar de la tarjeta elegida (UUID)",
-    "fecha": "fecha de la transacción en formato YYYY-MM-DD",
-    "idCategoria": "id de la categoría elegida (UUID)",
-    "descripcion": "Descripción concisa",
-    "importe": número (monto total o de la cuota según corresponda),
-    "tipoConsumo": "COMUN" o "CUOTAS",
+    "idTarjeta": "UUID de la tarjeta",
+    "idCuentaImputar": "UUID de la cuenta a imputar el pago de la tarjeta",
+    "fecha": "YYYY-MM-DD",
+    "idCategoria": "UUID de la categoría",
+    "descripcion": "Detalle conciso",
+    "importe": número,
+    "tipoConsumo": "SIMPLE" | "CUOTAS" | "RECURRENTE",
     "cuotaActual": 1, // Si es en cuotas
-    "cuotaTotal": cantidad total de cuotas, // Si es en cuotas (ej: "en 3 cuotas" -> cuotaTotal: 3, cuotaActual: 1).
+    "cuotaTotal": número, // Si es en cuotas
+    "periodos": número, // Si es recurrente
     "imputar": true
   }
 - Si tipo_registro es "cc":
   {
-    "idCuenta": "id de la cuenta predeterminada (UUID)",
-    "idCategoria": "id de la categoría elegida (UUID)",
-    "idUsuario": "id del contacto elegido (UUID)",
-    "fecha": "fecha de la transacción en formato YYYY-MM-DD",
-    "descripcion": "Descripción concisa",
-    "importe": número (monto total del gasto compartido),
-    "pagador": "YO" (si lo pagó el usuario) o "CONTACTO" (si lo pagó el contacto),
-    "porcentajeImputado": 50, // porcentaje que asume el usuario. Por defecto 50 si no se indica.
-    "tipo": "SIMPLE"
+    "idCuenta": "UUID de la cuenta principal",
+    "idCategoria": "UUID de la categoría",
+    "idUsuario": "UUID del contacto",
+    "fecha": "YYYY-MM-DD",
+    "descripcion": "Detalle",
+    "importe": número,
+    "pagador": "YO" | "CONTACTO",
+    "porcentajeImputado": 50,
+    "tipo": "SIMPLE" | "CUOTAS" | "RECURRENTE",
+    "cuotaActual": 1, // Si es en cuotas
+    "cuotaTotal": número, // Si es en cuotas
+    "periodos": número // Si es recurrente
+  }
+- Si tipo_registro es "ahorro":
+  {
+    "idCuenta": "UUID de la cuenta principal origen/destino",
+    "idSubcuenta": "UUID del chanchito de ahorro",
+    "fecha": "YYYY-MM-DD",
+    "tipo_transfer": "DEPOSITO" o "EXTRACCION",
+    "moneda": "ARS" o "USD",
+    "importe": número,
+    "descripcion": "Detalle opcional"
+  }
+- Si tipo_registro es "inversion":
+  {
+    "idCuenta": "UUID de la cuenta principal/broker",
+    "tipoOp": "COMPRA" o "VENTA",
+    "fecha": "YYYY-MM-DD",
+    "ticker": "Ticker del activo (ej. GGAL, AL30)",
+    "moneda": "ARS" o "USD",
+    "cantidad": número,
+    "precio": número
   }
 - Si tipo_registro es "query":
   {
-    "intent": "resumen_mes" (para preguntas generales de saldo, gastos o ingresos del mes) | "gastos_categoria" (para gastos en una categoría específica) | "ultimos_movimientos" (para ver los últimos registros) | "info_tarjetas" (para ver consumos en tarjetas de crédito) | "proyeccion" (para proyecciones de gastos futuros de los próximos meses),
-    "idCuenta": "id de la cuenta consultada (UUID, opcional, por defecto usar la predeterminada)",
-    "idCategoria": "id de la categoría (UUID, opcional, solo si consulta por una categoría en particular)",
-    "mes": "YYYY-MM" (el mes de consulta en formato año-mes. Ejemplo: "este mes" -> "2026-06", "el mes pasado" -> "2026-05")
+    "intent": "resumen_mes" | "gastos_categoria" | "ultimos_movimientos" | "info_tarjetas" | "proyeccion" | "inversiones" | "ahorros",
+    "idCuenta": "UUID de la cuenta (opcional)",
+    "idCategoria": "UUID de la categoría (opcional)",
+    "mes": "YYYY-MM" (opcional)
   }
 - Si tipo_registro es "update":
   {
     "action": "modify" o "delete",
-    "target_table": "movimientos" (para gastos comunes o ingresos) | "consumos_tc" (para consumos con tarjeta de crédito) | "cc_consumos" (para gastos compartidos),
-    "search_term": "palabra clave para buscar la transacción, ej: 'nafta', 'coto', 'netflix'. Dejar vacío si solo dice 'el último' o 'el de recién'",
-    "updates": {
-       // solo los campos a modificar (para acción "modify"):
-       "importe": número (nuevo monto si se solicita cambiar),
-       "descripcion": "nueva descripción si se solicita cambiar",
-       "fecha": "YYYY-MM-DD" (nueva fecha si se solicita cambiar),
-       "idCategoria": "id de la nueva categoría (UUID)"
-    }
+    "target_table": "movimientos" | "consumos_tc" | "cc_consumos",
+    "search_term": "búsqueda por descripción",
+    "updates": { ... campos modificables ... }
   }
 
-IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estructura, sin Markdown (no utilices bloques de código \`\`\`json ni texto adicional).
+IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses bloques de código ni texto adicional).
 `;
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) {
-      await sendTelegramMessage(botToken, chatId, '⚠️ Error: La API Key de Gemini no está configurada.', messageId);
-      return res.status(200).json({ success: false, error: 'GEMINI_API_KEY not configured' });
+    // 3. Retrieve or initiate Bot Session History
+    let history = [];
+    let hasSessionTable = true;
+    try {
+      const { data: sessionData, error: sErr } = await supabase
+        .from('bot_sessions')
+        .select('history, updated_at')
+        .eq('chat_id', String(chatId))
+        .maybeSingle();
+
+      if (!sErr && sessionData) {
+        const lastUpdate = new Date(sessionData.updated_at);
+        const diffMs = new Date() - lastUpdate;
+        // Inactivity timeout: 20 minutes
+        if (diffMs < 20 * 60 * 1000) {
+          history = sessionData.history || [];
+        }
+      }
+    } catch (e) {
+      console.warn('[telegramWebhook] bot_sessions table does not exist. Running statelessly.');
+      hasSessionTable = false;
     }
 
+    // Append current message
+    history.push({
+      role: 'user',
+      parts: [{ text: messageText }]
+    });
+
+    // Call Gemini with the conversation history
     const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-    
-    // Call Gemini to classify and parse input
-    const contentText = await callGemini(geminiKey, modelName, systemInstruction, `Mensaje del usuario: "${messageText}"`, 'application/json');
+    const contentText = await callGemini(geminiKey, modelName, systemInstruction, history, 'application/json');
 
     let parsedResult;
     try {
       parsedResult = JSON.parse(contentText);
     } catch (e) {
       console.error('[Gemini Parsing Error]', contentText);
-      await sendTelegramMessage(botToken, chatId, '❌ Error: No se pudo interpretar la respuesta de la IA. Intenta reformular el mensaje.', messageId);
+      await sendTelegramMessage(botToken, chatId, '❌ Error: No se pudo interpretar la respuesta de la IA. Intenta de nuevo.', messageId);
       return res.status(200).json({ success: false, error: 'JSON parse error' });
     }
 
-    // Handle conversational replies
+    // Handle conversational replies (saving state)
     if (parsedResult.tipo_registro === 'conversational') {
       const reply = parsedResult.reply_message || 'Hola, ¿en qué te puedo ayudar hoy?';
       await sendTelegramMessage(botToken, chatId, reply, messageId);
+      
+      if (hasSessionTable) {
+        history.push({
+          role: 'model',
+          parts: [{ text: contentText }]
+        });
+        await supabase.from('bot_sessions').upsert({
+          chat_id: String(chatId),
+          history: history,
+          updated_at: new Date().toISOString()
+        }).catch(e => console.error('[telegramWebhook session save error]', e.message));
+      }
       return res.status(200).json({ success: true, type: 'conversational' });
+    }
+
+    // Clear session on successful transactional load, update or query
+    if (hasSessionTable) {
+      await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId)).catch(() => {});
     }
 
     // Handle user queries (ida y vuelta / pass info of the app)
@@ -322,7 +403,6 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estruct
         const month = payload.mes || todayStr.substring(0, 7);
         const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
         
-        // Calculate safe date ranges
         const parts = month.split('-');
         const y = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10);
@@ -346,7 +426,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estruct
 - Cuenta consultada: ${cuentas.find(c => c.id_cuenta_principal === accountId)?.nombre || 'Principal'}
 - Total Ingresos: $${totalIngresos}
 - Total Egresos: $${totalEgresos}
-- Balance Neto (Ahorro o Déficit): $${totalIngresos - totalEgresos}
+- Balance Neto: $${totalIngresos - totalEgresos}
 - Listado de movimientos del mes: ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, monto: m.importe, tipo: m.tipo_mov, cat: m.categorias?.nombre })))}`;
         
       } else if (intent === 'gastos_categoria') {
@@ -354,7 +434,6 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estruct
         const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
         const catId = payload.idCategoria;
         
-        // Calculate safe date ranges
         const parts = month.split('-');
         const y = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10);
@@ -441,7 +520,6 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
         const y = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10);
         
-        // Calculate limit for next 3 months
         const endM = m + 4;
         const endY = endM > 12 ? y + 1 : y;
         const endMAdjusted = endM > 12 ? endM - 12 : endM;
@@ -484,16 +562,97 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
 - Movimientos de Egreso agendados para próximos meses: ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, monto: m.importe, cat: m.categorias?.nombre })))}
 - Cuotas y consumos con tarjeta agendados para próximos meses: ${JSON.stringify(consumos.map(c => ({ tarjeta: c.tarjetas?.nombre, fecha: c.fecha, desc: c.descripcion, monto: c.importe, cuota: c.cuota_actual ? `${c.cuota_actual}/${c.cuota_total}` : '1/1' })))}`;
         
+      } else if (intent === 'inversiones') {
+        const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        
+        const { data: invMovs, error: invErr } = await supabase
+          .from('inversiones_movimientos')
+          .select('*, movimientos!inner(id_cuenta_principal, descripcion, fecha)')
+          .eq('movimientos.id_cuenta_principal', accountId);
+          
+        if (invErr) throw invErr;
+        
+        const holdings = {};
+        (invMovs || []).forEach(m => {
+          const t = m.ticker.toUpperCase();
+          if (!holdings[t]) {
+            holdings[t] = { cantidad: 0, invertidoArs: 0, moneda: m.moneda };
+          }
+          if (m.tipo_operacion === 'COMPRA') {
+            holdings[t].cantidad += Number(m.cantidad_nominales);
+            holdings[t].invertidoArs += Number(m.importe_total_ars);
+          } else {
+            holdings[t].cantidad -= Number(m.cantidad_nominales);
+            holdings[t].invertidoArs -= Number(m.importe_total_ars);
+          }
+        });
+        
+        const activeHoldings = Object.entries(holdings)
+          .filter(([_, h]) => h.cantidad > 0.0001)
+          .map(([ticker, h]) => ({
+            ticker,
+            cantidad: h.cantidad,
+            promedioCompra: h.cantidad > 0 ? (h.invertidoArs / h.cantidad) : 0,
+            moneda: h.moneda,
+            totalInvertidoArs: h.invertidoArs
+          }));
+          
+        fetchedDataContext = `Datos reales de inversiones en cartera para la cuenta "${cuentas.find(c => c.id_cuenta_principal === accountId)?.nombre || 'Principal'}":
+- Posiciones activas: ${JSON.stringify(activeHoldings)}
+- Historial reciente de operaciones de inversión: ${JSON.stringify((invMovs || []).slice(-10).map(m => ({ fecha: m.fecha, ticker: m.ticker, op: m.tipo_operacion, cant: m.cantidad_nominales, precio: m.precio_compra, moneda: m.moneda, totalArs: m.importe_total_ars })))}`;
+
+      } else if (intent === 'ahorros') {
+        const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        
+        const { data: subcuentasList, error: scErr } = await supabase
+          .from('ahorro_subcuentas')
+          .select('*')
+          .eq('id_cuenta_principal', accountId);
+          
+        if (scErr) throw scErr;
+        
+        const subIds = (subcuentasList || []).map(s => s.id_subcuenta);
+        let transferencias = [];
+        if (subIds.length > 0) {
+          const { data: tfData, error: tfErr } = await supabase
+            .from('ahorros')
+            .select('*')
+            .in('id_subcuenta', subIds);
+          if (tfErr) throw tfErr;
+          transferencias = tfData || [];
+        }
+        
+        const balances = (subcuentasList || []).map(sc => {
+          let saldo = 0;
+          transferencias.forEach(t => {
+            if (t.id_subcuenta === sc.id_subcuenta) {
+              saldo += t.tipo_transfer === 'DEPOSITO' ? Number(t.importe || 0) : -Number(t.importe || 0);
+            }
+          });
+          return {
+            nombre: sc.nombre,
+            moneda: sc.moneda,
+            saldo: saldo
+          };
+        });
+        
+        fetchedDataContext = `Saldos actuales de tus chanchitos de ahorro en la cuenta "${cuentas.find(c => c.id_cuenta_principal === accountId)?.nombre || 'Principal'}":
+- Detalle de ahorros por subcuenta: ${JSON.stringify(balances)}`;
+
       } else {
         fetchedDataContext = `No se pudo determinar el tipo de consulta.`;
       }
       
-      // Call Gemini a second time to formulate a natural language response
       const answerText = await callGemini(
         geminiKey, 
         modelName, 
         null, 
-        `El usuario de Telegram preguntó: "${messageText}".\n\nAquí tienes la información real extraída de la base de datos de Supabase:\n\n${fetchedDataContext}\n\nResponde directamente al usuario de manera clara, amigable y resumida en español. Utiliza viñetas y etiquetas HTML (como <b> para negritas y <code> para montos de dinero o fechas) para formatear tu respuesta. No uses bloques de código markdown.`
+        [{
+          role: 'user',
+          parts: [{
+            text: `El usuario de Telegram preguntó: "${messageText}".\n\nAquí tienes la información real extraída de la base de datos de Supabase:\n\n${fetchedDataContext}\n\nResponde directamente al usuario de manera clara, amigable y resumida en español. Utiliza viñetas y etiquetas HTML (como <b> para negritas y <code> para montos de dinero o fechas) para formatear tu respuesta. No uses bloques de código markdown.`
+          }]
+        }]
       );
       
       await sendTelegramMessage(botToken, chatId, answerText, messageId);
@@ -518,7 +677,6 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
         }
       }
 
-      // Query latest record to modify
       let query = supabase.from(target_table).select('*');
       if (target_table === 'movimientos' || target_table === 'cc_consumos') {
         query = query.eq('id_cuenta_principal', accountId);
@@ -551,7 +709,6 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
           );
           return res.status(200).json({ success: true, type: 'record_deleted' });
         } else {
-          // Map properties from payload updates
           const mappedUpdates = {};
           if (updates.importe !== undefined) mappedUpdates.importe = updates.importe;
           if (updates.descripcion !== undefined) mappedUpdates.descripcion = updates.descripcion;
@@ -597,10 +754,8 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
     }
 
     // Handle transactional loads
-    // Fallback: support both wrapped payload and flat payload structure
     let payload = parsedResult.payload;
     if (!payload && parsedResult.tipo_registro && parsedResult.tipo_registro !== 'conversational') {
-      // If flat, clone the parsedResult and clean up metadata fields to build the payload
       payload = { ...parsedResult };
       delete payload.tipo_registro;
       delete payload.reply_message;
@@ -676,6 +831,31 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
                    `📅 Fecha: ${payload.fecha}`;
                    
       await createConsumoCC(mockReq, mockRes);
+    } else if (parsedResult.tipo_registro === 'ahorro') {
+      const scName = subcuentas.find(s => s.id_subcuenta === payload.idSubcuenta)?.nombre || 'Desconocida';
+      const ctaName = cuentas.find(c => c.id_cuenta_principal === payload.idCuenta)?.nombre || 'Desconocida';
+      
+      detailText = `🐷 <b>Registro de Ahorro (Chanchito)</b>\n` +
+                   `💵 Importe: ${payload.moneda} ${payload.importe}\n` +
+                   `🐷 Chanchito: ${scName}\n` +
+                   `💼 Cuenta Origen: ${ctaName}\n` +
+                   `🔄 Operación: ${payload.tipo_transfer === 'DEPOSITO' ? 'Depósito' : 'Extracción'}\n` +
+                   `📄 Detalle: ${payload.descripcion || ''}\n` +
+                   `📅 Fecha: ${payload.fecha}`;
+                   
+      await createAhorro(mockReq, mockRes);
+    } else if (parsedResult.tipo_registro === 'inversion') {
+      const ctaName = cuentas.find(c => c.id_cuenta_principal === payload.idCuenta)?.nombre || 'Desconocida';
+      
+      detailText = `📈 <b>Operación de Inversión</b>\n` +
+                   `💵 Importe: ${payload.moneda} ${payload.cantidad * payload.precio}\n` +
+                   `📈 Activo: ${payload.ticker}\n` +
+                   `📊 Cantidad: ${payload.cantidad} @ ${payload.moneda} ${payload.precio}\n` +
+                   `💼 Cuenta/Broker: ${ctaName}\n` +
+                   `🔄 Operación: ${payload.tipoOp === 'COMPRA' ? 'Compra' : 'Venta'}\n` +
+                   `📅 Fecha: ${payload.fecha}`;
+                   
+      await createInversion(mockReq, mockRes);
     } else {
       await sendTelegramMessage(botToken, chatId, '⚠️ Tipo de registro no soportado.', messageId);
       return res.status(200).json({ success: false, error: 'Unsupported register type' });
