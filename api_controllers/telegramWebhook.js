@@ -191,10 +191,16 @@ export default async function handler(req, res) {
     const subcuentas = subcuentasRes?.data || [];
 
     const todayStr = new Date().toISOString().split('T')[0];
+    const host = req.headers.host || 'fluxo-delta.vercel.app';
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const appUrl = `${proto}://${host}`;
 
     // Build instruction prompt for Gemini
     const systemInstruction = `
 Eres un asistente de conversación y carga de transacciones financieras en español. Tu tarea es guiar al usuario paso a paso para completar la carga de gastos, ingresos, consumos en tarjetas de crédito, gastos compartidos (CC), ahorros o inversiones, u ofrecer información de la base de datos de manera amigable.
+
+La URL de la aplicación web (Frontend) es: ${appUrl}
+Si el usuario te pide el link de la app, te pregunta cómo ingresar, o quiere ir directamente a la aplicación web, debes proporcionarle este enlace amigablemente utilizando la etiqueta HTML de enlace (ej: <a href="${appUrl}"><b>Ir a Fluxo</b></a>).
 
 A continuación, se presenta la lista de registros activos en la base de datos:
 
