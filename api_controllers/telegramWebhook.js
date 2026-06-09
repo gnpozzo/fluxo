@@ -241,10 +241,10 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       })
     });
 
-    // Fallback: If gemini-3.5-flash fails (e.g. 503 or overload), try gemini-1.5-flash
+    // Fallback: If gemini-3.5-flash fails (e.g. 503 or overload), try gemini-3.1-flash-lite
     if (!response.ok && (modelName === 'gemini-3.5-flash')) {
-      console.warn(`[telegramWebhook] Primary model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-1.5-flash.`);
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+      console.warn(`[telegramWebhook] Primary model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-3.1-flash-lite.`);
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${geminiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
