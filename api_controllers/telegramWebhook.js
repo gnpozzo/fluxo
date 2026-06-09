@@ -167,49 +167,54 @@ Instrucciones de clasificación:
    - Cuenta: Selecciona el "id" de la cuenta para movimientos. Si el usuario no especifica qué cuenta usó, selecciona el ID de la cuenta que está marcada como predeterminada ("predeterminada": true), o la primera de la lista.
    - Contacto: Para transacciones tipo "cc", mapea al "id" del contacto correspondiente.
 
-3. Formato de payload según tipo_registro:
-   - Para "movimiento":
-     {
-       "idCuenta": "id de la cuenta elegida",
-       "fecha": "fecha de la transacción en formato YYYY-MM-DD",
-       "idCategoria": "id de la categoría elegida",
-       "tipo": "EGRESO" o "INGRESO",
-       "descripcion": "Descripción concisa del gasto/ingreso",
-       "importe": número (monto total de la transacción),
-       "medioPago": "Efectivo", "Débito", "Transferencia" u "Otro",
-       "tipoConsumo": "SIMPLE"
-     }
-   - Para "tarjeta":
-     {
-       "idTarjeta": "id de la tarjeta elegida",
-       "idCuentaImputar": "idCuentaImputar de la tarjeta elegida",
-       "fecha": "fecha de la transacción en formato YYYY-MM-DD",
-       "idCategoria": "id de la categoría elegida",
-       "descripcion": "Descripción concisa",
-       "importe": número (monto total o de la cuota según corresponda),
-       "tipoConsumo": "COMUN" o "CUOTAS",
-       "cuotaActual": 1, // Si es en cuotas
-       "cuotaTotal": cantidad total de cuotas, // Si es en cuotas, ej: "en 3 cuotas" -> cuotaTotal: 3, cuotaActual: 1.
-       "imputar": true
-     }
-   - Para "cc":
-     {
-       "idCuenta": "id de la cuenta predeterminada",
-       "idCategoria": "id de la categoría elegida",
-       "idUsuario": "id del contacto elegido",
-       "fecha": "fecha de la transacción en formato YYYY-MM-DD",
-       "descripcion": "Descripción concisa",
-       "importe": número (monto total del gasto compartido),
-       "pagador": "YO" (si lo pagó el usuario) o "CONTACTO" (si lo pagó el contacto),
-       "porcentajeImputado": 50, // porcentaje que asume el usuario. Si el usuario pagó todo y le deben la mitad, porcentajeImputado es 50. Por defecto 50 si no se indica.
-       "tipo": "SIMPLE"
-     }
-   - Para "conversational":
-     {
-       "reply_message": "Una respuesta cordial o aclaración en español pidiendo más detalles para registrar un gasto."
-     }
+El JSON devuelto debe tener exactamente esta estructura de campos principales:
+{
+  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "conversational",
+  "reply_message": "Una respuesta cordial en español pidiendo más detalles (solo si tipo_registro es conversational)",
+  "payload": {
+     ... aquí van los campos específicos según el tipo_registro ...
+  }
+}
 
-IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses bloques de código \`\`\`json ni texto adicional).
+Estructura del "payload" según el "tipo_registro":
+- Si tipo_registro es "movimiento":
+  {
+    "idCuenta": "id de la cuenta elegida (UUID)",
+    "fecha": "fecha de la transacción en formato YYYY-MM-DD",
+    "idCategoria": "id de la categoría elegida (UUID)",
+    "tipo": "EGRESO" o "INGRESO",
+    "descripcion": "Descripción concisa del gasto/ingreso",
+    "importe": número (monto total de la transacción),
+    "medioPago": "Efectivo", "Débito", "Transferencia" u "Otro",
+    "tipoConsumo": "SIMPLE"
+  }
+- Si tipo_registro es "tarjeta":
+  {
+    "idTarjeta": "id de la tarjeta elegida (UUID)",
+    "idCuentaImputar": "idCuentaImputar de la tarjeta elegida (UUID)",
+    "fecha": "fecha de la transacción en formato YYYY-MM-DD",
+    "idCategoria": "id de la categoría elegida (UUID)",
+    "descripcion": "Descripción concisa",
+    "importe": número (monto total o de la cuota según corresponda),
+    "tipoConsumo": "COMUN" o "CUOTAS",
+    "cuotaActual": 1, // Si es en cuotas
+    "cuotaTotal": cantidad total de cuotas, // Si es en cuotas (ej: "en 3 cuotas" -> cuotaTotal: 3, cuotaActual: 1).
+    "imputar": true
+  }
+- Si tipo_registro es "cc":
+  {
+    "idCuenta": "id de la cuenta predeterminada (UUID)",
+    "idCategoria": "id de la categoría elegida (UUID)",
+    "idUsuario": "id del contacto elegido (UUID)",
+    "fecha": "fecha de la transacción en formato YYYY-MM-DD",
+    "descripcion": "Descripción concisa",
+    "importe": número (monto total del gasto compartido),
+    "pagador": "YO" (si lo pagó el usuario) o "CONTACTO" (si lo pagó el contacto),
+    "porcentajeImputado": 50, // porcentaje que asume el usuario. Si el usuario pagó todo y le deben la mitad, porcentajeImputado es 50. Por defecto 50 si no se indica.
+    "tipo": "SIMPLE"
+  }
+
+IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estructura, sin Markdown (no utilices bloques de código \`\`\`json ni texto adicional).
 `;
 
     const geminiKey = process.env.GEMINI_API_KEY;
@@ -294,7 +299,15 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       return res.status(200).json({ success: true, type: 'conversational' });
     }
 
-    const payload = parsedResult.payload;
+    // Fallback: support both wrapped payload and flat payload structure
+    let payload = parsedResult.payload;
+    if (!payload && parsedResult.tipo_registro && parsedResult.tipo_registro !== 'conversational') {
+      // If flat, clone the parsedResult and clean up metadata fields to build the payload
+      payload = { ...parsedResult };
+      delete payload.tipo_registro;
+      delete payload.reply_message;
+    }
+    
     if (!payload) {
       await sendTelegramMessage(botToken, chatId, '⚠️ No se pudieron extraer los datos del gasto. Por favor, intenta de nuevo.', messageId);
       return res.status(200).json({ success: false, error: 'No payload found' });
