@@ -27,6 +27,51 @@ async function sendTelegramMessage(token, chatId, text, replyToMessageId = null)
   }
 }
 
+async function callGemini(key, modelName, systemInstruction, promptText, responseMimeType = null) {
+  const payload = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: (systemInstruction ? systemInstruction + '\n\n' : '') + promptText
+          }
+        ]
+      }
+    ]
+  };
+  if (responseMimeType) {
+    payload.generationConfig = { responseMimeType };
+  }
+  
+  let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  
+  if (!response.ok && modelName === 'gemini-3.5-flash') {
+    console.warn(`[telegramWebhook] Model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-3.1-flash-lite.`);
+    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+  }
+  
+  const result = await response.json();
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('Gemini no devolvió respuesta.');
+  }
+  return text;
+}
+
 export default async function handler(req, res) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -78,7 +123,6 @@ export default async function handler(req, res) {
   try {
     const body = req.body;
     if (!body || !body.message) {
-      // Just acknowledge non-message updates (like edited messages or inline queries)
       return res.status(200).json({ success: true, message: 'No message payload' });
     }
 
@@ -136,7 +180,7 @@ export default async function handler(req, res) {
 
     // Build instruction prompt for Gemini
     const systemInstruction = `
-Eres un asistente de parsing financiero en español. Tu tarea es extraer la información de transacciones enviadas por el usuario y formatearla en un objeto JSON estructurado que coincida con las APIs de nuestro sistema de finanzas.
+Eres un asistente de parsing financiero en español. Tu tarea es extraer la información de transacciones enviadas por el usuario, o clasificar sus preguntas sobre saldos y gastos, y devolver un objeto JSON estructurado que coincida con las APIs de nuestro sistema.
 
 A continuación, se presenta la lista de registros activos en la base de datos:
 
@@ -155,21 +199,24 @@ ${JSON.stringify(contactos.map(u => ({ id: u.id_usuario, nombre: u.nombre })))}
 Fecha actual de referencia: ${todayStr} (Año-Mes-Día)
 
 Instrucciones de clasificación:
-1. Determina el "tipo_registro" de la transacción:
-   - "tarjeta": si menciona explícitamente pagar con una tarjeta de crédito, o si se detecta un consumo en cuotas con tarjeta (ej. "en la Visa", "con la Amex", "3 cuotas de la tarjeta").
-   - "cc": si se menciona que es un gasto a compartir con un contacto, o que lo pagó un contacto (ej. "pagó Bichi 5000", "gasto con Bichi de 2000").
-   - "movimiento": si es un gasto común en efectivo, débito, transferencia, o si es un ingreso (ej. "pagué nafta 5000", "ingreso sueldo 20000").
-   - "conversational": si no es una transacción sino un saludo, pregunta o comentario general.
+1. Determina el "tipo_registro" de la transacción o consulta:
+   - "tarjeta": si menciona cargar un consumo en tarjeta de crédito.
+   - "cc": si menciona cargar un gasto compartido.
+   - "movimiento": si menciona cargar un gasto común o un ingreso en cuenta.
+   - "query": si el usuario está haciendo una pregunta sobre sus finanzas (saldos, gastos del mes, ingresos del mes, últimos movimientos registrados, o consumos en tarjetas de crédito).
+     Ejemplos: "¿Cuánto dinero me queda?", "¿Cuánto gasté en supermercado?", "mostrame los últimos gastos", "cuánto tengo que pagar de tarjeta?".
+   - "conversational": si no es una carga de datos ni una consulta a sus finanzas, sino un saludo, despedida, agradecimiento, etc.
 
 2. Mapeo inteligente de entidades:
-   - Categoría: Selecciona el "id" de la categoría que mejor corresponda semánticamente (ej: "nafta" o "combustible" -> "Servicios (Luz, Gas, Int.)" o la categoría más cercana, "comida" -> "Supermercado").
+   - Categoría: Selecciona el "id" de la categoría que mejor corresponda semánticamente (ej: "comida" -> "Supermercado").
    - Tarjeta: Selecciona el "id" de la tarjeta si es un consumo de tarjeta.
-   - Cuenta: Selecciona el "id" de la cuenta para movimientos. Si el usuario no especifica qué cuenta usó, selecciona el ID de la cuenta que está marcada como predeterminada ("predeterminada": true), o la primera de la lista.
-   - Contacto: Para transacciones tipo "cc", mapea al "id" del contacto correspondiente.
+   - Cuenta: Selecciona el "id" de la cuenta. Si no se especifica cuál, selecciona el ID de la cuenta marcada como predeterminada ("predeterminada": true), o la primera.
+   - Contacto: Para transacciones tipo "cc", mapea al "id" del contacto.
 
+3. Formato de JSON a retornar:
 El JSON devuelto debe tener exactamente esta estructura de campos principales:
 {
-  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "conversational",
+  "tipo_registro": "movimiento" | "tarjeta" | "cc" | "query" | "conversational",
   "reply_message": "Una respuesta cordial en español pidiendo más detalles (solo si tipo_registro es conversational)",
   "payload": {
      ... aquí van los campos específicos según el tipo_registro ...
@@ -210,8 +257,15 @@ Estructura del "payload" según el "tipo_registro":
     "descripcion": "Descripción concisa",
     "importe": número (monto total del gasto compartido),
     "pagador": "YO" (si lo pagó el usuario) o "CONTACTO" (si lo pagó el contacto),
-    "porcentajeImputado": 50, // porcentaje que asume el usuario. Si el usuario pagó todo y le deben la mitad, porcentajeImputado es 50. Por defecto 50 si no se indica.
+    "porcentajeImputado": 50, // porcentaje que asume el usuario. Por defecto 50 si no se indica.
     "tipo": "SIMPLE"
+  }
+- Si tipo_registro es "query":
+  {
+    "intent": "resumen_mes" (para preguntas generales de saldo, gastos o ingresos del mes) | "gastos_categoria" (para gastos en una categoría específica) | "ultimos_movimientos" (para ver los últimos registros) | "info_tarjetas" (para ver consumos en tarjetas de crédito),
+    "idCuenta": "id de la cuenta consultada (UUID, opcional, por defecto usar la predeterminada)",
+    "idCategoria": "id de la categoría (UUID, opcional, solo si consulta por una categoría en particular)",
+    "mes": "YYYY-MM" (el mes de consulta en formato año-mes. Ejemplo: "este mes" -> "2026-06", "el mes pasado" -> "2026-05")
   }
 
 IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estructura, sin Markdown (no utilices bloques de código \`\`\`json ni texto adicional).
@@ -224,64 +278,9 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estruct
     }
 
     const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-    let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: systemInstruction + `\n\nMensaje del usuario: "${messageText}"`
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
-      })
-    });
-
-    // Fallback: If gemini-3.5-flash fails (e.g. 503 or overload), try gemini-3.1-flash-lite
-    if (!response.ok && (modelName === 'gemini-3.5-flash')) {
-      console.warn(`[telegramWebhook] Primary model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-3.1-flash-lite.`);
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${geminiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: systemInstruction + `\n\nMensaje del usuario: "${messageText}"`
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json'
-          }
-        })
-      });
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
-    }
-
-    const geminiResult = await response.json();
-    const contentText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!contentText) {
-      throw new Error('Gemini no devolvió ninguna respuesta.');
-    }
+    
+    // Call Gemini to classify and parse input
+    const contentText = await callGemini(geminiKey, modelName, systemInstruction, `Mensaje del usuario: "${messageText}"`, 'application/json');
 
     let parsedResult;
     try {
@@ -299,6 +298,146 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido que respete esta estruct
       return res.status(200).json({ success: true, type: 'conversational' });
     }
 
+    // Handle user queries (ida y vuelta / pass info of the app)
+    if (parsedResult.tipo_registro === 'query') {
+      const payload = parsedResult.payload || parsedResult;
+      const intent = payload.intent || 'resumen_mes';
+      let fetchedDataContext = '';
+      
+      if (intent === 'resumen_mes') {
+        const month = payload.mes || todayStr.substring(0, 7);
+        const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        
+        // Calculate safe date ranges
+        const parts = month.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const nextM = m === 12 ? 1 : m + 1;
+        const nextY = m === 12 ? y + 1 : y;
+        const nextMonthStr = `${nextY}-${String(nextM).padStart(2, '0')}`;
+        
+        const { data: movs, error } = await supabase
+          .from('movimientos')
+          .select('importe, tipo_mov, descripcion, fecha, categorias(nombre)')
+          .eq('id_cuenta_principal', accountId)
+          .gte('fecha', `${month}-01`)
+          .lt('fecha', `${nextMonthStr}-01`);
+          
+        if (error) throw error;
+        
+        const totalIngresos = (movs || []).filter(m => m.tipo_mov === 'INGRESO').reduce((acc, m) => acc + Math.abs(Number(m.importe)), 0);
+        const totalEgresos = (movs || []).filter(m => m.tipo_mov === 'EGRESO').reduce((acc, m) => acc + Math.abs(Number(m.importe)), 0);
+        
+        fetchedDataContext = `Datos reales de la base de datos para el mes ${month}:
+- Cuenta consultada: ${cuentas.find(c => c.id_cuenta_principal === accountId)?.nombre || 'Principal'}
+- Total Ingresos: $${totalIngresos}
+- Total Egresos: $${totalEgresos}
+- Balance Neto (Ahorro o Déficit): $${totalIngresos - totalEgresos}
+- Listado de movimientos del mes: ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, monto: m.importe, tipo: m.tipo_mov, cat: m.categorias?.nombre })))}`;
+        
+      } else if (intent === 'gastos_categoria') {
+        const month = payload.mes || todayStr.substring(0, 7);
+        const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        const catId = payload.idCategoria;
+        
+        // Calculate safe date ranges
+        const parts = month.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const nextM = m === 12 ? 1 : m + 1;
+        const nextY = m === 12 ? y + 1 : y;
+        const nextMonthStr = `${nextY}-${String(nextM).padStart(2, '0')}`;
+        
+        const query = supabase
+          .from('movimientos')
+          .select('importe, descripcion, fecha, categorias(nombre)')
+          .eq('id_cuenta_principal', accountId)
+          .eq('tipo_mov', 'EGRESO')
+          .gte('fecha', `${month}-01`)
+          .lt('fecha', `${nextMonthStr}-01`);
+          
+        if (catId) {
+          query.eq('id_categoria', catId);
+        }
+        
+        const { data: movs, error } = await query;
+        if (error) throw error;
+        
+        const totalGasto = (movs || []).reduce((acc, m) => acc + Math.abs(Number(m.importe)), 0);
+        const catName = categorias.find(c => c.id_categoria === catId)?.nombre || 'la categoría consultada';
+        
+        fetchedDataContext = `Datos reales para el mes ${month} en la categoría "${catName}":
+- Total gastado: $${totalGasto}
+- Detalle de consumos en esta categoría: ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, monto: m.importe })))}`;
+        
+      } else if (intent === 'ultimos_movimientos') {
+        const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        
+        const { data: movs, error } = await supabase
+          .from('movimientos')
+          .select('importe, tipo_mov, descripcion, fecha, categorias(nombre)')
+          .eq('id_cuenta_principal', accountId)
+          .order('fecha', { ascending: false })
+          .limit(10);
+          
+        if (error) throw error;
+        
+        fetchedDataContext = `Últimos 10 movimientos registrados en la cuenta "${cuentas.find(c => c.id_cuenta_principal === accountId)?.nombre || 'Principal'}":
+${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, monto: m.importe, tipo: m.tipo_mov, cat: m.categorias?.nombre })))}`;
+        
+      } else if (intent === 'info_tarjetas') {
+        const month = payload.mes || todayStr.substring(0, 7);
+        const parts = month.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const nextM = m === 12 ? 1 : m + 1;
+        const nextY = m === 12 ? y + 1 : y;
+        const nextMonthStr = `${nextY}-${String(nextM).padStart(2, '0')}`;
+
+        const { data: tarjetasRes, error: tErr } = await supabase
+          .from('tarjetas')
+          .select('id_tarjeta, nombre')
+          .eq('activa', true);
+        
+        if (tErr) throw tErr;
+        
+        const tarjetaIds = (tarjetasRes || []).map(t => t.id_tarjeta);
+        let consumos = [];
+        if (tarjetaIds.length > 0) {
+          const { data: cData, error: cErr } = await supabase
+            .from('consumos_tc')
+            .select('*, tarjetas(nombre), categorias(nombre)')
+            .in('id_tarjeta', tarjetaIds)
+            .gte('fecha', `${month}-01`)
+            .lt('fecha', `${nextMonthStr}-01`);
+            
+          if (cErr) throw cErr;
+          consumos = cData || [];
+        }
+        
+        const totalTarjeta = (consumos || []).reduce((acc, c) => acc + Math.abs(Number(c.importe)), 0);
+        
+        fetchedDataContext = `Consumos con tarjeta de crédito en el mes ${month}:
+- Total gastado en tarjetas: $${totalTarjeta}
+- Detalle de consumos en tarjeta: ${JSON.stringify(consumos.map(c => ({ tarjeta: c.tarjetas?.nombre, fecha: c.fecha, desc: c.descripcion, monto: c.importe, cuota: c.cuota_actual ? `${c.cuota_actual}/${c.cuota_total}` : '1/1' })))}`;
+        
+      } else {
+        fetchedDataContext = `No se pudo determinar el tipo de consulta.`;
+      }
+      
+      // Call Gemini a second time to formulate a natural language response
+      const answerText = await callGemini(
+        geminiKey, 
+        modelName, 
+        null, 
+        `El usuario de Telegram preguntó: "${messageText}".\n\nAquí tienes la información real extraída de la base de datos de Supabase:\n\n${fetchedDataContext}\n\nResponde directamente al usuario de manera clara, amigable y resumida en español. Utiliza viñetas y etiquetas HTML (como <b> para negritas y <code> para montos de dinero o fechas) para formatear tu respuesta. No uses bloques de código markdown.`
+      );
+      
+      await sendTelegramMessage(botToken, chatId, answerText, messageId);
+      return res.status(200).json({ success: true, type: 'query_answered' });
+    }
+
+    // Handle transactional loads
     // Fallback: support both wrapped payload and flat payload structure
     let payload = parsedResult.payload;
     if (!payload && parsedResult.tipo_registro && parsedResult.tipo_registro !== 'conversational') {
