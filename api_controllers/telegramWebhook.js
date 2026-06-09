@@ -203,8 +203,8 @@ Instrucciones de clasificación:
    - "tarjeta": si menciona cargar un consumo en tarjeta de crédito.
    - "cc": si menciona cargar un gasto compartido.
    - "movimiento": si menciona cargar un gasto común o un ingreso en cuenta.
-   - "query": si el usuario está haciendo una pregunta sobre sus finanzas (saldos, gastos del mes, ingresos del mes, últimos movimientos registrados, o consumos en tarjetas de crédito).
-     Ejemplos: "¿Cuánto dinero me queda?", "¿Cuánto gasté en supermercado?", "mostrame los últimos gastos", "cuánto tengo que pagar de tarjeta?".
+   - "query": si el usuario está haciendo una pregunta sobre sus finanzas (saldos, gastos del mes, ingresos del mes, últimos movimientos registrados, consumos en tarjetas de crédito, o proyecciones de gastos futuros).
+     Ejemplos: "¿Cuánto dinero me queda?", "¿Cuánto gasté en supermercado?", "mostrame los últimos gastos", "cuánto tengo que pagar de tarjeta?", "haceme una proyección de los próximos meses".
    - "conversational": si no es una carga de datos ni una consulta a sus finanzas, sino un saludo, despedida, agradecimiento, etc.
 
 2. Mapeo inteligente de entidades:
@@ -262,7 +262,7 @@ Estructura del "payload" según el "tipo_registro":
   }
 - Si tipo_registro es "query":
   {
-    "intent": "resumen_mes" (para preguntas generales de saldo, gastos o ingresos del mes) | "gastos_categoria" (para gastos en una categoría específica) | "ultimos_movimientos" (para ver los últimos registros) | "info_tarjetas" (para ver consumos en tarjetas de crédito),
+    "intent": "resumen_mes" (para preguntas generales de saldo, gastos o ingresos del mes) | "gastos_categoria" (para gastos en una categoría específica) | "ultimos_movimientos" (para ver los últimos registros) | "info_tarjetas" (para ver consumos en tarjetas de crédito) | "proyeccion" (para proyecciones de gastos futuros de los próximos meses),
     "idCuenta": "id de la cuenta consultada (UUID, opcional, por defecto usar la predeterminada)",
     "idCategoria": "id de la categoría (UUID, opcional, solo si consulta por una categoría en particular)",
     "mes": "YYYY-MM" (el mes de consulta en formato año-mes. Ejemplo: "este mes" -> "2026-06", "el mes pasado" -> "2026-05")
@@ -420,6 +420,55 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
         fetchedDataContext = `Consumos con tarjeta de crédito en el mes ${month}:
 - Total gastado en tarjetas: $${totalTarjeta}
 - Detalle de consumos en tarjeta: ${JSON.stringify(consumos.map(c => ({ tarjeta: c.tarjetas?.nombre, fecha: c.fecha, desc: c.descripcion, monto: c.importe, cuota: c.cuota_actual ? `${c.cuota_actual}/${c.cuota_total}` : '1/1' })))}`;
+        
+      } else if (intent === 'proyeccion') {
+        const currentMonthStr = todayStr.substring(0, 7);
+        const parts = currentMonthStr.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        
+        // Calculate limit for next 3 months
+        const endM = m + 4;
+        const endY = endM > 12 ? y + 1 : y;
+        const endMAdjusted = endM > 12 ? endM - 12 : endM;
+        const nextMonthLimitStr = `${endY}-${String(endMAdjusted).padStart(2, '0')}-01`;
+        
+        const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        
+        const { data: movs, error: mErr } = await supabase
+          .from('movimientos')
+          .select('importe, descripcion, fecha, categorias(nombre)')
+          .eq('id_cuenta_principal', accountId)
+          .eq('tipo_mov', 'EGRESO')
+          .gte('fecha', `${currentMonthStr}-01`)
+          .lt('fecha', nextMonthLimitStr);
+          
+        if (mErr) throw mErr;
+        
+        const { data: tarjetasRes, error: tErr } = await supabase
+          .from('tarjetas')
+          .select('id_tarjeta, nombre')
+          .eq('id_cuenta_principal', accountId);
+          
+        if (tErr) throw tErr;
+        
+        const tarjetaIds = (tarjetasRes || []).map(t => t.id_tarjeta);
+        let consumos = [];
+        if (tarjetaIds.length > 0) {
+          const { data: cData, error: cErr } = await supabase
+            .from('consumos_tc')
+            .select('*, tarjetas(nombre), categorias(nombre)')
+            .in('id_tarjeta', tarjetaIds)
+            .gte('fecha', `${currentMonthStr}-01`)
+            .lt('fecha', nextMonthLimitStr);
+            
+          if (cErr) throw cErr;
+          consumos = cData || [];
+        }
+        
+        fetchedDataContext = `Compromisos y egresos futuros proyectados desde ${currentMonthStr}-01 hasta antes de ${nextMonthLimitStr}:
+- Movimientos de Egreso agendados para próximos meses: ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, monto: m.importe, cat: m.categorias?.nombre })))}
+- Cuotas y consumos con tarjeta agendados para próximos meses: ${JSON.stringify(consumos.map(c => ({ tarjeta: c.tarjetas?.nombre, fecha: c.fecha, desc: c.descripcion, monto: c.importe, cuota: c.cuota_actual ? `${c.cuota_actual}/${c.cuota_total}` : '1/1' })))}`;
         
       } else {
         fetchedDataContext = `No se pudo determinar el tipo de consulta.`;
