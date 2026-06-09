@@ -219,7 +219,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
     }
 
     const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`, {
+    let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -240,6 +240,32 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
         }
       })
     });
+
+    // Fallback: If gemini-3.5-flash fails (e.g. 503 or overload), try gemini-1.5-flash
+    if (!response.ok && (modelName === 'gemini-3.5-flash')) {
+      console.warn(`[telegramWebhook] Primary model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-1.5-flash.`);
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: systemInstruction + `\n\nMensaje del usuario: "${messageText}"`
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json'
+          }
+        })
+      });
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
