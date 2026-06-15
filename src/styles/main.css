@@ -3093,7 +3093,7 @@ body {
   position: absolute;
   top: 46px;
   right: 0;
-  width: 220px;
+  width: 240px;
   background: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--r);
@@ -3157,6 +3157,7 @@ body {
 .dropdown-item svg {
   color: var(--texto-3);
   transition: color 0.15s ease;
+  flex-shrink: 0;
 }
 
 .dropdown-item:hover {

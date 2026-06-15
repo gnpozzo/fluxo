@@ -13,8 +13,13 @@ export class AdminModule extends BaseModule {
   get moduleId() { return 'admin'; }
   get vistaId()  { return 'vista-admin'; }
 
-  #modal         = null;
-  #seccionActiva = 'cuentas';
+  #modal          = null;
+  #modalCuenta    = null;
+  #modalTarjeta   = null;
+  #modalCategoria = null;
+  #modalSubcuenta = null;
+  #modalUsuarioCC = null;
+  #seccionActiva  = 'cuentas';
 
   #secciones = [
     { id: 'cuentas',    label: 'Cuentas',          icono: 'movimientos', fn: () => this.#renderCuentas()    },
@@ -28,6 +33,11 @@ export class AdminModule extends BaseModule {
 
   init() {
     this.#modal = new App.Modal('modal-admin-main');
+    this.#modalCuenta = new App.Modal('modal-adm-cuenta');
+    this.#modalTarjeta = new App.Modal('modal-adm-tc');
+    this.#modalCategoria = new App.Modal('modal-adm-cat');
+    this.#modalSubcuenta = new App.Modal('modal-adm-sub');
+    this.#modalUsuarioCC = new App.Modal('modal-adm-usr');
     this._bindListeners();
     App.log('AdminModule', 'init', 'Módulo admin iniciado');
   }
@@ -332,7 +342,7 @@ export class AdminModule extends BaseModule {
   // --- SECCIÓN 4: EDICIÓN (modal secundario) ---
 
   async _editCuenta(id) {
-    const m = new App.Modal('modal-adm-cuenta');
+    const m = this.#modalCuenta;
     let data = null;
     if (id) {
       const response = await App.API.cached('api_admin_getCuentasPrincipales', [], 0);
@@ -435,7 +445,7 @@ export class AdminModule extends BaseModule {
   }
 
   async _editTarjeta(id) {
-    const m = new App.Modal('modal-adm-tc');
+    const m = this.#modalTarjeta;
     let data = null;
     let cuentas = [];
     try {
@@ -546,7 +556,7 @@ export class AdminModule extends BaseModule {
   }
 
   async _editCategoria(id) {
-    const m = new App.Modal('modal-adm-cat');
+    const m = this.#modalCategoria;
     let data = null;
     if (id) {
       const response = await App.API.cached('api_admin_getCategorias', [], 0);
@@ -595,7 +605,7 @@ export class AdminModule extends BaseModule {
   }
 
   async _editSubcuenta(id) {
-    const m = new App.Modal('modal-adm-sub');
+    const m = this.#modalSubcuenta;
     let data = null;
     let cuentas = [];
     try {
@@ -654,7 +664,7 @@ export class AdminModule extends BaseModule {
   }
 
   async _editUsuarioCC(id) {
-    const m = new App.Modal('modal-adm-usr');
+    const m = this.#modalUsuarioCC;
     let data = null;
     let cuentas = [];
     try {
