@@ -6,6 +6,49 @@ import createAhorro from './createAhorro.js';
 import createInversion from './createInversion.js';
 
 
+async function downloadTelegramFile(botToken, fileId) {
+  const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+  if (!fileRes.ok) throw new Error(`Error al obtener info de archivo: ${fileRes.status}`);
+  const fileJson = await fileRes.json();
+  if (!fileJson.ok || !fileJson.result?.file_path) throw new Error('Telegram no devolvió la ruta del archivo.');
+  const filePath = fileJson.result.file_path;
+  const downloadRes = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
+  if (!downloadRes.ok) throw new Error(`Error al descargar archivo: ${downloadRes.status}`);
+  const arrayBuffer = await downloadRes.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString('base64');
+}
+
+async function registerConsumo(supabaseKey, consumoData) {
+  let responseData = null;
+  let responseStatus = 200;
+
+  const mockRes = {
+    status(code) {
+      responseStatus = code;
+      return this;
+    },
+    json(data) {
+      responseData = data;
+      return this;
+    }
+  };
+
+  const mockReq = {
+    method: 'POST',
+    body: consumoData,
+    headers: {
+      authorization: 'Bearer ' + supabaseKey
+    }
+  };
+
+  await createConsumoTC(mockReq, mockRes);
+  if (responseStatus !== 200 || !responseData?.success) {
+    throw new Error(responseData?.error || 'Error al guardar consumo con tarjeta.');
+  }
+  return responseData;
+}
+
+
 async function sendTelegramMessage(token, chatId, text, replyToMessageId = null, replyMarkup = null) {
   const body = {
     chat_id: chatId,
@@ -148,9 +191,10 @@ export default async function handler(req, res) {
     const chatId = message.chat.id;
     const messageId = message.message_id;
     const messageText = message.text;
+    const document = message.document;
 
-    if (!messageText) {
-      return res.status(200).json({ success: true, message: 'Message has no text' });
+    if (!messageText && !document) {
+      return res.status(200).json({ success: true, message: 'Message has no text or document' });
     }
 
     // Authenticate Sender
@@ -180,7 +224,7 @@ export default async function handler(req, res) {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     // Support canceling, restarting or help command session reset
-    const isResetCommand = ['cancelar', 'reiniciar', '/cancel', '/ayuda', '/help', '/start', 'ayuda', 'help', 'tutorial'].includes(messageText.toLowerCase().trim());
+    const isResetCommand = messageText && ['cancelar', 'reiniciar', '/cancel', '/ayuda', '/help', '/start', 'ayuda', 'help', 'tutorial'].includes(messageText.toLowerCase().trim());
     if (isResetCommand) {
       try {
         await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
@@ -215,6 +259,328 @@ export default async function handler(req, res) {
     const host = req.headers.host || 'fluxo-delta.vercel.app';
     const proto = req.headers['x-forwarded-proto'] || 'https';
     const appUrl = `${proto}://${host}`;
+
+    // 3. Retrieve or initiate Bot Session History
+    let history = [];
+    let hasSessionTable = true;
+    try {
+      const { data: sessionData, error: sErr } = await supabase
+        .from('bot_sessions')
+        .select('history, updated_at')
+        .eq('chat_id', String(chatId))
+        .maybeSingle();
+
+      if (!sErr && sessionData) {
+        const lastUpdate = new Date(sessionData.updated_at);
+        const diffMs = new Date() - lastUpdate;
+        // Inactivity timeout: 20 minutes
+        if (diffMs < 20 * 60 * 1000) {
+          history = sessionData.history || [];
+        }
+      }
+    } catch (e) {
+      console.warn('[telegramWebhook] bot_sessions table does not exist. Running statelessly.');
+      hasSessionTable = false;
+    }
+
+    // Process PDF Confirmation action
+    const cleanMsg = messageText ? messageText.toLowerCase().trim() : '';
+    if (cleanMsg === 'confirmar carga' || cleanMsg === 'confirmar') {
+      let pdfAnalysisPayload = null;
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role === 'model') {
+          try {
+            const parsed = JSON.parse(history[i].parts[0].text);
+            if (parsed.payload && parsed.payload.tipo_registro === 'pdf_analisis') {
+              pdfAnalysisPayload = parsed.payload;
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+      
+      if (pdfAnalysisPayload) {
+        await sendTelegramMessage(botToken, chatId, '⏳ <b>Cargando consumos en la base de datos...</b>', messageId);
+        
+        try {
+          const { card_info, new_consumptions, similar_different } = pdfAnalysisPayload;
+          const matchedCard = tarjetas.find(t => t.id_tarjeta === card_info.id_tarjeta);
+          if (!matchedCard) {
+            throw new Error('No se pudo encontrar la tarjeta coincidente en la base de datos.');
+          }
+          const idCuentaImputar = matchedCard.id_cuenta_principal;
+          
+          let newCount = 0;
+          let updateCount = 0;
+
+          // 1. Process Updates
+          for (const item of (similar_different || [])) {
+            const { db_record, statement_record } = item;
+            
+            // Delete old record(s)
+            if (db_record.recur_group_id) {
+              const { error: delTC } = await supabase.from('consumos_tc').delete().eq('recur_group_id', db_record.recur_group_id);
+              if (delTC) throw delTC;
+              const { error: delMov } = await supabase.from('movimientos').delete().eq('recur_group_id', db_record.recur_group_id);
+              if (delMov) throw delMov;
+            } else {
+              const { error: delTC } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', db_record.id_consumo_tarjeta);
+              if (delTC) throw delTC;
+              const { error: delMov } = await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', db_record.id_consumo_tarjeta);
+              if (delMov) throw delMov;
+            }
+            
+            // Re-create updated series/item
+            const payload = {
+              idTarjeta: card_info.id_tarjeta,
+              idCuentaImputar: idCuentaImputar,
+              fecha: statement_record.fecha,
+              idCategoria: statement_record.id_categoria,
+              descripcion: statement_record.descripcion,
+              importe: statement_record.importe,
+              tipoConsumo: statement_record.cuota_total > 1 ? 'CUOTAS' : 'SIMPLE',
+              cuotaActual: statement_record.cuota_actual || 1,
+              cuotaTotal: statement_record.cuota_total || 1,
+              imputar: true
+            };
+            
+            await registerConsumo(serviceKey, payload);
+            updateCount++;
+          }
+
+          // 2. Process New Consumptions
+          for (const item of (new_consumptions || [])) {
+            const payload = {
+              idTarjeta: card_info.id_tarjeta,
+              idCuentaImputar: idCuentaImputar,
+              fecha: item.fecha,
+              idCategoria: item.id_categoria,
+              descripcion: item.descripcion,
+              importe: item.importe,
+              tipoConsumo: item.cuota_total > 1 ? 'CUOTAS' : 'SIMPLE',
+              cuotaActual: item.cuota_actual || 1,
+              cuotaTotal: item.cuota_total || 1,
+              imputar: true
+            };
+            
+            await registerConsumo(serviceKey, payload);
+            newCount++;
+          }
+
+          // Clean up bot session
+          if (hasSessionTable) {
+            try {
+              await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
+            } catch (err) {}
+          }
+
+          const successMsg = `✅ <b>Carga de resumen finalizada con éxito</b>\n\n` +
+                             `💳 Tarjeta: <b>${matchedCard.nombre}</b>\n` +
+                             `🆕 Nuevos consumos agregados: <code>${newCount}</code>\n` +
+                             `🔄 Consumos actualizados y proyectados: <code>${updateCount}</code>\n\n` +
+                             `¡Tus movimientos mensuales y las proyecciones de cuotas han sido actualizadas!`;
+                             
+          await sendTelegramMessage(botToken, chatId, successMsg, messageId, { remove_keyboard: true });
+          return res.status(200).json({ success: true, type: 'pdf_import_success' });
+          
+        } catch (error) {
+          console.error('[telegramWebhook pdf confirmation error]', error);
+          await sendTelegramMessage(botToken, chatId, `❌ <b>Error al confirmar la carga:</b>\n<code>${error.message}</code>`, messageId);
+          return res.status(200).json({ success: false, error: error.message });
+        }
+      }
+    }
+
+    // Process PDF Document upload
+    if (document) {
+      if (document.mime_type !== 'application/pdf') {
+        await sendTelegramMessage(botToken, chatId, '⚠️ Por favor, sube el resumen de tu tarjeta de crédito únicamente en formato PDF.', messageId);
+        return res.status(200).json({ success: false, error: 'Invalid document type' });
+      }
+
+      if (tarjetas.length === 0) {
+        await sendTelegramMessage(botToken, chatId, '⚠️ No tienes ninguna tarjeta de crédito activa registrada en la aplicación. Registra tu tarjeta en Ajustes antes de cargar el resumen.', messageId);
+        return res.status(200).json({ success: false, error: 'No active cards found' });
+      }
+
+      await sendTelegramMessage(botToken, chatId, '⏳ <b>Resumen de tarjeta de crédito recibido.</b> Descargando y analizando consumos (esto puede demorar unos segundos)...', messageId);
+
+      try {
+        const fileBase64 = await downloadTelegramFile(botToken, document.file_id);
+
+        // Fetch consumos for the last 6 months to compare
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0];
+
+        const { data: dbConsumos, error: dbConsErr } = await supabase
+          .from('consumos_tc')
+          .select('id_consumo_tarjeta, id_tarjeta, id_categoria, fecha, descripcion, importe, cuota_actual, cuota_total, recur_group_id')
+          .gte('fecha', sixMonthsAgoStr);
+
+        if (dbConsErr) throw dbConsErr;
+
+        const systemInstruction = `
+Eres un asistente de procesamiento de resúmenes de tarjeta de crédito en formato PDF para la aplicación Fluxo.
+Tu tarea es analizar el PDF adjunto y compararlo con los consumos ya registrados en la base de datos para identificar nuevos consumos y consumos que difieren.
+
+Tarjetas de crédito disponibles en el sistema:
+${JSON.stringify(tarjetas.map(t => ({ id_tarjeta: t.id_tarjeta, nombre: t.nombre, banco: t.banco, ultimos_4_digitos: t.ultimos_4_digitos, id_cuenta_principal: t.id_cuenta_principal })))}
+
+Categorías de egreso disponibles en el sistema:
+${JSON.stringify(categorias.filter(c => c.tipo_mov === 'EGRESO').map(c => ({ id_categoria: c.id_categoria, nombre: c.nombre })))}
+
+Consumos ya registrados en la base de datos (últimos 6 meses):
+${JSON.stringify(dbConsumos)}
+
+INSTRUCCIONES DE PROCESAMIENTO:
+1. **Identificar la Tarjeta**: Busca en el PDF a qué tarjeta corresponde (por ejemplo, Visa o Mastercard y sus últimos 4 dígitos). Compara esto con las "Tarjetas de crédito disponibles" y selecciona la que coincida.
+2. **Extraer Metadatos del Resumen**:
+   - Fecha de cierre (fecha_cierre): YYYY-MM-DD
+   - Fecha de vencimiento (fecha_vencimiento): YYYY-MM-DD
+   - Total en Pesos (total_ars)
+   - Total en Dólares (total_usd)
+3. **Extraer Transacciones**: Extrae todas las compras, consumos, impuestos, percepciones o intereses del resumen. Ignora pagos o créditos (por ejemplo, "SU PAGO EN PESOS").
+   - Para transacciones en cuotas, busca formatos como "C.03/09" o "Cuota 3 de 9" y extrae cuota_actual (3) y cuota_total (9).
+   - Determina la fecha de la transacción (YYYY-MM-DD). Usa el año correspondiente al cierre del resumen (2026).
+4. **Comparar con la Base de Datos**:
+   - Compara las transacciones del resumen con los "Consumos ya registrados" para la tarjeta seleccionada en el mes de facturación (mayo 2026, dado que el cierre es 28 de Mayo de 2026).
+   - **Coincidencia Exacta (exact_matches)**: Si una transacción en el resumen coincide en descripción (concepto similar), importe, cuotas y moneda con un registro en la base de datos, clasifícala como coincidencia exacta.
+   - **Similares con Diferencias (similar_different)**: Si el comercio/concepto coincide pero el importe o el plan de cuotas difiere (por ejemplo, en la DB figura como simple por $80.000 pero en el resumen es cuota 9/12 por $73.721), clasifícalo aquí. Debes incluir el "db_record" completo y el "statement_record" con la información correcta.
+   - **Nuevos Consumos (new_consumptions)**: Si la transacción en el resumen no tiene un registro similar en la base de datos, clasifícala como nuevo consumo.
+5. **Clasificar Categorías**: Para cada nuevo consumo o consumo modificado, selecciona la categoría más adecuada de las "Categorías de egreso disponibles" y asigna su "id_categoria".
+
+Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de código markdown, sin texto adicional:
+{
+  "tipo_registro": "conversational",
+  "reply_message": "Resumen amigable formateado en HTML para el usuario, detallando la tarjeta, saldo total en ARS y USD, vencimiento, cantidad de consumos nuevos, cantidad de consumos a modificar, y pidiendo confirmación.",
+  "buttons": [["Confirmar Carga", "Cancelar"]],
+  "payload": {
+    "tipo_registro": "pdf_analisis",
+    "card_info": {
+      "id_tarjeta": "UUID de la tarjeta coincidente",
+      "nombre": "Nombre de la tarjeta",
+      "ultimos_4_digitos": "4 digitos"
+    },
+    "statement_info": {
+      "fecha_cierre": "YYYY-MM-DD",
+      "fecha_vencimiento": "YYYY-MM-DD",
+      "total_ars": número,
+      "total_usd": número
+    },
+    "exact_matches": [
+      { "descripcion": "...", "importe": 123, "fecha": "YYYY-MM-DD" }
+    ],
+    "similar_different": [
+      {
+        "db_record": {
+          "id_consumo_tarjeta": "UUID del registro existente",
+          "recur_group_id": "UUID del grupo recurrente o null",
+          "descripcion": "...",
+          "importe": 123
+        },
+        "statement_record": {
+          "descripcion": "...",
+          "importe": 123,
+          "cuota_actual": 9,
+          "cuota_total": 12,
+          "fecha": "YYYY-MM-DD",
+          "id_categoria": "UUID de la categoría seleccionada"
+        }
+      }
+    ],
+    "new_consumptions": [
+      {
+        "descripcion": "...",
+        "importe": 123,
+        "cuota_actual": null,
+        "cuota_total": null,
+        "fecha": "YYYY-MM-DD",
+        "id_categoria": "UUID de la categoría seleccionada"
+      }
+    ]
+  }
+}
+`;
+
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+
+        const pdfHistory = [
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: fileBase64
+                }
+              },
+              {
+                text: 'Analiza este resumen de tarjeta de crédito y compáralo con la base de datos.'
+              }
+            ]
+          }
+        ];
+
+        const contentText = await callGemini(geminiKey, modelName, systemInstruction, pdfHistory, 'application/json');
+        
+        let parsedResult;
+        try {
+          parsedResult = JSON.parse(contentText);
+        } catch (e) {
+          console.error('[Gemini Parsing Error in PDF]', contentText);
+          throw new Error('No se pudo interpretar la respuesta estructurada de la IA.');
+        }
+
+        const reply = parsedResult.reply_message || 'Resumen procesado. ¿Deseas confirmar la carga?';
+        let replyMarkup = null;
+        if (Array.isArray(parsedResult.buttons) && parsedResult.buttons.length > 0) {
+          replyMarkup = {
+            keyboard: parsedResult.buttons.map(row => {
+              if (Array.isArray(row)) {
+                return row.map(btn => ({ text: String(btn) }));
+              } else {
+                return [{ text: String(row) }];
+              }
+            }),
+            resize_keyboard: true,
+            one_time_keyboard: true
+          };
+        }
+
+        await sendTelegramMessage(botToken, chatId, reply, messageId, replyMarkup);
+
+        if (hasSessionTable) {
+          const savedHistory = [
+            {
+              role: 'user',
+              parts: [{ text: `Subió el archivo PDF: ${document.file_name}` }]
+            },
+            {
+              role: 'model',
+              parts: [{ text: contentText }]
+            }
+          ];
+
+          try {
+            await supabase.from('bot_sessions').upsert({
+              chat_id: String(chatId),
+              history: savedHistory,
+              updated_at: new Date().toISOString()
+            });
+          } catch (e) {
+            console.error('[telegramWebhook session save error for PDF]', e.message);
+          }
+        }
+
+        return res.status(200).json({ success: true, type: 'pdf_parsed' });
+
+      } catch (err) {
+        console.error('[telegramWebhook PDF Processing Error]', err);
+        await sendTelegramMessage(botToken, chatId, `❌ <b>Error al procesar el resumen PDF:</b>\n<code>${err.message}</code>`, messageId);
+        return res.status(200).json({ success: false, error: err.message });
+      }
+    }
 
     // Build instruction prompt for Gemini
     const systemInstruction = `
@@ -409,33 +775,10 @@ Estructura de "payload" por "tipo_registro":
 IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses bloques de código ni texto adicional).
 `;
 
-    // 3. Retrieve or initiate Bot Session History
-    let history = [];
-    let hasSessionTable = true;
-    try {
-      const { data: sessionData, error: sErr } = await supabase
-        .from('bot_sessions')
-        .select('history, updated_at')
-        .eq('chat_id', String(chatId))
-        .maybeSingle();
-
-      if (!sErr && sessionData) {
-        const lastUpdate = new Date(sessionData.updated_at);
-        const diffMs = new Date() - lastUpdate;
-        // Inactivity timeout: 20 minutes
-        if (diffMs < 20 * 60 * 1000) {
-          history = sessionData.history || [];
-        }
-      }
-    } catch (e) {
-      console.warn('[telegramWebhook] bot_sessions table does not exist. Running statelessly.');
-      hasSessionTable = false;
-    }
-
     // Append current message
     history.push({
       role: 'user',
-      parts: [{ text: messageText }]
+      parts: [{ text: messageText || '' }]
     });
 
     // Call Gemini with the conversation history
