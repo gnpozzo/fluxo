@@ -1,9 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
 async function sendTelegramMessage(token, chatId, text) {
+  let cleanText = text || '';
+  if (typeof cleanText === 'string') {
+    cleanText = cleanText
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<p>/gi, '')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<ul>/gi, '')
+      .replace(/<\/ul>/gi, '')
+      .replace(/<li>/gi, '• ')
+      .replace(/<\/li>/gi, '\n')
+      .trim();
+  }
+
   const body = {
     chat_id: chatId,
-    text: text,
+    text: cleanText,
     parse_mode: 'HTML'
   };
   try {

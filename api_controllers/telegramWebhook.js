@@ -50,9 +50,22 @@ async function registerConsumo(supabaseKey, consumoData) {
 
 
 async function sendTelegramMessage(token, chatId, text, replyToMessageId = null, replyMarkup = null) {
+  let cleanText = text || '';
+  if (typeof cleanText === 'string') {
+    cleanText = cleanText
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<p>/gi, '')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<ul>/gi, '')
+      .replace(/<\/ul>/gi, '')
+      .replace(/<li>/gi, '• ')
+      .replace(/<\/li>/gi, '\n')
+      .trim();
+  }
+
   const body = {
     chat_id: chatId,
-    text: text,
+    text: cleanText,
     parse_mode: 'HTML'
   };
   if (replyToMessageId) {
@@ -453,7 +466,7 @@ INSTRUCCIONES DE PROCESAMIENTO:
 Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de código markdown, sin texto adicional:
 {
   "tipo_registro": "conversational",
-  "reply_message": "Resumen amigable formateado en HTML para el usuario, detallando la tarjeta, saldo total en ARS y USD, vencimiento, cantidad de consumos nuevos, cantidad de consumos a modificar, y pidiendo confirmación.",
+  "reply_message": "Resumen amigable formateado en HTML para el usuario (usando únicamente etiquetas <b>, <i>, <u>, <s>, <code>, <pre> y enlaces <a>; NO utilices etiquetas <p> ni <br>, utiliza saltos de línea '\\n' en su lugar), detallando la tarjeta, saldo total en ARS y USD, vencimiento, cantidad de consumos nuevos, cantidad de consumos a modificar, y pidiendo confirmación.",
   "buttons": [["Confirmar Carga", "Cancelar"]],
   "payload": {
     "tipo_registro": "pdf_analisis",
