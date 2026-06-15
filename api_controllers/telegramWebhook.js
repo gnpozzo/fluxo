@@ -90,8 +90,9 @@ async function sendTelegramMessage(token, chatId, text, replyToMessageId = null,
 }
 
 async function callGemini(key, modelName, systemInstruction, history, responseMimeType = null) {
+  const cleanHistory = (history || []).filter(h => h.role === 'user' || h.role === 'model');
   const payload = {
-    contents: history
+    contents: cleanHistory
   };
   if (systemInstruction) {
     payload.systemInstruction = {
@@ -200,6 +201,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, message: 'No message payload' });
     }
 
+    const updateId = body.update_id ? String(body.update_id) : null;
     const message = body.message;
     const chatId = message.chat.id;
     const messageId = message.message_id;
@@ -294,6 +296,34 @@ export default async function handler(req, res) {
     } catch (e) {
       console.warn('[telegramWebhook] bot_sessions table does not exist. Running statelessly.');
       hasSessionTable = false;
+    }
+
+    // De-duplicate updates to prevent multiple concurrent processing due to Telegram timeouts/retries
+    if (updateId) {
+      const metaObj = history.find(h => h.role === 'system_metadata');
+      const lastUpdateId = metaObj?.parts?.[0]?.text;
+      if (lastUpdateId === updateId) {
+        console.warn(`[telegramWebhook] Ignoring duplicate update_id: ${updateId}`);
+        return res.status(200).json({ success: true, message: 'Duplicate update ignored' });
+      }
+    }
+
+    // Immediately save updateId lock in the session history to block concurrent retries
+    if (updateId && hasSessionTable) {
+      const cleanHistory = history.filter(h => h.role !== 'system_metadata');
+      history = [
+        { role: 'system_metadata', parts: [{ text: updateId }] },
+        ...cleanHistory
+      ];
+      try {
+        await supabase.from('bot_sessions').upsert({
+          chat_id: String(chatId),
+          history: history,
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {
+        console.error('[telegramWebhook session lock error]', e.message);
+      }
     }
 
     // Process PDF Confirmation action
@@ -574,6 +604,13 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
               parts: [{ text: contentText }]
             }
           ];
+
+          if (updateId) {
+            savedHistory.unshift({
+              role: 'system_metadata',
+              parts: [{ text: updateId }]
+            });
+          }
 
           try {
             await supabase.from('bot_sessions').upsert({
