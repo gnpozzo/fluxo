@@ -288,6 +288,8 @@ export class AdminModule extends BaseModule {
     try {
       const response = await App.API.cached('api_admin_getCtaCorrienteUsuarios', [], 2 * 60_000);
       const users = response?.data || [];
+      const rCuentas = await App.API.cached('api_admin_getCuentasPrincipales', [], 2 * 60_000);
+      const cuentas = rCuentas?.data || [];
       content.innerHTML = `
         <div class="section-header">
           <h2 style="margin:0">Contactos (Gastos Compartidos)</h2>
@@ -297,11 +299,15 @@ export class AdminModule extends BaseModule {
         </div>
         <div class="table-card">
           <table class="table">
-            <thead><tr><th>Nombre</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Cuenta Asociada</th><th></th></tr></thead>
             <tbody>
-              ${users.map(u => `
+              ${users.map(u => {
+                const cObj = cuentas.find(c => c.id_cuenta_principal === u.id_cuenta_principal);
+                const cuentaNombre = cObj ? cObj.nombre : '—';
+                return `
                 <tr>
                   <td>${App.Utils.escapeHtml(u.nombre)}${u.es_yo ? ' <strong style="color:var(--primary)">(Yo)</strong>' : ''}</td>
+                  <td>${App.Utils.escapeHtml(cuentaNombre)}</td>
                   <td class="text-right">
                     <button class="btn-accion" onclick="App.Modules.admin._editUsuarioCC('${u.id_usuario}')" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
@@ -310,7 +316,8 @@ export class AdminModule extends BaseModule {
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>
-                </tr>`).join('')}
+                </tr>`;
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -417,9 +424,11 @@ export class AdminModule extends BaseModule {
         try {
           await App.API.call('api_admin_saveCuentaPrincipal', d);
           App.API.invalidatePattern('api_admin_getCuentasPrincipales');
-          App.Toast.success('Cuenta guardada.');
+          App.API.invalidatePattern('api_getInitialData');
+          App.Toast.success('Cuenta guardada. Actualizando...');
           modal.close();
           this.#renderCuentas();
+          setTimeout(() => window.location.reload(), 800);
         } catch (err) { modal.setLoading(false); App.Toast.error(err.message); }
       }
     });
@@ -647,6 +656,12 @@ export class AdminModule extends BaseModule {
   async _editUsuarioCC(id) {
     const m = new App.Modal('modal-adm-usr');
     let data = null;
+    let cuentas = [];
+    try {
+      const pCuentas = await App.API.cached('api_admin_getCuentasPrincipales', [], 0);
+      cuentas = pCuentas?.data || [];
+    } catch(e) {}
+
     if (id) {
       const response = await App.API.cached('api_admin_getCtaCorrienteUsuarios', [], 0);
       data = (response?.data || []).find(u => u.id_usuario === id);
@@ -656,6 +671,15 @@ export class AdminModule extends BaseModule {
       body        : `
         <form id="form-adm-usr" class="form-grid">
           <input type="hidden" name="id_usuario" value="${data?.id_usuario || ''}">
+          
+          <div class="form-group full-width">
+            <label>Cuenta Asociada <span class="required-mark">*</span></label>
+            <select class="input" name="id_cuenta_principal" required>
+              <option value="" disabled ${!data ? 'selected' : ''}>Seleccione una cuenta</option>
+              ${cuentas.map(c => `<option value="${c.id_cuenta_principal}" ${data?.id_cuenta_principal === c.id_cuenta_principal ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+
           <div class="form-group full-width">
             <label>Nombre <span class="required-mark">*</span></label>
             <input class="input" name="nombre" value="${App.Utils.escapeHtml(data?.nombre || '')}" required>
@@ -672,6 +696,7 @@ export class AdminModule extends BaseModule {
         const fd = new FormData(modal.getForm());
         const d  = {};
         fd.forEach((v, k) => { d[k] = v; });
+        if (!d.id_cuenta_principal) { App.Toast.warning('La cuenta asociada es obligatoria.'); return; }
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
         d.es_yo = (d.es_yo === 'on' || d.es_yo === true);
         modal.setLoading(true);

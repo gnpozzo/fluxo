@@ -26,12 +26,13 @@ export default async function handler(req, res) {
     
     let { data, error } = await supabase.from('cta_corriente_usuarios').upsert(payload).select().single();
     if (error) {
-      if (error.message && (error.message.includes('es_yo') || error.message.includes('does not exist'))) {
+      if (error.message && (error.message.includes('es_yo') || error.message.includes('id_cuenta_principal') || error.message.includes('does not exist'))) {
         const cleanPayload = { ...payload };
         delete cleanPayload.es_yo;
+        delete cleanPayload.id_cuenta_principal;
         const fallbackRes = await supabase.from('cta_corriente_usuarios').upsert(cleanPayload).select().single();
         if (fallbackRes.error) throw fallbackRes.error;
-        data = { ...fallbackRes.data, es_yo: false };
+        data = { ...fallbackRes.data, es_yo: false, id_cuenta_principal: null };
       } else {
         throw error;
       }

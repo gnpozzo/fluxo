@@ -220,7 +220,7 @@ export class MovimientosModule extends BaseModule {
       .filter(c => c.tipo_mov === tipo && c.activa);
 
     const usuariosCC = window._appUsuariosCC || [];
-    const otherUsers = usuariosCC.filter(u => !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
+    const otherUsers = usuariosCC.filter(u => u.id_cuenta_principal === App.Store.cuenta && !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
     const optsU = otherUsers
       .map(u => `<option value="${u.id_usuario}">${App.Utils.escapeHtml(u.nombre)}</option>`)
       .join('');

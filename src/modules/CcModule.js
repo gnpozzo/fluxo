@@ -182,7 +182,7 @@ export class CCModule extends BaseModule {
       .map(c => `<option value="${c.id_categoria}" ${data?.id_categoria === c.id_categoria ? 'selected':''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
       .join('');
 
-    const otherUsers = this.#usuarios.filter(u => !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
+    const otherUsers = this.#usuarios.filter(u => u.id_cuenta_principal === App.Store.cuenta && !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
     const optsU = otherUsers
       .map(u => `<option value="${u.id_usuario}" ${data?.id_usuario === u.id_usuario ? 'selected':''}>${App.Utils.escapeHtml(u.nombre)}</option>`)
       .join('');

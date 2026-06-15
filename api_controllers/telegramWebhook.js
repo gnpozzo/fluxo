@@ -89,6 +89,448 @@ async function sendTelegramMessage(token, chatId, text, replyToMessageId = null,
   }
 }
 
+async function showFinalSummary(res, token, chatId, messageId, wizardState, cuentas, cardName, newCons, conflicts, saveState) {
+  wizardState.step = 'FINAL_CONFIRM';
+  const defaultAccount = cuentas.find(c => c.id_cuenta_principal === wizardState.selected_account_id);
+  
+  let numModify = 0;
+  let numNew = 0;
+  let numIgnore = 0;
+  Object.values(wizardState.conflict_resolutions).forEach(res => {
+    if (res === 'MODIFY') numModify++;
+    else if (res === 'NEW') numNew++;
+    else if (res === 'IGNORE') numIgnore++;
+  });
+
+  const reply = `📋 <b>Confirmar Carga de Resumen:</b>\n\n` +
+                `💳 Tarjeta: <b>${cardName}</b>\n` +
+                `🏦 Cuenta principal por defecto: <b>${defaultAccount?.nombre || '—'}</b>\n\n` +
+                `🆕 Consumos Nuevos a registrar: <code>${newCons.length}</code>\n` +
+                `🔄 Consumos a Modificar: <code>${numModify}</code>\n` +
+                `➕ Consumos conflictivos a agregar como nuevos: <code>${numNew}</code>\n` +
+                `🚫 Consumos a ignorar: <code>${numIgnore}</code>\n\n` +
+                `¿Deseas impactar estos cambios en la base de datos?`;
+
+  const replyMarkup = {
+    keyboard: [
+      [{ text: 'Confirmar Carga' }],
+      [{ text: 'Cancelar' }]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: true
+  };
+
+  await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+  await saveState();
+  return res.status(200).json({ success: true });
+}
+
+async function handleWizardStep(req, res, supabase, token, chatId, messageId, wizardState, text, cuentas, tarjetas, hasSessionTable, updateId, serviceKey) {
+  const step = wizardState.step;
+  const payload = wizardState.pdf_payload;
+  const matchedCard = tarjetas.find(t => t.id_tarjeta === payload.card_info.id_tarjeta);
+  const cardName = matchedCard ? matchedCard.nombre : (payload.card_info.nombre || 'Tarjeta');
+  const newCons = payload.new_consumptions || [];
+  const conflicts = payload.similar_different || [];
+
+  const saveState = async () => {
+    if (hasSessionTable) {
+      const savedHistory = [
+        { role: 'system_metadata', parts: [{ text: updateId || '' }] },
+        { role: 'wizard_state', parts: [{ text: JSON.stringify(wizardState) }] }
+      ];
+      await supabase.from('bot_sessions').upsert({
+        chat_id: String(chatId),
+        history: savedHistory,
+        updated_at: new Date().toISOString()
+      });
+    }
+  };
+
+  if (step === 'ASK_ACCOUNT') {
+    const selectedAccount = cuentas.find(c => c.nombre.toLowerCase().trim() === text.toLowerCase().trim());
+    if (!selectedAccount) {
+      const reply = `⚠️ <b>Cuenta no válida.</b> Por favor, selecciona una de las cuentas disponibles:`;
+      const replyMarkup = {
+        keyboard: [
+          cuentas.map(c => ({ text: c.nombre })),
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      return res.status(200).json({ success: true, message: 'Invalid account name' });
+    }
+
+    wizardState.selected_account_id = selectedAccount.id_cuenta_principal;
+
+    if (newCons.length > 0) {
+      wizardState.step = 'ASK_IMPUTATION_CHOICE';
+      const reply = `¿Deseas imputar todos los <b>${newCons.length} consumos nuevos</b> a la cuenta <b>${selectedAccount.nombre}</b> o prefieres personalizar la imputación uno por uno?`;
+      const replyMarkup = {
+        keyboard: [
+          [{ text: `Todos a ${selectedAccount.nombre}` }, { text: 'Personalizar uno por uno' }],
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      await saveState();
+      return res.status(200).json({ success: true });
+    } else if (conflicts.length > 0) {
+      wizardState.step = 'ASK_CONFLICT';
+      wizardState.current_conflict_index = 0;
+      const conflict = conflicts[0];
+      const reply = `[Conflicto 1 de ${conflicts.length}]\n` +
+                    `El consumo <b>"${conflict.statement_record.descripcion}"</b> de <b>$${conflict.statement_record.importe.toLocaleString('es-AR')}</b> ya figura en la base de datos como <b>$${conflict.db_record.importe.toLocaleString('es-AR')}</b>.\n\n` +
+                    `¿Qué deseas hacer con este consumo?`;
+      const replyMarkup = {
+        keyboard: [
+          [{ text: 'Modificar existente' }, { text: 'Agregar como nuevo' }],
+          [{ text: 'Ignorar este consumo' }, { text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      await saveState();
+      return res.status(200).json({ success: true });
+    } else {
+      wizardState.step = 'FINAL_CONFIRM';
+      const reply = `📋 <b>Resumen de importación:</b>\n\n` +
+                    `💳 Tarjeta: <b>${cardName}</b>\n` +
+                    `🏦 Cuenta de imputación: <b>${selectedAccount.nombre}</b>\n` +
+                    `🔍 No se detectaron consumos nuevos ni modificaciones.\n\n` +
+                    `¿Deseas finalizar la carga?`;
+      const replyMarkup = {
+        keyboard: [
+          [{ text: 'Confirmar Carga' }],
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      await saveState();
+      return res.status(200).json({ success: true });
+    }
+  }
+
+  if (step === 'ASK_IMPUTATION_CHOICE') {
+    const isBulk = text.toLowerCase().includes('todos a');
+    const isIndividual = text.toLowerCase().includes('personalizar');
+
+    if (!isBulk && !isIndividual) {
+      const selectedAccount = cuentas.find(c => c.id_cuenta_principal === wizardState.selected_account_id);
+      const reply = `⚠️ Opción no válida. Por favor, selecciona una de las opciones:`;
+      const replyMarkup = {
+        keyboard: [
+          [{ text: `Todos a ${selectedAccount.nombre}` }, { text: 'Personalizar uno por uno' }],
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      return res.status(200).json({ success: true });
+    }
+
+    if (isBulk) {
+      // Assign all new consumptions to the default selected account
+      for (let i = 0; i < newCons.length; i++) {
+        wizardState.imputations[i] = wizardState.selected_account_id;
+      }
+      
+      // Move to conflicts
+      if (conflicts.length > 0) {
+        wizardState.step = 'ASK_CONFLICT';
+        wizardState.current_conflict_index = 0;
+        const conflict = conflicts[0];
+        const reply = `[Conflicto 1 de ${conflicts.length}]\n` +
+                      `El consumo <b>"${conflict.statement_record.descripcion}"</b> de <b>$${conflict.statement_record.importe.toLocaleString('es-AR')}</b> ya figura en la base de datos como <b>$${conflict.db_record.importe.toLocaleString('es-AR')}</b>.\n\n` +
+                      `¿Qué deseas hacer con este consumo?`;
+        const replyMarkup = {
+          keyboard: [
+            [{ text: 'Modificar existente' }, { text: 'Agregar como nuevo' }],
+            [{ text: 'Ignorar este consumo' }, { text: 'Cancelar' }]
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true
+        };
+        await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+        await saveState();
+        return res.status(200).json({ success: true });
+      } else {
+        return await showFinalSummary(res, token, chatId, messageId, wizardState, cuentas, cardName, newCons, conflicts, saveState);
+      }
+    } else {
+      // Start individual personalization
+      wizardState.step = 'ASK_IMPUTATION_INDIVIDUAL';
+      wizardState.current_consumption_index = 0;
+      const cons = newCons[0];
+      const reply = `[Consumo 1 de ${newCons.length}]\n` +
+                    `¿A qué cuenta deseas imputar el consumo <b>"${cons.descripcion}"</b> por <b>$${cons.importe.toLocaleString('es-AR')}</b>?`;
+      const replyMarkup = {
+        keyboard: [
+          cuentas.map(c => ({ text: c.nombre })),
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      await saveState();
+      return res.status(200).json({ success: true });
+    }
+  }
+
+  if (step === 'ASK_IMPUTATION_INDIVIDUAL') {
+    const selectedAccount = cuentas.find(c => c.nombre.toLowerCase().trim() === text.toLowerCase().trim());
+    if (!selectedAccount) {
+      const index = wizardState.current_consumption_index;
+      const cons = newCons[index];
+      const reply = `⚠️ Cuenta no válida. ¿A qué cuenta deseas imputar el consumo <b>"${cons.descripcion}"</b> por <b>$${cons.importe.toLocaleString('es-AR')}</b>?`;
+      const replyMarkup = {
+        keyboard: [
+          cuentas.map(c => ({ text: c.nombre })),
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      return res.status(200).json({ success: true });
+    }
+
+    const index = wizardState.current_consumption_index;
+    wizardState.imputations[index] = selectedAccount.id_cuenta_principal;
+
+    if (index + 1 < newCons.length) {
+      wizardState.current_consumption_index++;
+      const nextIndex = index + 1;
+      const cons = newCons[nextIndex];
+      const reply = `[Consumo ${nextIndex + 1} de ${newCons.length}]\n` +
+                    `¿A qué cuenta deseas imputar el consumo <b>"${cons.descripcion}"</b> por <b>$${cons.importe.toLocaleString('es-AR')}</b>?`;
+      const replyMarkup = {
+        keyboard: [
+          cuentas.map(c => ({ text: c.nombre })),
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      await saveState();
+      return res.status(200).json({ success: true });
+    } else {
+      // Checked all new consumptions
+      if (conflicts.length > 0) {
+        wizardState.step = 'ASK_CONFLICT';
+        wizardState.current_conflict_index = 0;
+        const conflict = conflicts[0];
+        const reply = `[Conflicto 1 de ${conflicts.length}]\n` +
+                      `El consumo <b>"${conflict.statement_record.descripcion}"</b> de <b>$${conflict.statement_record.importe.toLocaleString('es-AR')}</b> ya figura en la base de datos como <b>$${conflict.db_record.importe.toLocaleString('es-AR')}</b>.\n\n` +
+                      `¿Qué deseas hacer con este consumo?`;
+        const replyMarkup = {
+          keyboard: [
+            [{ text: 'Modificar existente' }, { text: 'Agregar como nuevo' }],
+            [{ text: 'Ignorar este consumo' }, { text: 'Cancelar' }]
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true
+        };
+        await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+        await saveState();
+        return res.status(200).json({ success: true });
+      } else {
+        return await showFinalSummary(res, token, chatId, messageId, wizardState, cuentas, cardName, newCons, conflicts, saveState);
+      }
+    }
+  }
+
+  if (step === 'ASK_CONFLICT') {
+    let resolution = null;
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes('modificar')) resolution = 'MODIFY';
+    else if (lowerText.includes('nuevo')) resolution = 'NEW';
+    else if (lowerText.includes('ignorar')) resolution = 'IGNORE';
+
+    const index = wizardState.current_conflict_index;
+    const conflict = conflicts[index];
+
+    if (!resolution) {
+      const reply = `⚠️ Opción no válida. [Conflicto ${index + 1} de ${conflicts.length}]\n` +
+                    `El consumo <b>"${conflict.statement_record.descripcion}"</b> de <b>$${conflict.statement_record.importe.toLocaleString('es-AR')}</b> ya figura en la base de datos como <b>$${conflict.db_record.importe.toLocaleString('es-AR')}</b>.\n\n` +
+                    `¿Qué deseas hacer?`;
+      const replyMarkup = {
+        keyboard: [
+          [{ text: 'Modificar existente' }, { text: 'Agregar como nuevo' }],
+          [{ text: 'Ignorar este consumo' }, { text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      return res.status(200).json({ success: true });
+    }
+
+    wizardState.conflict_resolutions[index] = resolution;
+
+    if (index + 1 < conflicts.length) {
+      wizardState.current_conflict_index++;
+      const nextIndex = index + 1;
+      const nextConflict = conflicts[nextIndex];
+      const reply = `[Conflicto ${nextIndex + 1} de ${conflicts.length}]\n` +
+                    `El consumo <b>"${nextConflict.statement_record.descripcion}"</b> de <b>$${nextConflict.statement_record.importe.toLocaleString('es-AR')}</b> ya figura en la base de datos como <b>$${nextConflict.db_record.importe.toLocaleString('es-AR')}</b>.\n\n` +
+                    `¿Qué deseas hacer con este consumo?`;
+      const replyMarkup = {
+        keyboard: [
+          [{ text: 'Modificar existente' }, { text: 'Agregar como nuevo' }],
+          [{ text: 'Ignorar este consumo' }, { text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      await saveState();
+      return res.status(200).json({ success: true });
+    } else {
+      return await showFinalSummary(res, token, chatId, messageId, wizardState, cuentas, cardName, newCons, conflicts, saveState);
+    }
+  }
+
+  if (step === 'FINAL_CONFIRM') {
+    if (!text.toLowerCase().includes('confirmar')) {
+      const reply = `⚠️ Por favor, selecciona una opción válida:`;
+      const replyMarkup = {
+        keyboard: [
+          [{ text: 'Confirmar Carga' }],
+          [{ text: 'Cancelar' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      };
+      await sendTelegramMessage(token, chatId, reply, messageId, replyMarkup);
+      return res.status(200).json({ success: true });
+    }
+
+    await sendTelegramMessage(token, chatId, '⏳ <b>Procesando y guardando consumos en la base de datos...</b>', messageId);
+
+    try {
+      let newCount = 0;
+      let updateCount = 0;
+      let ignoredCount = 0;
+
+      // 1. Process conflicts resolutions
+      for (let i = 0; i < conflicts.length; i++) {
+        const item = conflicts[i];
+        const resolution = wizardState.conflict_resolutions[i] || 'MODIFY';
+
+        if (resolution === 'MODIFY') {
+          // Delete old record(s)
+          const { db_record, statement_record } = item;
+          if (db_record.recur_group_id) {
+            const { error: delTC } = await supabase.from('consumos_tc').delete().eq('recur_group_id', db_record.recur_group_id);
+            if (delTC) throw delTC;
+            const { error: delMov } = await supabase.from('movimientos').delete().eq('recur_group_id', db_record.recur_group_id);
+            if (delMov) throw delMov;
+          } else {
+            const { error: delTC } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', db_record.id_consumo_tarjeta);
+            if (delTC) throw delTC;
+            const { error: delMov } = await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', db_record.id_consumo_tarjeta);
+            if (delMov) throw delMov;
+          }
+
+          // Re-create updated series/item
+          const payloadData = {
+            idTarjeta: payload.card_info.id_tarjeta,
+            idCuentaImputar: wizardState.selected_account_id,
+            fecha: statement_record.fecha,
+            idCategoria: statement_record.id_categoria,
+            descripcion: statement_record.descripcion,
+            importe: statement_record.importe,
+            tipoConsumo: statement_record.cuota_total > 1 ? 'CUOTAS' : 'SIMPLE',
+            cuotaActual: statement_record.cuota_actual || 1,
+            cuotaTotal: statement_record.cuota_total || 1,
+            imputar: true
+          };
+
+          await registerConsumo(serviceKey, payloadData);
+          updateCount++;
+        } else if (resolution === 'NEW') {
+          const { statement_record } = item;
+          const payloadData = {
+            idTarjeta: payload.card_info.id_tarjeta,
+            idCuentaImputar: wizardState.selected_account_id,
+            fecha: statement_record.fecha,
+            idCategoria: statement_record.id_categoria,
+            descripcion: statement_record.descripcion,
+            importe: statement_record.importe,
+            tipoConsumo: statement_record.cuota_total > 1 ? 'CUOTAS' : 'SIMPLE',
+            cuotaActual: statement_record.cuota_actual || 1,
+            cuotaTotal: statement_record.cuota_total || 1,
+            imputar: true
+          };
+
+          await registerConsumo(serviceKey, payloadData);
+          newCount++;
+        } else {
+          ignoredCount++;
+        }
+      }
+
+      // 2. Process new consumptions
+      for (let i = 0; i < newCons.length; i++) {
+        const item = newCons[i];
+        const imputeAccount = wizardState.imputations[i] || wizardState.selected_account_id;
+
+        const payloadData = {
+          idTarjeta: payload.card_info.id_tarjeta,
+          idCuentaImputar: imputeAccount,
+          fecha: item.fecha,
+          idCategoria: item.id_categoria,
+          descripcion: item.descripcion,
+          importe: item.importe,
+          tipoConsumo: item.cuota_total > 1 ? 'CUOTAS' : 'SIMPLE',
+          cuotaActual: item.cuota_actual || 1,
+          cuotaTotal: item.cuota_total || 1,
+          imputar: true
+        };
+
+        await registerConsumo(serviceKey, payloadData);
+        newCount++;
+      }
+
+      // Clean up bot session
+      if (hasSessionTable) {
+        try {
+          await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
+        } catch (err) {}
+      }
+
+      const successMsg = `✅ <b>Carga de resumen finalizada con éxito</b>\n\n` +
+                         `💳 Tarjeta: <b>${cardName}</b>\n` +
+                         `🆕 Nuevos consumos agregados: <code>${newCount}</code>\n` +
+                         `🔄 Consumos modificados: <code>${updateCount}</code>\n` +
+                         `🚫 Consumos omitidos: <code>${ignoredCount}</code>\n\n` +
+                         `¡Los consumos y los movimientos se han registrado correctamente en las cuentas correspondientes!`;
+      
+      await sendTelegramMessage(token, chatId, successMsg, messageId, { remove_keyboard: true });
+      return res.status(200).json({ success: true });
+
+    } catch (err) {
+      console.error('[telegramWebhook pdf wizard confirmation error]', err);
+      await sendTelegramMessage(token, chatId, `❌ <b>Error al confirmar la carga:</b>\n<code>${err.message}</code>`, messageId);
+      return res.status(200).json({ success: false, error: err.message });
+    }
+  }
+
+  return res.status(200).json({ success: true });
+}
+
+
 async function callGemini(key, modelName, systemInstruction, history, responseMimeType = null) {
   const cleanHistory = (history || []).filter(h => h.role === 'user' || h.role === 'model');
   const payload = {
@@ -326,113 +768,33 @@ export default async function handler(req, res) {
       }
     }
 
-    // Process PDF Confirmation action
-    const cleanMsg = messageText ? messageText.toLowerCase().trim() : '';
-    if (cleanMsg === 'confirmar carga' || cleanMsg === 'confirmar') {
-      let pdfAnalysisPayload = null;
-      for (let i = history.length - 1; i >= 0; i--) {
-        if (history[i].role === 'model') {
-          try {
-            const parsed = JSON.parse(history[i].parts[0].text);
-            if (parsed.payload && parsed.payload.tipo_registro === 'pdf_analisis') {
-              pdfAnalysisPayload = parsed.payload;
-              break;
-            }
-          } catch (e) {}
-        }
+    // Guided PDF import wizard handler
+    const wizardStateObj = history.find(h => h.role === 'wizard_state');
+    if (wizardStateObj && messageText) {
+      let wizardState = null;
+      try {
+        wizardState = JSON.parse(wizardStateObj.parts[0].text);
+      } catch (e) {
+        console.error('[telegramWebhook] Error parsing wizard state:', e);
       }
-      
-      if (pdfAnalysisPayload) {
-        await sendTelegramMessage(botToken, chatId, '⏳ <b>Cargando consumos en la base de datos...</b>', messageId);
-        
-        try {
-          const { card_info, new_consumptions, similar_different } = pdfAnalysisPayload;
-          const matchedCard = tarjetas.find(t => t.id_tarjeta === card_info.id_tarjeta);
-          if (!matchedCard) {
-            throw new Error('No se pudo encontrar la tarjeta coincidente en la base de datos.');
-          }
-          const idCuentaImputar = matchedCard.id_cuenta_principal;
-          
-          let newCount = 0;
-          let updateCount = 0;
 
-          // 1. Process Updates
-          for (const item of (similar_different || [])) {
-            const { db_record, statement_record } = item;
-            
-            // Delete old record(s)
-            if (db_record.recur_group_id) {
-              const { error: delTC } = await supabase.from('consumos_tc').delete().eq('recur_group_id', db_record.recur_group_id);
-              if (delTC) throw delTC;
-              const { error: delMov } = await supabase.from('movimientos').delete().eq('recur_group_id', db_record.recur_group_id);
-              if (delMov) throw delMov;
-            } else {
-              const { error: delTC } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', db_record.id_consumo_tarjeta);
-              if (delTC) throw delTC;
-              const { error: delMov } = await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', db_record.id_consumo_tarjeta);
-              if (delMov) throw delMov;
-            }
-            
-            // Re-create updated series/item
-            const payload = {
-              idTarjeta: card_info.id_tarjeta,
-              idCuentaImputar: idCuentaImputar,
-              fecha: statement_record.fecha,
-              idCategoria: statement_record.id_categoria,
-              descripcion: statement_record.descripcion,
-              importe: statement_record.importe,
-              tipoConsumo: statement_record.cuota_total > 1 ? 'CUOTAS' : 'SIMPLE',
-              cuotaActual: statement_record.cuota_actual || 1,
-              cuotaTotal: statement_record.cuota_total || 1,
-              imputar: true
-            };
-            
-            await registerConsumo(serviceKey, payload);
-            updateCount++;
-          }
+      if (wizardState) {
+        const text = messageText.trim();
+        const lowerText = text.toLowerCase();
 
-          // 2. Process New Consumptions
-          for (const item of (new_consumptions || [])) {
-            const payload = {
-              idTarjeta: card_info.id_tarjeta,
-              idCuentaImputar: idCuentaImputar,
-              fecha: item.fecha,
-              idCategoria: item.id_categoria,
-              descripcion: item.descripcion,
-              importe: item.importe,
-              tipoConsumo: item.cuota_total > 1 ? 'CUOTAS' : 'SIMPLE',
-              cuotaActual: item.cuota_actual || 1,
-              cuotaTotal: item.cuota_total || 1,
-              imputar: true
-            };
-            
-            await registerConsumo(serviceKey, payload);
-            newCount++;
-          }
-
-          // Clean up bot session
-          if (hasSessionTable) {
-            try {
-              await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
-            } catch (err) {}
-          }
-
-          const successMsg = `✅ <b>Carga de resumen finalizada con éxito</b>\n\n` +
-                             `💳 Tarjeta: <b>${matchedCard.nombre}</b>\n` +
-                             `🆕 Nuevos consumos agregados: <code>${newCount}</code>\n` +
-                             `🔄 Consumos actualizados y proyectados: <code>${updateCount}</code>\n\n` +
-                             `¡Tus movimientos mensuales y las proyecciones de cuotas han sido actualizadas!`;
-                             
-          await sendTelegramMessage(botToken, chatId, successMsg, messageId, { remove_keyboard: true });
-          return res.status(200).json({ success: true, type: 'pdf_import_success' });
-          
-        } catch (error) {
-          console.error('[telegramWebhook pdf confirmation error]', error);
-          await sendTelegramMessage(botToken, chatId, `❌ <b>Error al confirmar la carga:</b>\n<code>${error.message}</code>`, messageId);
-          return res.status(200).json({ success: false, error: error.message });
+        if (lowerText === 'cancelar') {
+          try {
+            await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
+          } catch (err) {}
+          await sendTelegramMessage(botToken, chatId, '❌ <b>Importación cancelada.</b> Se borraron los datos temporales del resumen.', messageId, { remove_keyboard: true });
+          return res.status(200).json({ success: true, message: 'Wizard cancelled by user' });
         }
+
+        return await handleWizardStep(req, res, supabase, botToken, chatId, messageId, wizardState, text, cuentas, tarjetas, hasSessionTable, updateId, serviceKey);
       }
     }
+
+
 
     // Process PDF Document upload
     if (document) {
@@ -575,42 +937,56 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
           throw new Error('No se pudo interpretar la respuesta estructurada de la IA.');
         }
 
-        const reply = parsedResult.reply_message || 'Resumen procesado. ¿Deseas confirmar la carga?';
-        let replyMarkup = null;
-        if (Array.isArray(parsedResult.buttons) && parsedResult.buttons.length > 0) {
-          replyMarkup = {
-            keyboard: parsedResult.buttons.map(row => {
-              if (Array.isArray(row)) {
-                return row.map(btn => ({ text: String(btn) }));
-              } else {
-                return [{ text: String(row) }];
-              }
-            }),
-            resize_keyboard: true,
-            one_time_keyboard: true
-          };
+        const payload = parsedResult.payload;
+        if (!payload || payload.tipo_registro !== 'pdf_analisis') {
+          throw new Error('El análisis del PDF no arrojó los datos esperados.');
         }
+
+        const matchedCard = tarjetas.find(t => t.id_tarjeta === payload.card_info.id_tarjeta);
+        const cardName = matchedCard ? matchedCard.nombre : (payload.card_info.nombre || 'Tarjeta');
+        
+        const wizardState = {
+          step: 'ASK_ACCOUNT',
+          pdf_payload: payload,
+          selected_account_id: null,
+          imputations: {},
+          conflict_resolutions: {},
+          current_conflict_index: 0,
+          current_consumption_index: 0
+        };
+
+        const reply = `📄 <b>Resumen de tarjeta leído con éxito</b>\n\n` +
+                      `💳 Tarjeta: <b>${cardName}</b> (${payload.card_info.ultimos_4_digitos || '—'})\n` +
+                      `📅 Cierre: <code>${payload.statement_info.fecha_cierre}</code>\n` +
+                      `📅 Vencimiento: <code>${payload.statement_info.fecha_vencimiento}</code>\n` +
+                      `💰 Total Pesos: <b>$${payload.statement_info.total_ars.toLocaleString('es-AR')}</b>\n` +
+                      `💰 Total Dólares: <b>USD ${payload.statement_info.total_usd.toLocaleString('es-AR')}</b>\n\n` +
+                      `🆕 Consumos nuevos detectados: <code>${(payload.new_consumptions || []).length}</code>\n` +
+                      `🔄 Consumos similares con diferencias: <code>${(payload.similar_different || []).length}</code>\n\n` +
+                      `<b>¿A qué cuenta principal deseas imputar este resumen por defecto?</b>`;
+
+        const replyMarkup = {
+          keyboard: [
+            cuentas.map(c => ({ text: c.nombre })),
+            [{ text: 'Cancelar' }]
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true
+        };
 
         await sendTelegramMessage(botToken, chatId, reply, messageId, replyMarkup);
 
         if (hasSessionTable) {
           const savedHistory = [
             {
-              role: 'user',
-              parts: [{ text: `Subió el archivo PDF: ${document.file_name}` }]
+              role: 'system_metadata',
+              parts: [{ text: updateId || '' }]
             },
             {
-              role: 'model',
-              parts: [{ text: contentText }]
+              role: 'wizard_state',
+              parts: [{ text: JSON.stringify(wizardState) }]
             }
           ];
-
-          if (updateId) {
-            savedHistory.unshift({
-              role: 'system_metadata',
-              parts: [{ text: updateId }]
-            });
-          }
 
           try {
             await supabase.from('bot_sessions').upsert({
@@ -623,7 +999,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
           }
         }
 
-        return res.status(200).json({ success: true, type: 'pdf_parsed' });
+        return res.status(200).json({ success: true, type: 'pdf_parsed_wizard_started' });
 
       } catch (err) {
         console.error('[telegramWebhook PDF Processing Error]', err);
@@ -688,10 +1064,12 @@ VOCABULARIO Y CLASIFICACIÓN CLAVE (MUY IMPORTANTE):
 
 COMPORTAMIENTO DE DIÁLOGO GUIADO (MUY IMPORTANTE):
 1. Si el usuario te indica registrar un movimiento (gasto/ingreso), ahorro, inversión o consumo con tarjeta pero la información está INCOMPLETA, no asumas defaults. Debes responder de forma conversacional indicando opciones del sistema y solicitando lo que falta:
-   - Para movimientos (ingreso/egreso común): requiere saber la cuenta principal, si es recurrente o simple, y si desea hacer split (distribuir con otra cuenta principal).
+   - **NUNCA asumas el tipo de gasto o consumo por defecto** (por ejemplo, no asumas que un gasto es 'SIMPLE' o de 1 pago si el usuario no lo especificó explícitamente). Si el usuario te dice "gasto de 5000 en super" o "consumo visa de 3000", debes considerarlo incompleto y preguntarle de forma conversacional si es en 1 pago (simple), en cuotas o un gasto recurrente (suscripción mensual, etc.), mostrando los botones de opciones.
+   - **Reconocer Patrones de Suscripciones**: Si el usuario te pide registrar un gasto o consumo con nombre de servicios que habitualmente son suscripciones recurrentes (como "Netflix", "Spotify", "Gimnasio", "Alquiler", "Luz", "Internet", "Expensas"), hazle una pregunta conversacional sugiriéndole si prefiere registrarlo como un gasto **Recurrente** en lugar de uno simple, para facilitar sus cargas futuras.
+   - Para movimientos (ingreso/egreso común): requiere saber la cuenta principal, el tipo de pago (simple o recurrente), y si desea hacer split (distribuir con otra cuenta principal).
      - Si es recurrente: pregunta frecuencia (MENSUAL, BIMESTRAL, TRIMESTRAL, SEMESTRAL, ANUAL) y períodos (cuántos meses/ciclos).
      - Si desea hacer split: pregunta con qué cuenta principal desea hacer split y en qué porcentaje.
-   - Para consumos de tarjeta de crédito (tarjeta): requiere saber qué tarjeta, si es en 1 pago, cuotas o recurrente.
+   - Para consumos de tarjeta de crédito (tarjeta): requiere saber qué tarjeta, el tipo de consumo (1 pago/simple, cuotas o recurrente).
      - Si es en cuotas: pregunta en cuántas cuotas.
      - Si es recurrente: pregunta durante cuántos meses.
    - Para ahorros (ahorro): requiere saber el chanchito de destino (subcuenta), cuenta de origen, importe, moneda, y si es un depósito o extracción.
@@ -703,7 +1081,8 @@ COMPORTAMIENTO DE DIÁLOGO GUIADO (MUY IMPORTANTE):
    - Si preguntas por categorías: lista 3 o 4 categorías de egresos o ingresos sugeridas. Ejemplo: [["Supermercado", "Servicios", "Ocio"], ["Cancelar"]]
    - Si preguntas por el tipo de consumo/transacción: lista las opciones de tipo. Ejemplo: [["Simple", "Cuotas", "Recurrente"], ["Cancelar"]]
    - Si preguntas por confirmaciones, splits o recurrentes: usa botones apropiados como [["Sí", "No"], ["Cancelar"]].
-3. Solo cuando tengas todos los datos esenciales, devuelve el JSON estructurado correspondiente.
+3. Si el usuario te dice que te va a enviar el resumen de la tarjeta Visa Santander (o similar), indícale de forma atenta y amigable que proceda a subir el archivo PDF del resumen para que el sistema inicie el asistente conversacional paso a paso para la imputación de los gastos.
+4. Solo cuando tengas todos los datos esenciales, devuelve el JSON estructurado correspondiente.
 
 Tipos de registro disponibles:
 - "movimiento": si cargas un ingreso/egreso de cuenta principal.
@@ -819,6 +1198,7 @@ Estructura de "payload" por "tipo_registro":
     "action": "modify" o "delete",
     "target_table": "movimientos" | "consumos_tc" | "cc_consumos",
     "search_term": "búsqueda por descripción (dejar vacío o null si se refiere al último de recién, el último cargado, o el de recién)",
+    "delete_future_only": boolean (opcional, true si el usuario indica dar de baja la suscripción o cancelar el pago futuro de un gasto/consumo recurrente),
     "updates": { ... campos modificables ... }
   }
 
@@ -1219,16 +1599,35 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
         const rowId = row[idColumn];
         
         if (action === 'delete') {
-          const { error: delErr } = await supabase.from(target_table).delete().eq(idColumn, rowId);
-          if (delErr) throw delErr;
+          const recurGroupId = row.recur_group_id;
+          const deleteFutureOnly = payload.delete_future_only || false;
           
-          await sendTelegramMessage(
-            botToken, 
-            chatId, 
-            `🗑️ <b>Eliminado con éxito</b>\n\nSe borró el registro de <b>${row.descripcion}</b> por <code>$${Math.abs(Number(row.importe))}</code> (Fecha: <code>${row.fecha}</code>).`, 
-            messageId
-          );
-          return res.status(200).json({ success: true, type: 'record_deleted' });
+          if (recurGroupId && deleteFutureOnly) {
+            const deleteDate = row.fecha;
+            const { error: delTC } = await supabase.from('consumos_tc').delete().eq('recur_group_id', recurGroupId).gte('fecha', deleteDate);
+            if (delTC) throw delTC;
+            const { error: delMov } = await supabase.from('movimientos').delete().eq('recur_group_id', recurGroupId).gte('fecha', deleteDate);
+            if (delMov) throw delMov;
+            
+            await sendTelegramMessage(
+              botToken, 
+              chatId, 
+              `🗑️ <b>Suscripción cancelada con éxito</b>\n\nSe eliminaron todos los consumos futuros de la serie <b>"${row.descripcion}"</b> a partir del <code>${deleteDate}</code>.`, 
+              messageId
+            );
+            return res.status(200).json({ success: true, type: 'recurring_series_deleted' });
+          } else {
+            const { error: delErr } = await supabase.from(target_table).delete().eq(idColumn, rowId);
+            if (delErr) throw delErr;
+            
+            await sendTelegramMessage(
+              botToken, 
+              chatId, 
+              `🗑️ <b>Eliminado con éxito</b>\n\nSe borró el registro de <b>${row.descripcion}</b> por <code>$${Math.abs(Number(row.importe))}</code> (Fecha: <code>${row.fecha}</code>).`, 
+              messageId
+            );
+            return res.status(200).json({ success: true, type: 'record_deleted' });
+          }
         } else {
           const mappedUpdates = {};
           if (updates.importe !== undefined) mappedUpdates.importe = updates.importe;
