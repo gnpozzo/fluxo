@@ -6,17 +6,19 @@ export default async function handler(req, res) {
   try {
     const supabase = getSupabaseClient(req);
 
-    const [cuentasRes, categoriasRes, tarjetasRes, usuariosCcRes] = await Promise.all([
+    const [cuentasRes, categoriasRes, tarjetasRes, usuariosCcRes, subcuentasRes] = await Promise.all([
       supabase.from('cuentas_principales').select('id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_cc_activo,modulo_ahorro_activo,modulo_inversiones_activo').eq('activa', true).order('es_predeterminada', { ascending: false }).order('nombre', { ascending: true }),
       supabase.from('categorias').select('*').eq('activa', true).order('tipo_mov', { ascending: true }).order('nombre', { ascending: true }),
       supabase.from('tarjetas').select('*').eq('activa', true).order('id_cuenta_principal', { ascending: true }).order('nombre', { ascending: true }),
-      supabase.from('cta_corriente_usuarios').select('*').order('nombre', { ascending: true })
+      supabase.from('cta_corriente_usuarios').select('*').order('nombre', { ascending: true }),
+      supabase.from('ahorro_subcuentas').select('*')
     ]);
 
     if (cuentasRes.error) throw cuentasRes.error;
     if (categoriasRes.error) throw categoriasRes.error;
     if (tarjetasRes.error) throw tarjetasRes.error;
     if (usuariosCcRes.error) throw usuariosCcRes.error;
+    if (subcuentasRes.error) throw subcuentasRes.error;
 
     // Generate dynamic list of months (-12 to +6 months from now)
     const meses = [];
@@ -34,6 +36,7 @@ export default async function handler(req, res) {
       meses: meses,
       categorias: categoriasRes.data,
       tarjetas: tarjetasRes.data,
+      subcuentas: subcuentasRes.data,
       usuarios_cc: usuariosCcRes.data
     });
   } catch (err) {

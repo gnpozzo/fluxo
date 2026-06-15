@@ -183,9 +183,12 @@ export class DashboardModule extends BaseModule {
     const cardAhorro = document.getElementById('dash-card-ahorro');
     const cardInversiones = document.getElementById('dash-card-inversiones');
 
-    if (cardTarjetas) cardTarjetas.style.display = cuentaObj?.modulo_tarjetas_activo ? '' : 'none';
+    const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
+    const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
+
+    if (cardTarjetas) cardTarjetas.style.display = hasTarjetas ? '' : 'none';
     if (cardCC) cardCC.style.display = cuentaObj?.modulo_cc_activo ? '' : 'none';
-    if (cardAhorro) cardAhorro.style.display = cuentaObj?.modulo_ahorro_activo ? '' : 'none';
+    if (cardAhorro) cardAhorro.style.display = hasAhorro ? '' : 'none';
     if (cardInversiones) cardInversiones.style.display = cuentaObj?.modulo_inversiones_activo ? '' : 'none';
 
     this.#mostrarKpiSkeletons();
@@ -199,13 +202,13 @@ export class DashboardModule extends BaseModule {
       );
       this._render(resp.data);
       
-      if (cuentaObj?.modulo_tarjetas_activo) {
+      if (hasTarjetas) {
         this.#loadTarjetas(cuenta, fechaInicio, fechaFin);
       }
       if (cuentaObj?.modulo_cc_activo) {
         this.#loadCC(cuenta, fechaInicio, fechaFin);
       }
-      if (cuentaObj?.modulo_ahorro_activo) {
+      if (hasAhorro) {
         this.#loadAhorro(cuenta, fechaInicio, fechaFin);
       }
       if (cuentaObj?.modulo_inversiones_activo) {

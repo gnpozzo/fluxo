@@ -367,20 +367,52 @@ export class AdminModule extends BaseModule {
               `).join('')}
             </div>
           </div>
+          <div class="form-group full-width" style="margin-top: 10px;">
+            <label style="font-weight:600;margin-bottom:8px;display:block">Módulos Activos</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <label class="form-switch">
+                <input type="checkbox" class="toggle-switch" name="modulo_tarjetas_activo" ${data?.modulo_tarjetas_activo ? 'checked':''}>
+                <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Tarjetas</span>
+              </label>
+              <label class="form-switch">
+                <input type="checkbox" class="toggle-switch" name="modulo_cc_activo" ${data?.modulo_cc_activo ? 'checked':''}>
+                <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Gastos Compartidos</span>
+              </label>
+              <label class="form-switch">
+                <input type="checkbox" class="toggle-switch" name="modulo_ahorro_activo" ${data?.modulo_ahorro_activo ? 'checked':''}>
+                <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Chanchito</span>
+              </label>
+              <label class="form-switch">
+                <input type="checkbox" class="toggle-switch" name="modulo_inversiones_activo" ${data?.modulo_inversiones_activo ? 'checked':''}>
+                <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Inversiones</span>
+              </label>
+            </div>
+          </div>
           <div class="form-group">
-            <label class="form-switch" style="margin-top:28px">
-              <input type="checkbox" class="toggle-switch" name="activa" ${!data || data.activa ? 'checked':''}>
+            <label class="form-switch" style="margin-top:16px">
+              <input type="checkbox" class="toggle-switch" name="activa" ${(!data || data.activa) ? 'checked':''}>
               <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Activa</span>
             </label>
           </div>
         </form>`,
       confirmLabel: id ? 'Actualizar' : 'Crear',
       onConfirm   : async (modal) => {
-        const fd = new FormData(modal.getForm());
-        const d  = {};
-        fd.forEach((v, k) => { d[k] = v; });
+        const form = modal.getForm();
+        const idCuentaPrincipal = form.querySelector('[name="id_cuenta_principal"]').value;
+        const d = {
+          nombre: form.querySelector('[name="nombre"]').value.trim(),
+          moneda_principal: form.querySelector('[name="moneda_principal"]').value,
+          icono: form.querySelector('[name="icono"]:checked')?.value || 'home',
+          activa: form.querySelector('[name="activa"]').checked,
+          modulo_tarjetas_activo: form.querySelector('[name="modulo_tarjetas_activo"]').checked,
+          modulo_cc_activo: form.querySelector('[name="modulo_cc_activo"]').checked,
+          modulo_ahorro_activo: form.querySelector('[name="modulo_ahorro_activo"]').checked,
+          modulo_inversiones_activo: form.querySelector('[name="modulo_inversiones_activo"]').checked
+        };
+        if (idCuentaPrincipal) {
+          d.id_cuenta_principal = idCuentaPrincipal;
+        }
         if (!d.nombre) { App.Toast.warning('El nombre es obligatorio.'); return; }
-        d.activa = (d.activa === 'on');
         modal.setLoading(true);
         try {
           await App.API.call('api_admin_saveCuentaPrincipal', d);

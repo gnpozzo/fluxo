@@ -156,6 +156,7 @@ class AppInit {
       window._appCategorias = initialData.categorias || [];
       window._appTarjetas   = initialData.tarjetas   || [];
       window._appUsuariosCC = initialData.usuarios_cc || [];
+      window._appSubcuentas = initialData.subcuentas || [];
 
       // Configurar cuenta inicial
       const cuentaPred = (initialData.cuentas || []).find(c => c.es_predeterminada) || initialData.cuentas?.[0];
@@ -420,7 +421,10 @@ class AppInit {
       });
     }
 
-    if (cuentaObj.modulo_tarjetas_activo && vistaId !== 'vista-tarjetas') {
+    const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj.id_cuenta_principal);
+    const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj.id_cuenta_principal);
+
+    if (hasTarjetas && vistaId !== 'vista-tarjetas') {
       modules.push({
         id: 'tarjetas',
         label: 'Tarjetas',
@@ -442,7 +446,7 @@ class AppInit {
       });
     }
 
-    if (cuentaObj.modulo_ahorro_activo && vistaId !== 'vista-ahorro') {
+    if (hasAhorro && vistaId !== 'vista-ahorro') {
       modules.push({
         id: 'ahorro',
         label: 'Chanchito',
@@ -484,15 +488,18 @@ class AppInit {
 
   #actualizarVisibilidadTabs(cuentaObj) {
     if (!cuentaObj) return;
+    const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj.id_cuenta_principal);
+    const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj.id_cuenta_principal);
+
     const modulos = [
-      { tab: 'tab-btn-tarjetas',   flag: 'modulo_tarjetas_activo'    },
-      { tab: 'tab-btn-cc',         flag: 'modulo_cc_activo'          },
-      { tab: 'tab-btn-ahorro',     flag: 'modulo_ahorro_activo'      },
-      { tab: 'tab-btn-inversiones',flag: 'modulo_inversiones_activo' }
+      { tab: 'tab-btn-tarjetas',   active: hasTarjetas },
+      { tab: 'tab-btn-cc',         active: cuentaObj.modulo_cc_activo },
+      { tab: 'tab-btn-ahorro',     active: hasAhorro },
+      { tab: 'tab-btn-inversiones',active: cuentaObj.modulo_inversiones_activo }
     ];
-    modulos.forEach(({ tab, flag }) => {
+    modulos.forEach(({ tab, active }) => {
       const btn = document.getElementById(tab);
-      if (btn) btn.style.display = cuentaObj[flag] ? '' : 'none';
+      if (btn) btn.style.display = active ? '' : 'none';
     });
   }
 
