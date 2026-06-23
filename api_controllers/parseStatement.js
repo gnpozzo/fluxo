@@ -21,9 +21,9 @@ async function callGemini(key, modelName, systemInstruction, history, responseMi
     body: JSON.stringify(payload)
   });
   
-  if (!response.ok && modelName === 'gemini-3.5-flash') {
-    console.warn(`[parseStatement] Model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-3.1-flash-lite.`);
-    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${key}`, {
+  if (!response.ok && modelName === 'gemini-1.5-flash') {
+    console.warn(`[parseStatement] Model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-1.5-flash-8b.`);
+    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -114,7 +114,7 @@ INSTRUCCIONES DE PROCESAMIENTO:
    - Determina la fecha de la transacción (YYYY-MM-DD). Usa el año correspondiente al cierre del resumen (2026).
 4. **Comparar con la Base de Datos**:
    - Compara las transacciones del resumen con los "Consumos ya registrados" para la tarjeta seleccionada en el mes de facturación.
-   - **Coincidencia Exacta (exact_matches)**: Si una transacción en el resumen coincide en descripción (concepto similar), importe, cuotas y moneda con un registro en la base de datos, clasifícala como coincidencia exacta.
+   - **Coincidencia Exacta (exact_matches)**: Si una transacción en el resumen coincide en descripción (concepto similar, ej. 'MERCADOLIBRE' y 'Mercado Libre'), importe, cuotas y moneda con un registro en la base de datos para la misma fecha o periodo de facturación, clasifícala como coincidencia exacta para evitar duplicados.
    - **Similares con Diferencias (similar_different)**: Si el comercio/concepto coincide pero el importe o el plan de cuotas difiere (por ejemplo, en la DB figura como simple por $80.000 pero en el resumen es cuota 9/12 por $73.721), clasifícalo aquí. Debes incluir el "db_record" completo y el "statement_record" con la información correcta.
    - **Nuevos Consumos (new_consumptions)**: Si la transacción en el resumen no tiene un registro similar en la base de datos, clasifícala como nuevo consumo.
 5. **Clasificar Categorías**: Para cada nuevo consumo o consumo modificado, selecciona la categoría más adecuada de las "Categorías de egreso disponibles" y asigna su "id_categoria".
@@ -167,7 +167,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 }
 `;
 
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
     
     const parts = [];
     if (mimeType === 'application/pdf') {

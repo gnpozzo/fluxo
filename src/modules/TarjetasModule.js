@@ -28,6 +28,7 @@ export class TarjetasModule extends BaseModule {
   #editData    = null;
   #allConsumos = [];
   #selectedTcId = null;
+  #txListImportar = [];
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -859,6 +860,7 @@ export class TarjetasModule extends BaseModule {
                   <tr style="background:var(--bg-2); border-bottom:1px solid var(--border-color); text-align:left">
                     <th style="padding:10px; width:40px; text-align:center"><input type="checkbox" id="tc-import-select-all" checked></th>
                     <th style="padding:10px">Fecha</th>
+                    <th style="padding:10px; width:80px; text-align:center">Estado</th>
                     <th style="padding:10px">Descripción</th>
                     <th style="padding:10px; width:120px">Categoría</th>
                     <th style="padding:10px; width:100px">Plan / Tipo</th>
@@ -872,7 +874,8 @@ export class TarjetasModule extends BaseModule {
         </div>
       `,
       confirmLabel: 'Importar Consumos',
-      cancelLabel: 'Cancelar'
+      cancelLabel: 'Cancelar',
+      onConfirm: (modal) => this.#confirmarImportacion(modal)
     });
     
     const btnConfirm = this.#modalImportar.el.querySelector('.modal-confirm');
@@ -991,13 +994,15 @@ export class TarjetasModule extends BaseModule {
       });
     });
 
+    this.#txListImportar = txList;
+
     document.getElementById('tc-import-count').textContent = txList.length;
 
     const tbody = document.getElementById('tc-import-table-body');
     if (!tbody) return;
 
     if (txList.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="padding:2rem; text-align:center; color:var(--texto-3)">No se detectaron transacciones para registrar.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="padding:2rem; text-align:center; color:var(--texto-3)">No se detectaron transacciones para registrar.</td></tr>`;
       if (btnConfirm) btnConfirm.style.display = 'none';
       return;
     }
@@ -1011,14 +1016,24 @@ export class TarjetasModule extends BaseModule {
         </select>
       `;
 
+      const badgeHtml = tx.type === 'DIFF'
+        ? `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(245, 158, 11, 0.15); color:#F59E0B;" title="Reemplazará un consumo existente que tiene diferencias">Modifica</span>`
+        : `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(16, 185, 129, 0.15); color:#10B981;" title="Nuevo consumo a registrar">Nuevo</span>`;
+
+      const diffDescHtml = tx.type === 'DIFF' && tx.dbRecord
+        ? `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Reemplaza: "${App.Utils.escapeHtml(tx.dbRecord.descripcion)}" - ${App.Utils.formatearMoneda(tx.dbRecord.importe)})</small>`
+        : '';
+
       return `
         <tr style="border-bottom:1px solid var(--border-color)">
           <td style="padding:10px; text-align:center">
             <input type="checkbox" class="tx-select-row" data-id="${tx.id}" checked>
           </td>
           <td style="padding:10px; white-space:nowrap">${App.Utils.formatearFecha(tx.fecha)}</td>
+          <td style="padding:10px; text-align:center">${badgeHtml}</td>
           <td style="padding:10px">
             <input class="input" type="text" style="padding:4px 8px; font-size:0.8rem; margin:0; width:100%" id="tx-desc-${tx.id}" value="${App.Utils.escapeHtml(tx.descripcion)}">
+            ${diffDescHtml}
           </td>
           <td style="padding:10px">
             <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-cat-${tx.id}">
@@ -1057,83 +1072,91 @@ export class TarjetasModule extends BaseModule {
         chk.checked = selectAllChk.checked;
       });
     });
+  }
 
-    this.#modalImportar.open({
-      onConfirm: async (modal) => {
-        const checkedRowChks = tbody.querySelectorAll('.tx-select-row:checked');
-        if (checkedRowChks.length === 0) {
-          App.Toast.warning('Selecciona al menos un consumo para importar.');
-          return;
-        }
+  async #confirmarImportacion(modal) {
+    const resultsDiv = document.getElementById('tc-import-step-results');
+    if (!resultsDiv || resultsDiv.classList.contains('hidden')) {
+      return;
+    }
 
-        const targetCard = cardSelect.value;
-        const targetAccount = accSelect.value;
+    const tbody = document.getElementById('tc-import-table-body');
+    if (!tbody) return;
 
-        if (!targetCard || !targetAccount) {
-          App.Toast.warning('Selecciona la tarjeta y la cuenta de imputación.');
-          return;
-        }
+    const checkedRowChks = tbody.querySelectorAll('.tx-select-row:checked');
+    if (checkedRowChks.length === 0) {
+      App.Toast.warning('Selecciona al menos un consumo para importar.');
+      return;
+    }
 
-        modal.setLoading(true);
-        let importedCount = 0;
+    const cardSelect = document.getElementById('tc-import-card-select');
+    const accSelect = document.getElementById('tc-import-account-select');
+    const targetCard = cardSelect ? cardSelect.value : null;
+    const targetAccount = accSelect ? accSelect.value : null;
 
-        try {
-          for (const chk of checkedRowChks) {
-            const txId = chk.dataset.id;
-            const originalTx = txList.find(t => t.id === txId);
-            if (!originalTx) continue;
+    if (!targetCard || !targetAccount) {
+      App.Toast.warning('Selecciona la tarjeta y la cuenta de imputación.');
+      return;
+    }
 
-            const desc = document.getElementById(`tx-desc-${txId}`).value;
-            const cat = document.getElementById(`tx-cat-${txId}`).value;
-            const type = document.getElementById(`tx-type-${txId}`).value;
-            const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`).value || 1);
-            const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`).value || 1);
+    modal.setLoading(true);
+    let importedCount = 0;
 
-            if (originalTx.type === 'DIFF' && originalTx.dbRecord) {
-              const { dbRecord } = originalTx;
-              try {
-                await App.API.call(this._deleteEndpoint, [
-                  dbRecord.id_consumo_tarjeta,
-                  dbRecord.recur_group_id ? 'SERIES' : 'SINGLE',
-                  dbRecord.recur_group_id || null,
-                  dbRecord.fecha || null
-                ]);
-              } catch (delErr) {
-                console.warn('Failed to delete old diff record', delErr);
-              }
-            }
+    try {
+      for (const chk of checkedRowChks) {
+        const txId = chk.dataset.id;
+        const originalTx = this.#txListImportar.find(t => t.id === txId);
+        if (!originalTx) continue;
 
-            const payloadData = {
-              idCuenta: App.Store.cuenta,
-              idTarjeta: targetCard,
-              fecha: originalTx.fecha,
-              idCategoria: cat,
-              descripcion: desc,
-              importe: originalTx.importe,
-              tipoConsumo: type,
-              cuotaActual: cuotaAct,
-              cuotaTotal: cuotaTot,
-              imputar: true,
-              idCuentaImputar: targetAccount
-            };
+        const desc = document.getElementById(`tx-desc-${txId}`).value;
+        const cat = document.getElementById(`tx-cat-${txId}`).value;
+        const type = document.getElementById(`tx-type-${txId}`).value;
+        const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`).value || 1);
+        const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`).value || 1);
 
-            await App.API.call(this._createEndpoint, payloadData);
-            importedCount++;
+        if (originalTx.type === 'DIFF' && originalTx.dbRecord) {
+          const { dbRecord } = originalTx;
+          try {
+            await App.API.call(this._deleteEndpoint, [
+              dbRecord.id_consumo_tarjeta,
+              dbRecord.recur_group_id ? 'SERIES' : 'SINGLE',
+              dbRecord.recur_group_id || null,
+              dbRecord.fecha || null
+            ]);
+          } catch (delErr) {
+            console.warn('Failed to delete old diff record', delErr);
           }
-
-          App.Toast.success(`Importación finalizada con éxito! Se cargaron ${importedCount} consumos.`);
-          App.API.invalidateAll();
-          if (App.Events) App.Events.emit('data:changed');
-          this.destruir();
-          modal.close();
-          await this.cargar();
-        } catch (err) {
-          App.Toast.error(err.message || 'Error al guardar consumos.');
-        } finally {
-          modal.setLoading(false);
         }
+
+        const payloadData = {
+          idCuenta: App.Store.cuenta,
+          idTarjeta: targetCard,
+          fecha: originalTx.fecha,
+          idCategoria: cat,
+          descripcion: desc,
+          importe: originalTx.importe,
+          tipoConsumo: type,
+          cuotaActual: cuotaAct,
+          cuotaTotal: cuotaTot,
+          imputar: true,
+          idCuentaImputar: targetAccount
+        };
+
+        await App.API.call(this._createEndpoint, payloadData);
+        importedCount++;
       }
-    });
+
+      App.Toast.success(`Importación finalizada con éxito! Se cargaron ${importedCount} consumos.`);
+      App.API.invalidateAll();
+      if (App.Events) App.Events.emit('data:changed');
+      this.destruir();
+      modal.close();
+      await this.cargar();
+    } catch (err) {
+      App.Toast.error(err.message || 'Error al guardar consumos.');
+    } finally {
+      modal.setLoading(false);
+    }
   }
 }
 
