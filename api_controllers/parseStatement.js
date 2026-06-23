@@ -47,7 +47,8 @@ export default async function handler(req, res) {
 
   try {
     const supabase = getSupabaseClient(req);
-    const { fileBase64, mimeType } = req.body;
+    const body = Array.isArray(req.body) ? req.body[0] : req.body;
+    const { fileBase64, mimeType } = body || {};
 
     if (!fileBase64 || !mimeType) {
       return res.status(400).json({ success: false, error: 'Missing fileBase64 or mimeType in request body.' });
