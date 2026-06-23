@@ -8,7 +8,7 @@
 export class GeminiChatController {
   #chatHistory = [];
   #apiKey = 'AIzaSyAmgUEcj3daadBB24fIUboBOH-8I69FbaA';
-  #apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  #apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
   #initialized = false;
 
   constructor() {
