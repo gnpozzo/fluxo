@@ -55,7 +55,7 @@ export default async function handler(req, res) {
       for (let i = 0; i < cuotasARegistrar; i++) {
         const idConsumo = crypto.randomUUID();
         const cuotaNumActual = consumo.cuotaActual + i;
-        const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
+        const fechaISO = addMonthsSafe(fechaBase, cuotaNumActual - 1).toISOString().split('T')[0];
         
         tcRows.push({
           id_consumo_tarjeta: idConsumo,

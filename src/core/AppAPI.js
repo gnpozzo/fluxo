@@ -69,8 +69,8 @@ class ApiService {
 
   // --- CORE DE RED ---
 
-  async #internalFetch(endpoint, method = 'POST', bodyFields = {}) {
-    if (window.App) window.App.log('AppAPI', 'fetch:start', { endpoint, method, bodyFields });
+  async #internalFetch(endpoint, method = 'POST', bodyFields = {}, attempt = 1) {
+    if (window.App) window.App.log('AppAPI', 'fetch:start', { endpoint, method, bodyFields, attempt });
     const t0 = performance.now();
     const headers = {
       'Content-Type': 'application/json',
@@ -87,14 +87,17 @@ class ApiService {
       finalBody = bodyFields.args;
     }
 
+    let response;
+    let resObj = null;
+    let errorToThrow = null;
+
     try {
-      const response = await fetch(endpoint, {
+      response = await fetch(endpoint, {
         method: method,
         headers: headers,
         body: JSON.stringify(finalBody)
       });
 
-      let resObj = null;
       try {
         resObj = await response.json();
       } catch (e) {
@@ -102,24 +105,33 @@ class ApiService {
       }
 
       if (!response.ok) {
-        if (response.status === 401 && window.App && window.App.Events) {
-          window.App.Events.emit('auth:unauthorized');
-        }
-        const errMsg = resObj?.error || `HTTP Error: ${response.status} en ${endpoint}`;
-        throw new Error(errMsg);
+        errorToThrow = new Error(resObj?.error || `HTTP Error: ${response.status} en ${endpoint}`);
+      } else if (resObj && resObj.success === false) {
+        errorToThrow = new Error(resObj.error || 'Error genérico en el servidor');
       }
-      
-      if (resObj.success === false) {
-        throw new Error(resObj.error || 'Error genérico en el servidor');
+    } catch (networkErr) {
+      errorToThrow = networkErr;
+    }
+
+    if (errorToThrow) {
+      const errMsg = errorToThrow.message || '';
+      if (errMsg.includes('JWT issued at future') && attempt < 3) {
+        if (window.App) window.App.warn('AppAPI', 'fetch:clock_skew_retry', { endpoint, attempt, errMsg });
+        await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+        return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
       }
 
-      if (window.App) window.App.log('AppAPI', 'fetch:success', { endpoint, time: `${(performance.now() - t0).toFixed(1)}ms` });
-      return resObj;
-    } catch (err) {
-      alert('APP_API ERROR: ' + err.message);
-      if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: err.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
-      throw err;
+      if (response && response.status === 401 && window.App && window.App.Events) {
+        window.App.Events.emit('auth:unauthorized');
+      }
+
+      alert('APP_API ERROR: ' + errorToThrow.message);
+      if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: errorToThrow.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
+      throw errorToThrow;
     }
+
+    if (window.App) window.App.log('AppAPI', 'fetch:success', { endpoint, time: `${(performance.now() - t0).toFixed(1)}ms` });
+    return resObj;
   }
 
 }

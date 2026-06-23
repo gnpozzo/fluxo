@@ -42,6 +42,7 @@ import updateMovimiento from '../api_controllers/updateMovimiento.js';
 import telegramWebhook from '../api_controllers/telegramWebhook.js';
 import sendReminders from '../api_controllers/sendReminders.js';
 import debug_query from '../api_controllers/debug_query.js';
+import parseStatement from '../api_controllers/parseStatement.js';
 
 
 export default async function handler(req, res) {
@@ -92,6 +93,7 @@ export default async function handler(req, res) {
     case 'telegramWebhook': return await telegramWebhook(req, res);
     case 'sendReminders': return await sendReminders(req, res);
     case 'debug_query': return await debug_query(req, res);
+    case 'parseStatement': return await parseStatement(req, res);
 
     default:
       return res.status(404).json({ success: false, error: 'Endpoint not found: ' + endpoint });

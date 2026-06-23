@@ -21,6 +21,7 @@ export class TarjetasModule extends BaseModule {
   #kpiImputado = null;
   #kpiConsol   = null;
   #modal       = null;
+  #modalImportar = null;
   #tarjetas    = [];
   #categorias  = [];
   #cuentas     = [];
@@ -32,6 +33,7 @@ export class TarjetasModule extends BaseModule {
 
   init() {
     this.#modal = new App.Modal('modal-tarjetas');
+    this.#modalImportar = new App.Modal('modal-tc-importar');
     this._buildVista();
     this._bindListeners();
     this._subscribeEvents();
@@ -205,7 +207,7 @@ export class TarjetasModule extends BaseModule {
     this.#kpiImputado = new App.KpiCard(grid, { titulo: 'Incidencia Personal', icono: 'person',      colorClass: 'kpi-blue',   onFormat: App.Utils.formatearMoneda });
     this.#kpiConsol   = new App.KpiCard(grid, { titulo: 'Incidencia Externa',  icono: 'groups',      colorClass: 'kpi-amber',  onFormat: App.Utils.formatearMoneda });
 
-    document.getElementById('tc-acciones').innerHTML = ``;
+    this.#renderAcciones();
 
     this.#table = new App.DataTable(
       document.getElementById('tc-tabla-wrap'),
@@ -783,6 +785,355 @@ export class TarjetasModule extends BaseModule {
       prevBtn.classList.add('hidden');
       nextBtn.classList.add('hidden');
     }
+  }
+
+  #renderAcciones() {
+    const accContainer = document.getElementById('tc-acciones');
+    if (!accContainer) return;
+    accContainer.innerHTML = `
+      <button id="tc-btn-importar" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border-color)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-sm"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar Resumen
+      </button>
+    `;
+    
+    document.getElementById('tc-btn-importar')?.addEventListener('click', () => this.#abrirModalImportar());
+  }
+
+  #abrirModalImportar() {
+    this.#modalImportar.open({
+      titulo: 'Importar Resumen de Tarjeta',
+      icono: 'cloud_upload',
+      size: 'xl',
+      body: `
+        <div id="tc-import-step-upload" style="display:flex; flex-direction:column; align-items:center; justify-content:center; border:2px dashed var(--border-color); border-radius:12px; padding:3rem 2rem; cursor:pointer; text-align:center; transition:border-color 0.2s; margin-bottom:1.5rem" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border-color)'">
+          <div style="background:rgba(59, 130, 246, 0.1); border-radius:50%; padding:12px; margin-bottom:12px; display:inline-flex; align-items:center">
+             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-upload-cloud"><polyline points="16 16 12 12 8 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path><polyline points="16 16 12 12 8 16"></polyline></svg>
+          </div>
+          <h4 style="margin:0 0 4px 0; font-size:1.1rem; color:var(--texto-1)">Arrastra tu archivo aquí o haz clic para seleccionarlo</h4>
+          <p style="margin:0; font-size:0.85rem; color:var(--texto-3)">Soporta formatos PDF o XLSX (.xlsx)</p>
+          <input type="file" id="tc-import-file-input" accept=".pdf,.xlsx" style="display:none">
+        </div>
+
+        <div id="tc-import-step-parsing" class="hidden" style="text-align:center; padding:3rem 1rem">
+          <div class="loader-spinner" style="width:40px; height:40px; margin:0 auto 16px auto; border-top-color:var(--primary)"></div>
+          <h4 style="margin:0 0 4px 0; color:var(--texto-1)">Analizando resumen con IA de Gemini...</h4>
+          <p style="margin:0; font-size:0.85rem; color:var(--texto-3)">Esto puede demorar unos segundos. Estamos comparando y categorizando tus consumos.</p>
+        </div>
+
+        <div id="tc-import-step-results" class="hidden" style="display:flex; flex-direction:column; gap:1.5rem">
+          <div class="card" style="padding:1rem; background:var(--bg-2); border:1px solid var(--border-color); border-radius:8px; display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px">
+            <div>
+              <span style="font-size:0.8rem; color:var(--texto-3); display:block">Cierre</span>
+              <strong id="tc-res-cierre" style="font-size:0.95rem; color:var(--texto-1)">—</strong>
+            </div>
+            <div>
+              <span style="font-size:0.8rem; color:var(--texto-3); display:block">Vencimiento</span>
+              <strong id="tc-res-venc" style="font-size:0.95rem; color:var(--texto-1)">—</strong>
+            </div>
+            <div>
+              <span style="font-size:0.8rem; color:var(--texto-3); display:block">Total Pesos</span>
+              <strong id="tc-res-total-ars" style="font-size:0.95rem; color:var(--texto-1)">—</strong>
+            </div>
+            <div>
+              <span style="font-size:0.8rem; color:var(--texto-3); display:block">Total Dólares</span>
+              <strong id="tc-res-total-usd" style="font-size:0.95rem; color:var(--texto-1)">—</strong>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+            <div class="form-group">
+              <label style="font-weight:500; margin-bottom:4px; display:block">Tarjeta Destino</label>
+              <select class="input" id="tc-import-card-select"></select>
+            </div>
+            <div class="form-group">
+              <label style="font-weight:500; margin-bottom:4px; display:block">Cuenta de Imputación (Débito)</label>
+              <select class="input" id="tc-import-account-select"></select>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="margin:0 0 8px 0; color:var(--texto-1)">Consumos Detectados (<span id="tc-import-count">0</span>)</h4>
+            <div style="max-height:300px; overflow-y:auto; border:1px solid var(--border-color); border-radius:8px">
+              <table class="table" style="width:100%; border-collapse:collapse; font-size:0.85rem" id="tc-import-table">
+                <thead>
+                  <tr style="background:var(--bg-2); border-bottom:1px solid var(--border-color); text-align:left">
+                    <th style="padding:10px; width:40px; text-align:center"><input type="checkbox" id="tc-import-select-all" checked></th>
+                    <th style="padding:10px">Fecha</th>
+                    <th style="padding:10px">Descripción</th>
+                    <th style="padding:10px; width:120px">Categoría</th>
+                    <th style="padding:10px; width:100px">Plan / Tipo</th>
+                    <th style="padding:10px; text-align:right">Importe</th>
+                  </tr>
+                </thead>
+                <tbody id="tc-import-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `,
+      confirmLabel: 'Importar Consumos',
+      cancelLabel: 'Cancelar'
+    });
+    
+    const btnConfirm = this.#modalImportar.el.querySelector('.modal-confirm');
+    if (btnConfirm) btnConfirm.style.display = 'none';
+
+    this.#setupImportEvents();
+  }
+
+  #setupImportEvents() {
+    const uploadArea = document.getElementById('tc-import-step-upload');
+    const fileInput = document.getElementById('tc-import-file-input');
+
+    uploadArea?.addEventListener('click', () => fileInput?.click());
+
+    uploadArea?.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.style.borderColor = 'var(--primary)';
+    });
+    uploadArea?.addEventListener('dragleave', () => {
+      uploadArea.style.borderColor = 'var(--border-color)';
+    });
+    uploadArea?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        this.#handleImportFile(files[0]);
+      }
+    });
+
+    fileInput?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        this.#handleImportFile(file);
+      }
+    });
+  }
+
+  #handleImportFile(file) {
+    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    if (!validTypes.includes(file.type) && !file.name.endsWith('.xlsx')) {
+      App.Toast.error('Por favor, selecciona únicamente archivos PDF o XLSX.');
+      return;
+    }
+
+    document.getElementById('tc-import-step-upload').classList.add('hidden');
+    document.getElementById('tc-import-step-parsing').classList.remove('hidden');
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      const base64 = dataUrl.split(',')[1];
+      const mimeType = file.type || (file.name.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf');
+
+      try {
+        const resp = await App.API.call('parseStatement', { fileBase64: base64, mimeType });
+        if (resp && resp.success && resp.payload) {
+          this.#showImportResults(resp.payload);
+        } else {
+          throw new Error(resp?.error || 'Error al analizar el archivo.');
+        }
+      } catch (err) {
+        App.Toast.error(err.message || 'Error al procesar el archivo con Gemini.');
+        document.getElementById('tc-import-step-upload').classList.remove('hidden');
+        document.getElementById('tc-import-step-parsing').classList.add('hidden');
+      }
+    };
+    reader.onerror = () => {
+      App.Toast.error('Error al leer el archivo local.');
+      document.getElementById('tc-import-step-upload').classList.remove('hidden');
+      document.getElementById('tc-import-step-parsing').classList.add('hidden');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  #showImportResults(payload) {
+    document.getElementById('tc-import-step-parsing').classList.add('hidden');
+    document.getElementById('tc-import-step-results').classList.remove('hidden');
+
+    const btnConfirm = this.#modalImportar.el.querySelector('.modal-confirm');
+    if (btnConfirm) btnConfirm.style.display = '';
+
+    const stInfo = payload.statement_info || {};
+    document.getElementById('tc-res-cierre').textContent = App.Utils.formatearFecha(stInfo.fecha_cierre) || '—';
+    document.getElementById('tc-res-venc').textContent = App.Utils.formatearFecha(stInfo.fecha_vencimiento) || '—';
+    document.getElementById('tc-res-total-ars').textContent = App.Utils.formatearMoneda(stInfo.total_ars) || '—';
+    document.getElementById('tc-res-total-usd').textContent = 'USD ' + (stInfo.total_usd?.toLocaleString('es-AR') || '0,00');
+
+    const cardSelect = document.getElementById('tc-import-card-select');
+    if (cardSelect) {
+      cardSelect.innerHTML = this.#tarjetas.map(t => `
+        <option value="${t.id_tarjeta}" ${t.id_tarjeta === payload.card_info?.id_tarjeta || t.ultimos_4_digitos === payload.card_info?.ultimos_4_digitos ? 'selected' : ''}>
+          ${App.Utils.escapeHtml(t.nombre)} (${t.ultimos_4_digitos || '—'})
+        </option>
+      `).join('');
+    }
+
+    const accSelect = document.getElementById('tc-import-account-select');
+    if (accSelect) {
+      accSelect.innerHTML = this.#cuentas.map(c => `
+        <option value="${c.id_cuenta_principal}" ${c.id_cuenta_principal === App.Store.cuenta ? 'selected' : ''}>
+          ${App.Utils.escapeHtml(c.nombre)}
+        </option>
+      `).join('');
+    }
+
+    const txList = [];
+    (payload.new_consumptions || []).forEach(tx => {
+      txList.push({ ...tx, id: 'new_' + Math.random().toString(36).substr(2, 9), type: 'NEW' });
+    });
+    (payload.similar_different || []).forEach(diff => {
+      txList.push({
+        ...diff.statement_record,
+        id: 'diff_' + Math.random().toString(36).substr(2, 9),
+        type: 'DIFF',
+        dbRecord: diff.db_record
+      });
+    });
+
+    document.getElementById('tc-import-count').textContent = txList.length;
+
+    const tbody = document.getElementById('tc-import-table-body');
+    if (!tbody) return;
+
+    if (txList.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="padding:2rem; text-align:center; color:var(--texto-3)">No se detectaron transacciones para registrar.</td></tr>`;
+      if (btnConfirm) btnConfirm.style.display = 'none';
+      return;
+    }
+
+    tbody.innerHTML = txList.map((tx, idx) => {
+      const isCuotas = tx.cuota_total && tx.cuota_total > 1;
+      const typeSelect = `
+        <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-type-${tx.id}">
+          <option value="SIMPLE" ${!isCuotas ? 'selected' : ''}>Simple</option>
+          <option value="CUOTAS" ${isCuotas ? 'selected' : ''}>Cuotas</option>
+        </select>
+      `;
+
+      return `
+        <tr style="border-bottom:1px solid var(--border-color)">
+          <td style="padding:10px; text-align:center">
+            <input type="checkbox" class="tx-select-row" data-id="${tx.id}" checked>
+          </td>
+          <td style="padding:10px; white-space:nowrap">${App.Utils.formatearFecha(tx.fecha)}</td>
+          <td style="padding:10px">
+            <input class="input" type="text" style="padding:4px 8px; font-size:0.8rem; margin:0; width:100%" id="tx-desc-${tx.id}" value="${App.Utils.escapeHtml(tx.descripcion)}">
+          </td>
+          <td style="padding:10px">
+            <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-cat-${tx.id}">
+              ${this.#categorias
+                .filter(c => c.tipo_mov === 'EGRESO' && c.activa)
+                .map(c => `<option value="${c.id_categoria}" ${c.id_categoria === tx.id_categoria ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
+                .join('')}
+            </select>
+          </td>
+          <td style="padding:10px">
+            <div style="display:flex; flex-direction:column; gap:4px">
+              ${typeSelect}
+              <div id="tx-cuotas-div-${tx.id}" style="display:${isCuotas ? 'flex' : 'none'}; gap:4px; align-items:center">
+                <input class="input" type="number" style="padding:4px; font-size:0.8rem; margin:0; width:45px" id="tx-cuota-act-${tx.id}" value="${tx.cuota_actual || 1}" min="1">
+                <span style="font-size:0.75rem">/</span>
+                <input class="input" type="number" style="padding:4px; font-size:0.8rem; margin:0; width:45px" id="tx-cuota-tot-${tx.id}" value="${tx.cuota_total || 12}" min="2">
+              </div>
+            </div>
+          </td>
+          <td style="padding:10px; text-align:right; font-weight:500" class="negativo">${App.Utils.formatearMoneda(tx.importe)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    txList.forEach(tx => {
+      const typeSel = document.getElementById(`tx-type-${tx.id}`);
+      typeSel?.addEventListener('change', () => {
+        const div = document.getElementById(`tx-cuotas-div-${tx.id}`);
+        if (div) div.style.display = (typeSel.value === 'CUOTAS') ? 'flex' : 'none';
+      });
+    });
+
+    const selectAllChk = document.getElementById('tc-import-select-all');
+    selectAllChk?.addEventListener('change', () => {
+      tbody.querySelectorAll('.tx-select-row').forEach(chk => {
+        chk.checked = selectAllChk.checked;
+      });
+    });
+
+    this.#modalImportar.open({
+      onConfirm: async (modal) => {
+        const checkedRowChks = tbody.querySelectorAll('.tx-select-row:checked');
+        if (checkedRowChks.length === 0) {
+          App.Toast.warning('Selecciona al menos un consumo para importar.');
+          return;
+        }
+
+        const targetCard = cardSelect.value;
+        const targetAccount = accSelect.value;
+
+        if (!targetCard || !targetAccount) {
+          App.Toast.warning('Selecciona la tarjeta y la cuenta de imputación.');
+          return;
+        }
+
+        modal.setLoading(true);
+        let importedCount = 0;
+
+        try {
+          for (const chk of checkedRowChks) {
+            const txId = chk.dataset.id;
+            const originalTx = txList.find(t => t.id === txId);
+            if (!originalTx) continue;
+
+            const desc = document.getElementById(`tx-desc-${txId}`).value;
+            const cat = document.getElementById(`tx-cat-${txId}`).value;
+            const type = document.getElementById(`tx-type-${txId}`).value;
+            const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`).value || 1);
+            const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`).value || 1);
+
+            if (originalTx.type === 'DIFF' && originalTx.dbRecord) {
+              const { dbRecord } = originalTx;
+              try {
+                await App.API.call(this._deleteEndpoint, [
+                  dbRecord.id_consumo_tarjeta,
+                  dbRecord.recur_group_id ? 'SERIES' : 'SINGLE',
+                  dbRecord.recur_group_id || null,
+                  dbRecord.fecha || null
+                ]);
+              } catch (delErr) {
+                console.warn('Failed to delete old diff record', delErr);
+              }
+            }
+
+            const payloadData = {
+              idCuenta: App.Store.cuenta,
+              idTarjeta: targetCard,
+              fecha: originalTx.fecha,
+              idCategoria: cat,
+              descripcion: desc,
+              importe: originalTx.importe,
+              tipoConsumo: type,
+              cuotaActual: cuotaAct,
+              cuotaTotal: cuotaTot,
+              imputar: true,
+              idCuentaImputar: targetAccount
+            };
+
+            await App.API.call(this._createEndpoint, payloadData);
+            importedCount++;
+          }
+
+          App.Toast.success(`Importación finalizada con éxito! Se cargaron ${importedCount} consumos.`);
+          App.API.invalidateAll();
+          if (App.Events) App.Events.emit('data:changed');
+          this.destruir();
+          modal.close();
+          await this.cargar();
+        } catch (err) {
+          App.Toast.error(err.message || 'Error al guardar consumos.');
+        } finally {
+          modal.setLoading(false);
+        }
+      }
+    });
   }
 }
 
