@@ -28,7 +28,25 @@ export default async function handler(req, res) {
     });
 
     if (!rpcRes.error) {
-       consumos = rpcRes.data || [];
+      consumos = rpcRes.data || [];
+      
+      // Map id_tarjeta based on tarjeta_nombre because the RPC doesn't return it
+      const { data: tarjetas } = await supabase
+        .from('tarjetas')
+        .select('id_tarjeta, nombre')
+        .eq('id_cuenta_principal', cuenta);
+        
+      if (tarjetas && tarjetas.length > 0) {
+        const tarjetaMap = {};
+        tarjetas.forEach(t => {
+          tarjetaMap[t.nombre.toLowerCase()] = t.id_tarjeta;
+        });
+        consumos.forEach(c => {
+          if (c.tarjeta_nombre) {
+            c.id_tarjeta = tarjetaMap[c.tarjeta_nombre.toLowerCase()] || null;
+          }
+        });
+      }
     } else {
        // Fallback: get tarjetas for this account, then get their consumos
        const { data: tarjetas, error: tErr1 } = await supabase
