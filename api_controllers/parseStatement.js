@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import XLSX from 'xlsx';
 
 async function callGemini(key, modelName, systemInstruction, history, responseMimeType = null) {
   const cleanHistory = (history || []).filter(h => h.role === 'user' || h.role === 'model');
@@ -167,20 +168,36 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 `;
 
     const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    
+    const parts = [];
+    if (mimeType === 'application/pdf') {
+      parts.push({
+        inlineData: {
+          mimeType: mimeType,
+          data: fileBase64
+        }
+      });
+    } else {
+      // Parse XLSX
+      const buffer = Buffer.from(fileBase64, 'base64');
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const csvText = XLSX.utils.sheet_to_csv(worksheet);
+      
+      parts.push({
+        text: `A continuación se detallan los datos del resumen de la tarjeta en formato CSV:\n\n${csvText}`
+      });
+    }
+
+    parts.push({
+      text: 'Analiza este resumen de tarjeta de crédito y compáralo con la base de datos.'
+    });
+
     const history = [
       {
         role: 'user',
-        parts: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: fileBase64
-            }
-          },
-          {
-            text: 'Analiza este resumen de tarjeta de crédito y compáralo con la base de datos.'
-          }
-        ]
+        parts: parts
       }
     ];
 
