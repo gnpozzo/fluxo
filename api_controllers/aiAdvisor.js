@@ -186,45 +186,75 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
       parts: [{ text: message }]
     });
 
-    const candidateModels = [
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-flash',
-      'gemini-pro'
-    ];
-
+    // 4. Descubrimiento dinámico de modelos soportados por la API Key
     let geminiData = null;
     let lastError = null;
 
-    for (const model of candidateModels) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
-            contents: contents,
-            generationConfig: { temperature: 0.4 }
-          })
-        });
+    try {
+      // Consultar qué modelos tiene habilitados exactamente esta API Key
+      const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, { signal: AbortSignal.timeout(4000) });
+      let availableModels = [];
+      if (listResp.ok) {
+        const listData = await listResp.json();
+        availableModels = (listData.models || [])
+          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+          .map(m => m.name.replace('models/', ''));
+      }
 
-        if (resp.ok) {
-          geminiData = await resp.json();
-          break;
-        } else {
-          const errBody = await resp.json().catch(() => null);
-          lastError = errBody?.error?.message || `HTTP ${resp.status}`;
-          // Si el error es modelo no encontrado (404), prueba el siguiente
-          if (resp.status !== 404) {
-            // Si es un error de API Key inválida o cuota, detén la cascada
+      // Modelos preferidos en orden de prioridad
+      const priorityOrder = [
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-exp',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b',
+        'gemini-1.5-pro-latest',
+        'gemini-1.5-pro',
+        'gemini-1.0-pro'
+      ];
+
+      // Ordenar los disponibles según nuestra preferencia o usar la lista candidata
+      let modelsToTry = [];
+      if (availableModels.length > 0) {
+        modelsToTry = priorityOrder.filter(m => availableModels.includes(m));
+        // Agregar cualquier otro modelo disponible que soporte generateContent
+        availableModels.forEach(m => {
+          if (!modelsToTry.includes(m) && (m.includes('flash') || m.includes('pro'))) modelsToTry.push(m);
+        });
+      }
+
+      if (modelsToTry.length === 0) {
+        modelsToTry = priorityOrder;
+      }
+
+      for (const model of modelsToTry) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: systemPrompt }] },
+              contents: contents,
+              generationConfig: { temperature: 0.4 }
+            })
+          });
+
+          if (resp.ok) {
+            geminiData = await resp.json();
+            break;
+          } else {
+            const errBody = await resp.json().catch(() => null);
+            lastError = errBody?.error?.message || `HTTP ${resp.status}`;
             if (resp.status === 400 || resp.status === 403) break;
           }
+        } catch (callErr) {
+          lastError = callErr.message;
         }
-      } catch (callErr) {
-        lastError = callErr.message;
       }
+    } catch (listErr) {
+      lastError = listErr.message;
     }
 
     if (!geminiData) {
