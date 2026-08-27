@@ -172,7 +172,7 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
    - Justifica con inflación y devaluación actual.
 4. FORMATO: Usa Markdown estructurado con negritas, listas y tablas cuando presentes carteras o proyecciones. Responde en español directo y profesional.`;
 
-    // 4. Llamar a la API de Gemini
+    // 4. Llamar a la API de Gemini con lista de modelos en cascada
     const contents = [];
     (chatHistory || []).forEach(msg => {
       contents.push({
@@ -186,36 +186,51 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
       parts: [{ text: message }]
     });
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    let geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: contents,
-        generationConfig: { temperature: 0.4 }
-      })
-    });
+    const candidateModels = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-flash',
+      'gemini-pro'
+    ];
 
-    if (!geminiRes.ok) {
-      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      geminiRes = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: contents,
-          generationConfig: { temperature: 0.4 }
-        })
-      });
+    let geminiData = null;
+    let lastError = null;
+
+    for (const model of candidateModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: contents,
+            generationConfig: { temperature: 0.4 }
+          })
+        });
+
+        if (resp.ok) {
+          geminiData = await resp.json();
+          break;
+        } else {
+          const errBody = await resp.json().catch(() => null);
+          lastError = errBody?.error?.message || `HTTP ${resp.status}`;
+          // Si el error es modelo no encontrado (404), prueba el siguiente
+          if (resp.status !== 404) {
+            // Si es un error de API Key inválida o cuota, detén la cascada
+            if (resp.status === 400 || resp.status === 403) break;
+          }
+        }
+      } catch (callErr) {
+        lastError = callErr.message;
+      }
     }
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      throw new Error(`Gemini API error: ${geminiRes.status} - ${errText}`);
+    if (!geminiData) {
+      throw new Error(`Gemini API error: ${lastError || 'No se pudo contactar el modelo de IA'}`);
     }
 
-    const geminiData = await geminiRes.json();
     const replyText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No pude generar una recomendación en este momento.';
 
     return res.status(200).json({
