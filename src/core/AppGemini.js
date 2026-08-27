@@ -86,17 +86,95 @@ export class GeminiChatController {
 
   #formatMarkdown(text) {
     if (!text) return '';
-    let html = text
+
+    // Extraer bloque de opciones si existe: [OPCIONES: A) ... | B) ... | C) ...]
+    let optionsHtml = '';
+    const optionsMatch = text.match(/\[OPCIONES:\s*(.+?)\]/i);
+    let cleanText = text;
+
+    if (optionsMatch) {
+      cleanText = cleanText.replace(optionsMatch[0], '').trim();
+      const rawOptions = optionsMatch[1].split('|').map(o => o.trim()).filter(Boolean);
+      optionsHtml = `
+        <div class="gemini-interactive-options" style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
+          ${rawOptions.map(opt => `
+            <button type="button" class="gemini-option-choice-btn" data-choice="${opt}" style="
+              text-align:left;
+              padding:10px 14px;
+              background:var(--superficie);
+              border:1px solid var(--borde);
+              border-radius:var(--r);
+              cursor:pointer;
+              font-size:0.84rem;
+              color:var(--texto);
+              font-weight:500;
+              transition:all .15s ease;
+              box-shadow:var(--sombra-sm);
+            " onmouseover="this.style.borderColor='var(--primary)';this.style.background='var(--primary-tint)'" onmouseout="this.style.borderColor='var(--borde)';this.style.background='var(--superficie)'">
+              ${opt}
+            </button>
+          `).join('')}
+        </div>
+      `;
+    } else {
+      // Detección automática alternativa si vienen opciones en formato A) ... B) ...
+      const regexLines = cleanText.split('\n');
+      const detectedOptions = [];
+      const nonOptionLines = [];
+
+      for (const line of regexLines) {
+        const trimmed = line.trim();
+        if (/^[A-D]\)\s+/i.test(trimmed)) {
+          detectedOptions.push(trimmed);
+        } else {
+          nonOptionLines.push(line);
+        }
+      }
+
+      if (detectedOptions.length >= 2) {
+        cleanText = nonOptionLines.join('\n').trim();
+        optionsHtml = `
+          <div class="gemini-interactive-options" style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
+            ${detectedOptions.map(opt => `
+              <button type="button" class="gemini-option-choice-btn" data-choice="${opt}" style="
+                text-align:left;
+                padding:10px 14px;
+                background:var(--superficie);
+                border:1px solid var(--borde);
+                border-radius:var(--r);
+                cursor:pointer;
+                font-size:0.84rem;
+                color:var(--texto);
+                font-weight:500;
+                transition:all .15s ease;
+                box-shadow:var(--sombra-sm);
+              " onmouseover="this.style.borderColor='var(--primary)';this.style.background='var(--primary-tint)'" onmouseout="this.style.borderColor='var(--borde)';this.style.background='var(--superficie)'">
+                ${opt}
+              </button>
+            `).join('')}
+          </div>
+        `;
+      }
+    }
+
+    let html = cleanText
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
 
+    // Limpiar separadores tipo --- o ___
+    html = html.replace(/^(---|\*\*\*|___)\s*$/gm, '<hr style="border:none; border-top:1px solid var(--borde); margin:12px 0;">');
+
+    // Limpiar encabezados ### y ##
+    html = html.replace(/^###\s+(.*$)/gm, '<strong style="display:block; margin:8px 0 4px; font-size:0.95rem; color:var(--texto);">$1</strong>');
+    html = html.replace(/^##\s+(.*$)/gm, '<strong style="display:block; margin:10px 0 4px; font-size:1.02rem; color:var(--texto);">$1</strong>');
+
     // Tablas Markdown
     html = html.replace(/\|(.+)\|/g, (match) => {
       const cells = match.split('|').filter(c => c.trim() !== '');
-      if (match.includes('---')) return ''; // Línea separadora
+      if (match.includes('---')) return '';
       return '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
     });
     if (html.includes('<tr>')) {
@@ -106,7 +184,7 @@ export class GeminiChatController {
     // Negritas **texto**
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
-    // Listas desordenadas (* o -)
+    // Listas desordenadas
     const lines = html.split('\n');
     let inList = false;
     const processedLines = [];
@@ -115,7 +193,7 @@ export class GeminiChatController {
       const trimmed = line.trim();
       if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
         if (!inList) {
-          processedLines.push('<ul>');
+          processedLines.push('<ul style="margin:6px 0; padding-left:18px;">');
           inList = true;
         }
         processedLines.push(`<li>${trimmed.substring(2)}</li>`);
@@ -132,14 +210,14 @@ export class GeminiChatController {
     let finalHtml = '';
     for (let i = 0; i < processedLines.length; i++) {
       const line = processedLines[i];
-      if (line === '<ul>' || line === '</ul>' || line.startsWith('<li>') || line.startsWith('<div class="table-card"')) {
+      if (line.startsWith('<ul') || line === '</ul>' || line.startsWith('<li>') || line.startsWith('<div class="table-card"') || line.startsWith('<hr') || line.startsWith('<strong style="display:block')) {
         finalHtml += line;
       } else {
         finalHtml += line + (i < processedLines.length - 1 ? '<br>' : '');
       }
     }
 
-    return finalHtml;
+    return finalHtml + optionsHtml;
   }
 
   async #handleUserMessage(message) {
@@ -236,6 +314,25 @@ export class GeminiChatController {
 
     if (sender === 'gemini') {
       msgEl.innerHTML = this.#formatMarkdown(text);
+
+      // Vincular eventos a los botones de opción interactiva
+      msgEl.querySelectorAll('.gemini-option-choice-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const choice = btn.dataset.choice;
+          if (choice) {
+            // Deshabilitar todos los botones de este grupo para evitar clics múltiples
+            msgEl.querySelectorAll('.gemini-option-choice-btn').forEach(b => {
+              b.disabled = true;
+              b.style.opacity = '0.6';
+              b.style.pointerEvents = 'none';
+            });
+            btn.style.background = 'var(--primary)';
+            btn.style.color = '#FFFFFF';
+            btn.style.opacity = '1';
+            this.#handleUserMessage(choice);
+          }
+        });
+      });
     } else {
       msgEl.textContent = text;
     }
