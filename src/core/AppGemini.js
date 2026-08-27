@@ -177,23 +177,29 @@ export class GeminiChatController {
         riskProfile: this.#riskProfile
       };
 
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (window.App && window.App.Auth) {
+        const token = window.App.Auth.getToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/aiAdvisor', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: headers,
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
-      }
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (_) {}
 
-      const data = await response.json();
       this.#hideLoader();
 
-      if (!data.success) {
-        throw new Error(data.error || 'Error al procesar consulta');
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP error: ${response.status}`);
       }
 
       const modelText = data.reply || 'No se pudo generar respuesta.';
