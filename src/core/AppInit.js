@@ -242,10 +242,10 @@ class AppInit {
     // Ocultar todos los paneles de contenido
     document.querySelectorAll('.vista-container').forEach(v => v.classList.remove('active'));
 
-    // Control Back Button visibility
+    // Control Back Button visibility (Show back button on sub-modules)
     const backBtn = document.getElementById('btn-header-back');
     if (backBtn) {
-      backBtn.style.display = 'none';
+      backBtn.style.display = vistaId === 'vista-dashboard' ? 'none' : 'inline-flex';
     }
 
     // Desactivar todos los nav items del sidebar

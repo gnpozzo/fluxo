@@ -228,13 +228,28 @@ export class DashboardModule extends BaseModule {
     const { kpis, movimientos } = data;
 
     const saldoValEl = document.getElementById('dash-saldo-val');
+    const convValEl = document.getElementById('dash-conversion-val');
     const breakdownIngresosEl = document.getElementById('dash-breakdown-ingresos');
     const breakdownEgresosEl = document.getElementById('dash-breakdown-egresos');
+
+    const curr = App.Store.monedaGlobal || 'ARS';
+    const rate = App.Store.exchangeRate || 1540;
 
     if (saldoValEl) {
       saldoValEl.textContent = App.Utils.formatearMoneda(kpis.resultado);
       saldoValEl.classList.toggle('negativo', kpis.resultado < 0);
     }
+
+    if (convValEl) {
+      if (curr === 'ARS') {
+        const usdEquiv = (kpis.resultado || 0) / (rate || 1540);
+        convValEl.textContent = `≈ US$ ${Math.abs(usdEquiv).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      } else {
+        const arsEquiv = (kpis.resultado || 0) * (rate || 1540);
+        convValEl.textContent = `≈ $ ${Math.abs(arsEquiv).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ARS`;
+      }
+    }
+
     if (breakdownIngresosEl) {
       breakdownIngresosEl.textContent = App.Utils.formatearMoneda(kpis.ingresos);
     }
@@ -255,126 +270,236 @@ export class DashboardModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
-      <!-- Collapsible Saldo Card -->
-      <div class="saldo-card" id="dash-saldo-card" role="button" aria-expanded="false" tabindex="0">
-        <div class="saldo-card-header">
-          <span class="saldo-label">Mi saldo</span>
-          <svg class="saldo-chevron dash-chevron" id="dash-saldo-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-        <div class="saldo-value" id="dash-saldo-val">$ 0,00</div>
-        <div class="saldo-breakdown collapsed" id="dash-saldo-breakdown">
-          <div class="breakdown-row">
-            <div class="breakdown-col">
-              <span class="breakdown-label">INGRESOS</span>
-              <span class="breakdown-val positivo" id="dash-breakdown-ingresos">$ 0,00</span>
+      <!-- ═══ TOP ROW: HERO PATRIMONIAL & ACCIONES RÁPIDAS ═══ -->
+      <div class="dash-hero-grid">
+        
+        <!-- Hero Saldo Card -->
+        <div class="fintech-hero-card" id="dash-saldo-card">
+          <div class="fhc-header">
+            <div class="fhc-title-wrap">
+              <span class="fhc-badge">Patrimonio Disponible</span>
+              <span class="fhc-subtitle">Balance y flujo mensual</span>
             </div>
-            <div class="breakdown-col">
-              <span class="breakdown-label">EGRESOS</span>
-              <span class="breakdown-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
+            <button class="fhc-visibility-btn" id="btn-toggle-privacy" title="Ocultar/Mostrar saldo" aria-label="Alternar privacidad">
+              <svg id="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg id="icon-eye-closed" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+
+          <div class="fhc-body">
+            <div class="fhc-main-amount" id="dash-saldo-val">$ 0,00</div>
+            <div class="fhc-conversion-text" id="dash-conversion-val">≈ US$ 0,00</div>
+          </div>
+
+          <div class="fhc-breakdown-row">
+            <div class="fhc-stat-box fhc-stat-ing">
+              <div class="fhc-stat-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+              </div>
+              <div class="fhc-stat-info">
+                <span class="fhc-stat-label">Ingresos</span>
+                <span class="fhc-stat-val positivo" id="dash-breakdown-ingresos">$ 0,00</span>
+              </div>
+            </div>
+
+            <div class="fhc-stat-divider"></div>
+
+            <div class="fhc-stat-box fhc-stat-egr">
+              <div class="fhc-stat-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+              </div>
+              <div class="fhc-stat-info">
+                <span class="fhc-stat-label">Egresos</span>
+                <span class="fhc-stat-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Quick Actions Panel -->
+        <div class="fintech-actions-card">
+          <div class="fac-header">
+            <span class="fac-title">Acciones Directas</span>
+          </div>
+          <div class="fac-grid">
+            <button class="fac-btn" id="qa-btn-gasto" onclick="App.Modules.movimientos?.abrirAlta('EGRESO')">
+              <div class="fac-btn-icon icon-red">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+              </div>
+              <span class="fac-btn-label">Gasto</span>
+            </button>
+
+            <button class="fac-btn" id="qa-btn-ingreso" onclick="App.Modules.movimientos?.abrirAlta('INGRESO')">
+              <div class="fac-btn-icon icon-green">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+              </div>
+              <span class="fac-btn-label">Ingreso</span>
+            </button>
+
+            <button class="fac-btn" id="qa-btn-tc" onclick="App.Modules.tarjetas?.abrirAlta()">
+              <div class="fac-btn-icon icon-blue">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              </div>
+              <span class="fac-btn-label">Tarjeta</span>
+            </button>
+
+            <button class="fac-btn" id="qa-btn-cc" onclick="App.Modules.cc?.abrirAlta()">
+              <div class="fac-btn-icon icon-purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <span class="fac-btn-label">Compartido</span>
+            </button>
+
+            <button class="fac-btn" id="qa-btn-ahorro" onclick="App.Modules.ahorro?.abrirAlta()">
+              <div class="fac-btn-icon icon-yellow">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+              </div>
+              <span class="fac-btn-label">Ahorrar</span>
+            </button>
+
+            <button class="fac-btn" id="qa-btn-inversiones" onclick="document.querySelector('[data-vista=vista-inversiones]')?.click()">
+              <div class="fac-btn-icon icon-cyan">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              <span class="fac-btn-label">Invertir</span>
+            </button>
+          </div>
+        </div>
+
       </div>
 
-      <!-- ═══ MOVIMIENTOS DEL MES (Acordeón) ═══ -->
-      <div class="dash-section" id="dash-mov-section">
-        <div class="dash-section-header" id="dash-mov-toggle">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="dash-section-icon" style="background:var(--primary-tint);color:var(--primary)">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/></svg>
-            </span>
-            <span class="dash-section-title">MOVIMIENTOS DEL MES</span>
-          </div>
-          <svg class="dash-chevron" id="dash-mov-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      <!-- ═══ BENTO GRID: 4 MÓDULOS DE RESUMEN PATRIMONIAL ═══ -->
+      <div class="dash-bento-section">
+        <div class="dbs-header">
+          <h3 class="dbs-title">Tus Pilares Patrimoniales</h3>
+          <span class="dbs-subtitle">Resumen y estado de tus cuentas activas</span>
         </div>
-        <div class="dash-section-body" id="dash-mov-body">
-          <div id="dash-mov-table-preview"></div>
-          <div id="dash-mov-table-full" class="hidden"></div>
-          <button id="dash-mov-ver-mas" class="btn btn-ghost btn-sm" style="margin:12px auto;display:block">
-            Ver todos los movimientos ▼
-          </button>
-        </div>
-      </div>
 
-      <!-- ═══ MÓDULOS SECUNDARIOS ═══ -->
-      <div class="dash-cards-row" id="dash-modules-row">
-        <!-- Tarjetas de Crédito -->
-        <div class="dash-module-card" id="dash-card-tarjetas">
-          <div class="dash-mc-header">
-            <span class="dash-section-icon" style="background:var(--rojo-tint);color:var(--rojo)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
-            <span class="dash-mc-title">TARJETAS</span>
-          </div>
-          <div class="dash-mc-body">
-            <div class="dash-mc-kpi-row" style="margin-bottom:12px"><div><span class="dash-mc-kpi-label">Total consumos</span><span class="dash-mc-kpi-value negativo" id="dash-tc-total">—</span></div></div>
-            <div class="dash-tc-carousel">
-              <button class="dash-tc-arrow" id="dash-tc-prev" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
-              <div class="dash-tc-visual" id="dash-tc-visual" style="display:flex; justify-content:center; align-items:center;">
-                <div class="tc-card-pill" style="background: linear-gradient(135deg, #1D195D 0%, #0c0a2a 100%); cursor: default; margin: 0 auto; user-select: none;">
-                  <div class="tc-card-shimmer"></div>
-                  <div class="tc-card-row tc-card-top">
-                    <span class="tc-card-issuer-name">SANTANDER</span>
-                    <svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" style="display:block;">
-                      <path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z" />
-                    </svg>
-                  </div>
-                  <div class="tc-card-row tc-card-middle">
-                    <div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>
-                    <svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
-                      <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
-                      <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
-                      <path d="M11 4a15 15 0 0 1 0 16" opacity="0.7"/>
-                      <path d="M14 2a18 18 0 0 1 0 20"/>
-                    </svg>
-                  </div>
-                  <div class="tc-card-row tc-card-bottom">
-                    <div class="tc-card-bottom-left">
+        <div class="dash-bento-grid" id="dash-modules-row">
+          
+          <!-- 1. Tarjetas de Crédito -->
+          <div class="bento-card bento-card-tarjetas" id="dash-card-tarjetas">
+            <div class="bc-top">
+              <div class="bc-icon icon-blue">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              </div>
+              <span class="bc-tag">Tarjetas</span>
+              <button class="bc-arrow-btn" id="dash-tc-ver-consumos" title="Ver detalle de tarjetas">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            <div class="bc-main">
+              <span class="bc-label">Total consumos del ciclo</span>
+              <span class="bc-value negativo" id="dash-tc-total">—</span>
+            </div>
+            <div class="bc-preview-wrap">
+              <div class="dash-tc-carousel">
+                <button class="dash-tc-arrow" id="dash-tc-prev" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+                <div class="dash-tc-visual" id="dash-tc-visual">
+                  <div class="tc-card-pill" style="background: linear-gradient(135deg, #1D195D 0%, #0c0a2a 100%);">
+                    <div class="tc-card-shimmer"></div>
+                    <div class="tc-card-row tc-card-top">
+                      <span class="tc-card-issuer-name">SANTANDER</span>
+                      <svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" width="16" height="16"><path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z"/></svg>
+                    </div>
+                    <div class="tc-card-row tc-card-bottom">
                       <span class="tc-card-number">**** ••••</span>
                       <span class="tc-card-amount">$0,00</span>
                     </div>
-                    <div class="tc-card-bottom-right">
-                      <svg viewBox="0 0 48 16" width="36" height="12" fill="#ffffff" style="opacity:0.95; display:block;"><path d="M18.2 1.2L15.3 15h-2.8L9.7 4.1C9.2 3.6 8.7 3.3 8 3.2L5 3v-.4h4.6c.6 0 1.1.4 1.2 1L12 11.2l3.5-10h2.7zm9.6 9.4c0-2.5-3.5-2.6-3.5-3.7 0-.3.3-.7 1-.8.3 0 1.3-.1 2.4.4l.4-2.5C27.4 3.7 26.3 3.4 25 3.4c-2.8 0-4.8 1.5-4.8 3.6 0 2.8 3.9 3 3.9 4.5 0 .5-.5.9-1.2.9-1.6 0-2.7-.7-2.7-.7l-.4 2.6c.7.3 2.1.6 3.5.6 3 0 5.2-1.5 5.2-3.7zM38.8 15h2.4L43.3 1.2h-2.4L38.8 15zm-9.3-13.8L27.2 15h2.6l1.6-4.4h6.3l.6 4.4h2.3L37.2 1.2H29.5zm2.3 7.2l2-5.5 1.1 5.5H31.8zM4.6 1.2L.2 11.9v.2c.4 1.1 1.5 1.7 2.6 1.7H11L12.3 8 7.6 1.2H4.6z" /></svg>
-                    </div>
                   </div>
                 </div>
+                <button class="dash-tc-arrow" id="dash-tc-next" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
               </div>
-              <button class="dash-tc-arrow" id="dash-tc-next" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
             </div>
-            <div style="text-align:center;margin-top:8px;font-size:0.85rem;font-weight:600;color:var(--texto-2)" id="dash-tc-subtotal">Subtotal: —</div>
-            <button id="dash-tc-ver-consumos" class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" disabled>Ver consumos de esta tarjeta</button>
+            <div class="bc-footer" id="dash-tc-subtotal">Subtotal: —</div>
           </div>
+
+          <!-- 2. Gastos Compartidos (Clearing) -->
+          <div class="bento-card bento-card-cc" id="dash-card-cc">
+            <div class="bc-top">
+              <div class="bc-icon icon-purple">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <span class="bc-tag">Clearing</span>
+              <button class="bc-arrow-btn" id="dash-cc-detail" title="Ver detalle de gastos compartidos">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            <div class="bc-main">
+              <span class="bc-label">Saldo neto a liquidar</span>
+              <span class="bc-value" id="dash-cc-saldo">—</span>
+            </div>
+            <div class="bc-desc-box">
+              <span class="bc-desc-text">Balance consolidado de deudas y créditos con convivientes.</span>
+            </div>
+            <div class="bc-footer bc-footer-link" onclick="document.querySelector('[data-vista=vista-cc]')?.click()">Ver conciliación →</div>
+          </div>
+
+          <!-- 3. Chanchito (Ahorros) -->
+          <div class="bento-card bento-card-ahorro" id="dash-card-ahorro">
+            <div class="bc-top">
+              <div class="bc-icon icon-yellow">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+              </div>
+              <span class="bc-tag">Chanchito</span>
+              <button class="bc-arrow-btn" id="dash-ahorro-detail" title="Ver alcancías de ahorro">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            <div class="bc-main">
+              <span class="bc-label">Fondo de reserva acumulado</span>
+              <span class="bc-value positivo" id="dash-ahorro-total">—</span>
+            </div>
+            <div class="bc-desc-box">
+              <span class="bc-desc-text">Ahorro líquido separado en alcancías para metas programadas.</span>
+            </div>
+            <div class="bc-footer bc-footer-link" onclick="document.querySelector('[data-vista=vista-ahorro]')?.click()">Ver alcancías →</div>
+          </div>
+
+          <!-- 4. Inversiones -->
+          <div class="bento-card bento-card-inversiones" id="dash-card-inversiones">
+            <div class="bc-top">
+              <div class="bc-icon icon-cyan">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              <span class="bc-tag">Inversiones</span>
+              <button class="bc-arrow-btn" id="dash-inversiones-detail" title="Ver portafolio de inversiones">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            <div class="bc-main">
+              <span class="bc-label">Valuación de cartera viva</span>
+              <span class="bc-value" id="dash-inversiones-valor">—</span>
+            </div>
+            <div class="bc-desc-box">
+              <span class="bc-desc-text">Rendimiento en LECAPs, ONs en dólares y CEDEARs.</span>
+            </div>
+            <div class="bc-footer bc-footer-link" onclick="document.querySelector('[data-vista=vista-inversiones]')?.click()">Ver portafolio →</div>
+          </div>
+
         </div>
-        <!-- Gastos Compartidos -->
-        <div class="dash-module-card" id="dash-card-cc">
-          <div class="dash-mc-header">
-            <span class="dash-section-icon" style="background:var(--verde-tint);color:var(--verde)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-            <span class="dash-mc-title">GASTOS COMPARTIDOS</span>
+      </div>
+
+      <!-- ═══ FEED MODERNO: ÚLTIMAS TRANSACCIONES ═══ -->
+      <div class="dash-feed-section" id="dash-mov-section">
+        <div class="dfs-header">
+          <div class="dfs-title-wrap">
+            <div class="dfs-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </div>
+            <div>
+              <h3 class="dfs-title">Últimos Movimientos</h3>
+              <span class="dfs-subtitle">Transacciones del período seleccionado</span>
+            </div>
           </div>
-          <div class="dash-mc-body">
-            <div class="dash-mc-kpi-row"><div><span class="dash-mc-kpi-label">Saldo neto</span><span class="dash-mc-kpi-value" id="dash-cc-saldo">—</span></div></div>
-            <button id="dash-cc-detail" class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px">Ver detalle</button>
-          </div>
+          <button id="dash-mov-ver-mas" class="dfs-all-btn">
+            <span>Ver todos los movimientos</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
         </div>
-        <!-- Ahorro / Chanchito -->
-        <div class="dash-module-card" id="dash-card-ahorro">
-          <div class="dash-mc-header">
-            <span class="dash-section-icon" style="background:var(--amarillo-tint);color:var(--amarillo-text)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg></span>
-            <span class="dash-mc-title">CHANCHITO</span>
-          </div>
-          <div class="dash-mc-body">
-            <div class="dash-mc-kpi-row"><div><span class="dash-mc-kpi-label">Total ahorros</span><span class="dash-mc-kpi-value" id="dash-ahorro-total">—</span></div></div>
-            <button id="dash-ahorro-detail" class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px">Ver alcancías</button>
-          </div>
-        </div>
-        <!-- Inversiones -->
-        <div class="dash-module-card" id="dash-card-inversiones">
-          <div class="dash-mc-header">
-            <span class="dash-section-icon" style="background:rgba(14, 165, 233, 0.1);color:var(--cyan, #0ea5e9)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
-            <span class="dash-mc-title">INVERSIONES</span>
-          </div>
-          <div class="dash-mc-body">
-            <div class="dash-mc-kpi-row"><div><span class="dash-mc-kpi-label">Valor actual</span><span class="dash-mc-kpi-value" id="dash-inversiones-valor">—</span></div></div>
-            <button id="dash-inversiones-detail" class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px">Ver inversiones</button>
-          </div>
+
+        <div class="dfs-body" id="dash-mov-body">
+          <div id="dash-mov-table-preview" class="fintech-feed-container"></div>
         </div>
       </div>
     `;
@@ -383,12 +508,25 @@ export class DashboardModule extends BaseModule {
   // --- SECCIÓN 4: LISTENERS ---
 
   _bindListeners() {
-    // Acordeón movimientos
-    document.getElementById('dash-mov-toggle')?.addEventListener('click', () => {
-      const body = document.getElementById('dash-mov-body');
-      const chev = document.getElementById('dash-mov-chevron');
-      body?.classList.toggle('collapsed');
-      chev?.classList.toggle('rotated');
+    // Privacy Toggle (Eye button)
+    let isPrivacyActive = false;
+    document.getElementById('btn-toggle-privacy')?.addEventListener('click', () => {
+      isPrivacyActive = !isPrivacyActive;
+      const saldoValEl = document.getElementById('dash-saldo-val');
+      const convValEl = document.getElementById('dash-conversion-val');
+      const eyeOpen = document.getElementById('icon-eye-open');
+      const eyeClosed = document.getElementById('icon-eye-closed');
+
+      eyeOpen?.classList.toggle('hidden', isPrivacyActive);
+      eyeClosed?.classList.toggle('hidden', !isPrivacyActive);
+
+      if (isPrivacyActive) {
+        saldoValEl?.classList.add('privacy-masked');
+        convValEl?.classList.add('privacy-masked');
+      } else {
+        saldoValEl?.classList.remove('privacy-masked');
+        convValEl?.classList.remove('privacy-masked');
+      }
     });
 
     // Ver más movimientos
@@ -396,12 +534,15 @@ export class DashboardModule extends BaseModule {
       this.#accordionOpen = !this.#accordionOpen;
       this.#renderMovTable();
       const btn = document.getElementById('dash-mov-ver-mas');
-      if (btn) btn.textContent = this.#accordionOpen ? 'Ver menos ▲' : 'Ver todos los movimientos ▼';
+      if (btn) {
+        btn.querySelector('span').textContent = this.#accordionOpen ? 'Mostrar menos' : 'Ver todos los movimientos';
+        btn.querySelector('svg')?.classList.toggle('rotated', this.#accordionOpen);
+      }
     });
 
     // Tarjetas carousel
-    document.getElementById('dash-tc-prev')?.addEventListener('click', () => this.#navigateTc(-1));
-    document.getElementById('dash-tc-next')?.addEventListener('click', () => this.#navigateTc(1));
+    document.getElementById('dash-tc-prev')?.addEventListener('click', (e) => { e.stopPropagation(); this.#navigateTc(-1); });
+    document.getElementById('dash-tc-next')?.addEventListener('click', (e) => { e.stopPropagation(); this.#navigateTc(1); });
     document.getElementById('dash-tc-ver-consumos')?.addEventListener('click', () => {
       document.querySelector('[data-vista="vista-tarjetas"]')?.click();
     });
@@ -459,40 +600,83 @@ export class DashboardModule extends BaseModule {
 
   #renderMovTable() {
     const preview = document.getElementById('dash-mov-table-preview');
-    const full    = document.getElementById('dash-mov-table-full');
     if (!preview) return;
 
     const rows = this.#accordionOpen ? this.#movData : this.#movData.slice(0, 5);
 
-    const tableHtml = `
-      <table class="dash-table">
-        <thead>
-          <tr>
-            <th>FECHA ▲</th>
-            <th>TIPO ⇅</th>
-            <th>CATEGORÍA ⇅</th>
-            <th>DESCRIPCIÓN ⇅</th>
-            <th style="text-align:right">IMPORTE</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.length === 0
-            ? '<tr><td colspan="5" style="text-align:center;color:var(--texto-3);padding:24px">No hay movimientos en el período</td></tr>'
-            : rows.map(r => `
-              <tr class="clickable-row" data-id="${r.id_movimiento || r.id}">
-                <td>${App.Utils.formatearFecha(r.fecha?.value || r.fecha)}</td>
-                <td><span class="tipo-mov tipo-${(r.tipo_mov || '').toLowerCase()}">${App.Utils.escapeHtml(r.tipo_mov || '')}</span></td>
-                <td>${App.Utils.escapeHtml(r.categoria_nombre || 'General')}</td>
-                <td>${App.Utils.escapeHtml(r.descripcion || '')}${r.es_recurrente ? ' <span class="badge-recurrente">Recurrente</span>' : ''}</td>
-                <td style="text-align:right" class="${r.tipo_mov === 'EGRESO' ? 'negativo' : 'positivo'}">${App.Utils.formatearMoneda(r.importe)}</td>
-              </tr>
-            `).join('')}
-        </tbody>
-      </table>
-    `;
-    preview.innerHTML = tableHtml;
+    if (rows.length === 0) {
+      preview.innerHTML = `
+        <div class="dfs-empty">
+          <div class="dfs-empty-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          </div>
+          <span>No hay movimientos registrados en este período</span>
+        </div>
+      `;
+      const btn = document.getElementById('dash-mov-ver-mas');
+      if (btn) btn.style.display = 'none';
+      return;
+    }
 
-    // Click listeners
+    const getCategoryIconSvg = (catName, tipo) => {
+      const cat = (catName || '').toLowerCase();
+      if (tipo === 'INGRESO') {
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+      }
+      if (cat.includes('super') || cat.includes('alimen') || cat.includes('comida')) {
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
+      }
+      if (cat.includes('serv') || cat.includes('luz') || cat.includes('gas') || cat.includes('internet')) {
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+      }
+      if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+      }
+      if (cat.includes('salud') || cat.includes('farmacia')) {
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
+      }
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
+    };
+
+    const feedHtml = `
+      <div class="dfs-list">
+        ${rows.map(r => {
+          const esIngreso = r.tipo_mov === 'INGRESO';
+          const iconClass = esIngreso ? 'icon-green' : 'icon-subtle';
+          const sign = esIngreso ? '+' : '-';
+          const valClass = esIngreso ? 'positivo' : 'negativo';
+          const catName = r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General');
+          const desc = r.descripcion || catName;
+          const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
+
+          return `
+            <div class="dfs-item clickable-row" data-id="${r.id_movimiento || r.id}">
+              <div class="dfs-item-left">
+                <div class="dfs-item-icon ${iconClass}">
+                  ${getCategoryIconSvg(catName, r.tipo_mov)}
+                </div>
+                <div class="dfs-item-text">
+                  <span class="dfs-item-desc">${App.Utils.escapeHtml(desc)}</span>
+                  <div class="dfs-item-meta">
+                    <span class="dfs-item-cat">${App.Utils.escapeHtml(catName)}</span>
+                    <span class="dfs-meta-dot">•</span>
+                    <span class="dfs-item-date">${fechaStr}</span>
+                    ${r.es_recurrente ? '<span class="dfs-badge-recur">Recurrente</span>' : ''}
+                  </div>
+                </div>
+              </div>
+              <div class="dfs-item-right">
+                <span class="dfs-item-amount ${valClass}">${sign} ${App.Utils.formatearMoneda(r.importe)}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    preview.innerHTML = feedHtml;
+
+    // Click listeners for transactions
     preview.querySelectorAll('.clickable-row').forEach(rowEl => {
       rowEl.addEventListener('click', () => {
         const id = rowEl.dataset.id;
@@ -502,7 +686,7 @@ export class DashboardModule extends BaseModule {
     });
 
     const btn = document.getElementById('dash-mov-ver-mas');
-    if (btn) btn.style.display = this.#movData.length > 10 ? 'block' : 'none';
+    if (btn) btn.style.display = this.#movData.length > 5 ? 'flex' : 'none';
   }
 
   // --- SECCIÓN 6: TARJETAS DE CRÉDITO ---

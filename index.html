@@ -172,14 +172,22 @@
 
           <!-- Currency Pills -->
           <div class="currency-pills" id="currency-pills" role="group" aria-label="Moneda">
-            <button class="currency-pill active" id="pill-ars" data-currency="ARS">Pesos</button>
-            <button class="currency-pill" id="pill-usd" data-currency="USD">Dólares</button>
+            <button class="currency-pill active" id="pill-ars" data-currency="ARS">ARS</button>
+            <button class="currency-pill" id="pill-usd" data-currency="USD">USD</button>
           </div>
+
+          <!-- Gemini AI Advisor Button (Top Bar Header) -->
+          <button id="btn-header-gemini" class="btn-icon-sm btn-gemini-header" title="Asesor Financiero IA" aria-label="Abrir asesor IA">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="currentColor"/>
+            </svg>
+            <span class="btn-gemini-text">AI Advisor</span>
+          </button>
 
           <!-- Notificaciones (Header) -->
           <div class="notifications-dropdown-container" id="notifications-dropdown-container">
             <button id="btn-notifications" class="header-bell-btn" title="Notificaciones" aria-label="Notificaciones" style="position:relative;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
               </svg>
@@ -206,7 +214,7 @@
               <div class="dropdown-divider"></div>
               <button class="dropdown-item" id="dropdown-opt-config">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-                  <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
                 <span>Panel de configuración</span>
               </button>
@@ -234,11 +242,6 @@
         </div>
       </header>
 
-      <!-- ── HEADER HERO PANEL (Mi Saldo & Module Navigation) ── -->
-      <div class="header-hero-panel" id="header-hero-panel">
-        <!-- Botonera de Acceso Rápido a Módulos (Navegación Adaptativa) -->
-        <div class="dash-modules-nav" id="dash-modules-nav"></div>
-      </div>
 
       <!-- ── CONTENIDO PRINCIPAL ────────────────────────────── -->
       <main class="main-content">
@@ -438,6 +441,7 @@
 
       // --- Gemini panel toggle ---
       const btnGemini = document.getElementById('btn-gemini');
+      const btnHeaderGemini = document.getElementById('btn-header-gemini');
       const geminiPanel = document.getElementById('gemini-panel');
       const geminiOverlay = document.getElementById('gemini-overlay');
       const geminiClose = document.getElementById('gemini-panel-close');
@@ -453,6 +457,7 @@
       }
 
       btnGemini?.addEventListener('click', openGemini);
+      btnHeaderGemini?.addEventListener('click', openGemini);
       geminiClose?.addEventListener('click', closeGemini);
       geminiOverlay?.addEventListener('click', closeGemini);
 
