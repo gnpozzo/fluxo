@@ -183,13 +183,13 @@ export class DashboardModule extends BaseModule {
     const cardAhorro = document.getElementById('dash-card-ahorro');
     const cardInversiones = document.getElementById('dash-card-inversiones');
 
-    const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
-    const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
+    const hasTarjetas = (cuentaObj?.modulo_tarjetas_activo ?? true) || (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
+    const hasAhorro = (cuentaObj?.modulo_ahorro_activo ?? true) || (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
 
     if (cardTarjetas) cardTarjetas.style.display = hasTarjetas ? '' : 'none';
-    if (cardCC) cardCC.style.display = cuentaObj?.modulo_cc_activo ? '' : 'none';
+    if (cardCC) cardCC.style.display = (cuentaObj?.modulo_cc_activo ?? true) ? '' : 'none';
     if (cardAhorro) cardAhorro.style.display = hasAhorro ? '' : 'none';
-    if (cardInversiones) cardInversiones.style.display = cuentaObj?.modulo_inversiones_activo ? '' : 'none';
+    if (cardInversiones) cardInversiones.style.display = (cuentaObj?.modulo_inversiones_activo ?? true) ? '' : 'none';
 
     this.#mostrarKpiSkeletons();
 
@@ -414,13 +414,13 @@ export class DashboardModule extends BaseModule {
             <div class="bc-footer" id="dash-tc-subtotal">Subtotal: —</div>
           </div>
 
-          <!-- 2. Gastos Compartidos (Clearing) -->
+          <!-- 2. Gastos Compartidos -->
           <div class="bento-card bento-card-cc" id="dash-card-cc">
             <div class="bc-top">
               <div class="bc-icon icon-purple">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               </div>
-              <span class="bc-tag">Clearing</span>
+              <span class="bc-tag">Gastos Compartidos</span>
               <button class="bc-arrow-btn" id="dash-cc-detail" title="Ver detalle de gastos compartidos">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
