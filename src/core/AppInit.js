@@ -149,38 +149,35 @@ class AppInit {
         App.Store.setExchangeRate(pDolar.bolsa.venta);
       }
 
-      if (!initialData?.success) {
-        if (initialData?.error) {
-          App.Toast.error(initialData.error);
-        }
-        this.#ocultarLoader();
-        return;
-      }
+      const defaultCuentas = [
+        { id_cuenta_principal: 'Principal', nombre: 'Principal', es_predeterminada: true, activa: true, modulo_tarjetas_activo: true, modulo_cc_activo: true, modulo_ahorro_activo: true, modulo_inversiones_activo: true }
+      ];
+
+      const cuentas = initialData?.cuentas?.length ? initialData.cuentas : defaultCuentas;
+      const meses = initialData?.meses?.length ? initialData.meses : [];
 
       // Llenar Store con datos maestros
-      App.Store.setCuentas(initialData.cuentas || []);
-      App.Store.setMeses(initialData.meses   || []);
+      App.Store.setCuentas(cuentas);
+      if (meses.length) App.Store.setMeses(meses);
 
-      // Cachear categorías y tarjetas en los módulos (disponibles en el Store via data)
-      // Los módulos los recibirán en su primera respuesta de backend,
-      // pero los guardamos globalmente para acceso rápido
-      window._appCategorias = initialData.categorias || [];
-      window._appTarjetas   = initialData.tarjetas   || [];
-      window._appUsuariosCC = initialData.usuarios_cc || [];
-      window._appSubcuentas = initialData.subcuentas || [];
+      // Cachear categorías y tarjetas en los módulos
+      window._appCategorias = initialData?.categorias || [];
+      window._appTarjetas   = initialData?.tarjetas   || [];
+      window._appUsuariosCC = initialData?.usuarios_cc || [];
+      window._appSubcuentas = initialData?.subcuentas || [];
 
       // Configurar cuenta inicial
-      const cuentaPred = (initialData.cuentas || []).find(c => c.es_predeterminada) || initialData.cuentas?.[0];
+      const cuentaPred = cuentas.find(c => c.es_predeterminada) || cuentas[0];
       if (cuentaPred) {
         App.Store.setCuenta(cuentaPred.id_cuenta_principal);
       }
 
-      // Configurar selectores del DOM (por compatibilidad con código legacy si hubiera)
-      this.#syncSelectorDom(initialData.cuentas);
-      this.#syncMesDom(initialData.meses);
+      // Configurar selectores del DOM
+      this.#syncSelectorDom(cuentas);
+      if (meses.length) this.#syncMesDom(meses);
 
       // Configurar Account Selector
-      this.#setupAccountSelector(initialData.cuentas);
+      this.#setupAccountSelector(cuentas);
       
       // Configurar Quick Add global
       this.#setupQuickAdd();
