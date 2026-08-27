@@ -295,7 +295,8 @@
           <svg class="gemini-icon-inline gemini-sparkle-anim" viewBox="0 0 24 24" fill="none">
             <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="#9B72CB" stroke="none"/>
           </svg>
-          Gemini AI
+          <span>Fluxo Wealth AI</span>
+          <span id="gemini-profile-pill" style="font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:12px; background:var(--primary-tint); color:var(--primary); margin-left:6px; cursor:pointer;" title="Clic para cambiar perfil de riesgo">MODERADO</span>
         </div>
         <button class="gemini-panel-close" id="gemini-panel-close" aria-label="Cerrar panel">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -304,18 +305,38 @@
         </button>
       </div>
       <div class="gemini-panel-body" id="gemini-panel-body" style="display:flex; flex-direction:column;">
-        <div class="gemini-panel-welcome" id="gemini-welcome-msg" style="text-align:center; padding:40px 20px; color:var(--texto-3);">
-          <svg class="gemini-sparkle-large gemini-sparkle-anim" viewBox="0 0 24 24" fill="none" style="width:56px; height:56px; margin: 0 auto 16px; opacity:0.6;">
+        <div class="gemini-panel-welcome" id="gemini-welcome-msg" style="text-align:center; padding:24px 16px; color:var(--texto-3);">
+          <svg class="gemini-sparkle-large gemini-sparkle-anim" viewBox="0 0 24 24" fill="none" style="width:48px; height:48px; margin: 0 auto 12px; opacity:0.8;">
             <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="#9B72CB" stroke="none"/>
           </svg>
-          <h3>Asistente Financiero</h3>
-          <p>Preguntame sobre tus finanzas, composición de cartera, patrones de gastos o cómo optimizar tu ahorro.</p>
+          <h3 style="color:var(--texto); font-size:1.15rem; margin-bottom:6px;">Asesor Financiero & Mercados</h3>
+          <p style="font-size:0.85rem; margin-bottom:18px;">Te ayudo a optimizar gastos, planificar metas de ahorro, proyectar flujos y diseñar carteras de inversión diversificadas.</p>
+          
+          <!-- Chips de Acción Rápida -->
+          <div class="gemini-quick-chips" style="display:flex; flex-direction:column; gap:8px; text-align:left;">
+            <button class="gemini-chip-btn" data-prompt="Quiero hacer el Test de Perfil del Inversor para calibrar mi nivel de riesgo (Conservador, Moderado o Agresivo).">
+              <span class="chip-icon">🧭</span>
+              <span class="chip-text"><strong>Test de Perfil de Inversor</strong><small>Descubrí tu tolerancia al riesgo y horizonte</small></span>
+            </button>
+            <button class="gemini-chip-btn" data-prompt="Quiero ahorrar un monto fijo por mes para un proyecto. Analizá mis gastos de este mes, decime qué partidas o categorías puedo recortar y armame la proyección de ahorro.">
+              <span class="chip-icon">✂️</span>
+              <span class="chip-text"><strong>Plan de Ahorro & Recorte de Gastos</strong><small>Optimizar partidas para cumplir una meta</small></span>
+            </button>
+            <button class="gemini-chip-btn" data-prompt="¿Dónde me conviene invertir el dinero que voy ahorrando mes a mes? Analizá inflación, devaluación, rendimiento de LECAPs, ONs en USD y CEDEARs para armar una cartera diversificada.">
+              <span class="chip-icon">📈</span>
+              <span class="chip-text"><strong>Estrategia de Inversión por Proyecto</strong><small>Pesos vs USD, renta fija y variable diversificada</small></span>
+            </button>
+            <button class="gemini-chip-btn" data-prompt="Analizá mi balance financiero de este período, nivel de deuda en tarjetas y salud general de mis cuentas.">
+              <span class="chip-icon">📊</span>
+              <span class="chip-text"><strong>Diagnóstico de Finanzas Personales</strong><small>Balance, tarjetas de crédito y patrimonio</small></span>
+            </button>
+          </div>
         </div>
         <div class="gemini-chat-history" id="gemini-chat-history" style="display:none; flex-direction:column; gap:12px; flex:1; overflow-y:auto; padding-bottom:10px;"></div>
       </div>
       <div class="gemini-panel-footer">
         <form id="gemini-chat-form" onsubmit="event.preventDefault()" class="gemini-input-wrap">
-          <input type="text" id="gemini-input" placeholder="Preguntá sobre tus finanzas...">
+          <input type="text" id="gemini-input" placeholder="Preguntá sobre ahorro, recortes, inversiones o proyectos...">
           <button type="submit" class="gemini-send-btn" id="gemini-send-btn" aria-label="Enviar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>

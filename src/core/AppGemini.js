@@ -7,122 +7,101 @@
 
 export class GeminiChatController {
   #chatHistory = [];
-  #apiKey = 'AIzaSyAmgUEcj3daadBB24fIUboBOH-8I69FbaA';
-  #apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
   #initialized = false;
+  #riskProfile = localStorage.getItem('fluxo_risk_profile') || 'MODERADO';
 
   constructor() {
-    App.log('GeminiChatController', 'constructor', 'Inicializando controlador Gemini');
+    App.log('GeminiChatController', 'constructor', 'Inicializando Fluxo Wealth Advisor');
+  }
+
+  get riskProfile() {
+    return this.#riskProfile;
+  }
+
+  setRiskProfile(profile) {
+    this.#riskProfile = profile;
+    localStorage.setItem('fluxo_risk_profile', profile);
+    this.#updateProfileUI();
   }
 
   async init() {
     if (this.#initialized) return;
     this.#initialized = true;
-    
-    try {
-      const res = await fetch('/api/getConfig');
-      const config = await res.json();
-      if (config.geminiApiKey) {
-        this.#apiKey = config.geminiApiKey;
-      }
-    } catch (err) {
-      App.log('GeminiChatController', 'init', 'Error al obtener la API Key desde el servidor:', err);
-    }
-    
     this.#initUI();
+    this.#updateProfileUI();
+  }
+
+  #updateProfileUI() {
+    const pill = document.getElementById('gemini-profile-pill');
+    if (!pill) return;
+    pill.textContent = this.#riskProfile;
+    if (this.#riskProfile === 'CONSERVADOR') {
+      pill.style.background = 'var(--verde-tint)';
+      pill.style.color = 'var(--verde-text)';
+    } else if (this.#riskProfile === 'AGRESIVO') {
+      pill.style.background = 'var(--rojo-tint)';
+      pill.style.color = 'var(--rojo-text)';
+    } else {
+      pill.style.background = 'var(--primary-tint)';
+      pill.style.color = 'var(--primary)';
+    }
   }
 
   #initUI() {
     const form = document.getElementById('gemini-chat-form');
     const input = document.getElementById('gemini-input');
-    
-    if (!form || !input) {
-      App.log('GeminiChatController', 'initUI', 'No se encontraron los elementos del chat de Gemini. Reintentando...');
-      return;
+    const pill = document.getElementById('gemini-profile-pill');
+
+    if (pill) {
+      pill.addEventListener('click', () => {
+        const next = this.#riskProfile === 'CONSERVADOR' ? 'MODERADO' : (this.#riskProfile === 'MODERADO' ? 'AGRESIVO' : 'CONSERVADOR');
+        this.setRiskProfile(next);
+        if (App.Toast) App.Toast.info(`Perfil de inversor cambiado a: ${next}`);
+      });
     }
 
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const message = input.value.trim();
-      if (!message) return;
-
-      input.value = '';
-      this.#handleUserMessage(message);
+    // Bind Quick Action Chips
+    document.querySelectorAll('.gemini-chip-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prompt = btn.dataset.prompt;
+        if (prompt) {
+          this.#handleUserMessage(prompt);
+        }
+      });
     });
 
-    App.log('GeminiChatController', 'initUI', 'UI del chat Gemini vinculada con éxito');
-  }
+    if (form && input) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const message = input.value.trim();
+        if (!message) return;
 
-  #compileSystemInstruction() {
-    const activeCuenta = App.Store.cuenta;
-    const cuentaObj = App.Store.cuentas.find(c => c.id_cuenta_principal === activeCuenta);
-    const nombreCuenta = cuentaObj?.nombre || activeCuenta;
-    const mes = App.Store.mes || '';
-    const moneda = App.Store.globalCurrency || 'ARS';
-    
-    // Obtener KPIs del DOM actual
-    const saldoText = document.getElementById('dash-saldo-val')?.textContent || '$ 0,00';
-    const ingresosText = document.getElementById('dash-breakdown-ingresos')?.textContent || '$ 0,00';
-    const egresosText = document.getElementById('dash-breakdown-egresos')?.textContent || '$ 0,00';
-    
-    // Módulos
-    const tcTotal = cuentaObj?.modulo_tarjetas_activo ? (document.getElementById('dash-tc-total')?.textContent || '—') : 'Inactivo';
-    const ccSaldo = cuentaObj?.modulo_cc_activo ? (document.getElementById('dash-cc-saldo')?.textContent || '—') : 'Inactivo';
-    const ahorroTotal = cuentaObj?.modulo_ahorro_activo ? (document.getElementById('dash-ahorro-total')?.textContent || '—') : 'Inactivo';
-    const inversionesValor = cuentaObj?.modulo_inversiones_activo ? (document.getElementById('dash-inversiones-valor')?.textContent || '—') : 'Inactivo';
+        input.value = '';
+        this.#handleUserMessage(message);
+      });
+    }
 
-    // Lista de últimos movimientos
-    const recentMovs = App.Modules.dashboard?.movData || [];
-    const movsContext = recentMovs.map(m => {
-      const fecha = App.Utils.formatearFecha(m.fecha?.value || m.fecha || '');
-      const tipo = m.tipo_mov || '';
-      const cat = m.categoria_nombre || 'General';
-      const desc = m.descripcion || '';
-      const imp = App.Utils.formatearMoneda(m.importe);
-      return `- ${fecha} | ${tipo} | ${cat} | ${desc} | ${imp}`;
-    }).join('\n');
-
-    const userDisplayName = App.Store.usuario?.user_metadata?.full_name || 
-                            App.Store.usuario?.email?.split('@')[0] || 
-                            'Gaston';
-
-    return `Eres "Gemini AI", el asistente financiero inteligente integrado en la aplicación de finanzas personales "Fluxo".
-Tu objetivo es ayudar al usuario a entender sus finanzas y responder a sus consultas de forma clara, directa, empática y concisa (ideal para visualización en un panel de chat móvil). Responde siempre en español.
-
-CONTEXTO FINANCIERO ACTUAL DEL USUARIO:
-- Usuario: ${userDisplayName}
-- Cuenta Activa: ${nombreCuenta}
-- Período de Análisis: ${mes}
-- Moneda Principal: ${moneda}
-- Saldo Total: ${saldoText}
-- Total Ingresos del Mes: ${ingresosText}
-- Total Egresos del Mes: ${egresosText}
-
-ESTADO DE MÓDULOS DE LA CUENTA:
-- Tarjetas de Crédito: ${cuentaObj?.modulo_tarjetas_activo ? `Activo (Total Consumos del mes: ${tcTotal})` : 'Desactivado'}
-- Gastos Compartidos: ${cuentaObj?.modulo_cc_activo ? `Activo (Saldo Neto: ${ccSaldo})` : 'Desactivado'}
-- Chanchito (Ahorro): ${cuentaObj?.modulo_ahorro_activo ? `Activo (Total Ahorrado: ${ahorroTotal})` : 'Desactivado'}
-- Inversiones: ${cuentaObj?.modulo_inversiones_activo ? `Activo (Valor Actual: ${inversionesValor})` : 'Desactivado'}
-
-ÚLTIMOS MOVIMIENTOS REGISTRADOS EN ESTE PERÍODO:
-${movsContext || 'No hay movimientos registrados en este período.'}
-
-INSTRUCCIONES DE COMPORTAMIENTO:
-1. Responde preguntas del usuario basándote en el contexto financiero proporcionado. Si es posible, realiza resúmenes rápidos de gastos, categorías, o saldo.
-2. Sé muy breve y conciso, utilizando negritas y listas viñetadas para estructurar las respuestas para pantallas móviles.
-3. Si el usuario te pregunta por un módulo que está desactivado, menciónale amablemente que puede activarlo desde el panel de configuración de la cuenta.
-4. Si el usuario te hace preguntas no financieras o no relacionadas con la aplicación, guíalo amablemente de vuelta a sus finanzas en Fluxo.`;
+    App.log('GeminiChatController', 'initUI', 'UI Fluxo Wealth Advisor vinculada con éxito');
   }
 
   #formatMarkdown(text) {
     if (!text) return '';
-    // Escapar caracteres HTML para seguridad
     let html = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+
+    // Tablas Markdown
+    html = html.replace(/\|(.+)\|/g, (match) => {
+      const cells = match.split('|').filter(c => c.trim() !== '');
+      if (match.includes('---')) return ''; // Línea separadora
+      return '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
+    });
+    if (html.includes('<tr>')) {
+      html = html.replace(/(<tr>.*?<\/tr>(\s*<tr>.*?<\/tr>)*)/g, '<div class="table-card" style="margin:10px 0;overflow-x:auto;"><table class="table">$1</table></div>');
+    }
 
     // Negritas **texto**
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
@@ -148,15 +127,12 @@ INSTRUCCIONES DE COMPORTAMIENTO:
         processedLines.push(line);
       }
     }
-    if (inList) {
-      processedLines.push('</ul>');
-    }
+    if (inList) processedLines.push('</ul>');
 
-    // Unir líneas e insertar <br> donde sea necesario
     let finalHtml = '';
     for (let i = 0; i < processedLines.length; i++) {
       const line = processedLines[i];
-      if (line === '<ul>' || line === '</ul>' || line.startsWith('<li>')) {
+      if (line === '<ul>' || line === '</ul>' || line.startsWith('<li>') || line.startsWith('<div class="table-card"')) {
         finalHtml += line;
       } else {
         finalHtml += line + (i < processedLines.length - 1 ? '<br>' : '');
@@ -177,70 +153,70 @@ INSTRUCCIONES DE COMPORTAMIENTO:
     this.#appendMessage('user', message);
     this.#scrollToBottom();
 
-    // 2. Agregar mensaje de usuario al historial de la conversación en memoria
+    // 2. Historial en memoria
     this.#chatHistory.push({
       role: 'user',
-      parts: [{ text: message }]
+      text: message
     });
 
-    // Mantener historial recortado a los últimos 20 mensajes para evitar desborde de tokens
     if (this.#chatHistory.length > 20) {
       this.#chatHistory.shift();
     }
 
-    // 3. Mostrar indicador de escritura (loader)
+    // 3. Indicador de carga
     this.#showLoader();
     this.#scrollToBottom();
 
-    // Check if the API key is not configured or contains placeholder
-    if (!this.#apiKey || this.#apiKey.includes('daadBB') || this.#apiKey.trim() === '') {
-      this.#hideLoader();
-      this.#appendMessage('error', 'Error de conexión: No se pudo contactar a Gemini AI. Por favor configurá la API Key válida en las variables de entorno.');
-      this.#scrollToBottom();
-      return;
-    }
-
     try {
-      const systemInstruction = this.#compileSystemInstruction();
-      
-      const response = await fetch(`${this.#apiUrl}?key=${this.#apiKey}`, {
+      const payload = {
+        message: message,
+        chatHistory: this.#chatHistory.slice(0, -1),
+        cuentaId: App.Store?.cuenta || null,
+        mes: App.Store?.mes || null,
+        globalCurrency: App.Store?.globalCurrency || 'ARS',
+        riskProfile: this.#riskProfile
+      };
+
+      const response = await fetch('/api/aiAdvisor', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemInstruction }]
-          },
-          contents: this.#chatHistory,
-          generationConfig: {
-            temperature: 0.3
-          }
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error: ${response.status}`);
       }
 
       const data = await response.json();
-      const modelText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No pude procesar tu solicitud en este momento.';
-
-      // Ocultar loader
       this.#hideLoader();
 
-      // 4. Agregar respuesta del modelo al DOM y al historial
+      if (!data.success) {
+        throw new Error(data.error || 'Error al procesar consulta');
+      }
+
+      const modelText = data.reply || 'No se pudo generar respuesta.';
+
+      // Actualizar perfil si el modelo diagnosticó uno nuevo
+      if (modelText.includes('Perfil de Riesgo:') || modelText.includes('perfil asignado:') || modelText.includes('tu perfil es')) {
+        if (modelText.toUpperCase().includes('CONSERVADOR')) this.setRiskProfile('CONSERVADOR');
+        else if (modelText.toUpperCase().includes('AGRESIVO')) this.setRiskProfile('AGRESIVO');
+        else if (modelText.toUpperCase().includes('MODERADO')) this.setRiskProfile('MODERADO');
+      }
+
       this.#appendMessage('gemini', modelText);
       this.#chatHistory.push({
         role: 'model',
-        parts: [{ text: modelText }]
+        text: modelText
       });
 
       this.#scrollToBottom();
+
     } catch (err) {
       App.log('GeminiChatController', 'error', err);
       this.#hideLoader();
-      this.#appendMessage('error', 'Error de conexión: No se pudo contactar a Gemini AI.');
+      this.#appendMessage('error', `Error al contactar al asesor: ${err.message || 'Verificá tu conexión o credenciales.'}`);
       this.#scrollToBottom();
     }
   }

@@ -3947,4 +3947,129 @@ body {
   flex-shrink: 0 !important;
 }
 
+/* ── Fluxo Wealth AI Advisor Styles ─────────────────────────── */
+.gemini-quick-chips {
+  margin-top: 14px;
+}
+
+.gemini-chip-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.gemini-chip-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-tint);
+  transform: translateY(-1px);
+  box-shadow: var(--sombra-sm);
+}
+
+.gemini-chip-btn .chip-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.gemini-chip-btn .chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gemini-chip-btn .chip-text strong {
+  font-size: 0.82rem;
+  color: var(--texto);
+}
+
+.gemini-chip-btn .chip-text small {
+  font-size: 0.73rem;
+  color: var(--texto-2);
+}
+
+.gemini-chat-history .message {
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  max-width: 90%;
+  word-break: break-word;
+}
+
+.gemini-chat-history .message.user {
+  background: var(--primary);
+  color: #FFFFFF;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.gemini-chat-history .message.gemini {
+  background: var(--superficie);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  box-shadow: var(--sombra-sm);
+}
+
+.gemini-chat-history .message.error {
+  background: var(--rojo-tint);
+  color: var(--rojo-text);
+  border: 1px solid var(--rojo);
+  align-self: center;
+  font-size: 0.82rem;
+}
+
+.gemini-chat-history .message table {
+  width: 100%;
+  font-size: 0.8rem;
+  margin: 6px 0;
+  border-collapse: collapse;
+}
+
+.gemini-chat-history .message table th,
+.gemini-chat-history .message table td {
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+}
+
+.gemini-chat-history .message table th {
+  background: var(--fondo);
+  font-weight: 700;
+}
+
+.gemini-loader {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  align-self: flex-start;
+  width: fit-content;
+}
+
+.gemini-loader span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: geminiBounce 1.2s infinite ease-in-out;
+}
+
+.gemini-loader span:nth-child(2) { animation-delay: 0.2s; }
+.gemini-loader span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes geminiBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}
+
 

@@ -125,7 +125,9 @@ class ApiService {
         window.App.Events.emit('auth:unauthorized');
       }
 
-      alert('APP_API ERROR: ' + errorToThrow.message);
+      if (window.App && window.App.Toast) {
+        window.App.Toast.error(errorToThrow.message || 'Error de conexión con el servidor');
+      }
       if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: errorToThrow.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
       throw errorToThrow;
     }

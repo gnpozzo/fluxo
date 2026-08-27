@@ -528,14 +528,15 @@ class AppInit {
     btnQa.addEventListener('click', () => {
       const m = new App.Modal('modal-quick-add');
       m.open({
-        titulo: '¿Qué tipo de movimiento?',
+        titulo: '¿Qué vas a registrar?',
         icono: 'add',
         size: 'sm',
         body: `<div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('INGRESO')">${iw(icons.ing,'var(--verde-tint)','var(--verde)')}<span style="flex:1">Cargar Ingreso</span>${chev}</button>
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('EGRESO')">${iw(icons.egr,'var(--rojo-tint)','var(--rojo)')}<span style="flex:1">Cargar Gasto</span>${chev}</button>
+          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('EGRESO')">${iw(icons.egr,'var(--rojo-tint)','var(--rojo)')}<span style="flex:1">Gasto al Contado</span>${chev}</button>
           <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.tarjetas?.abrirAlta()">${iw(icons.tc,'#eff6ff','#2563eb')}<span style="flex:1">Consumo en Tarjeta</span>${chev}</button>
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.cc?.abrirAlta()">${iw(icons.cc,'#f5f3ff','#7c3aed')}<span style="flex:1">Gasto Compartido</span>${chev}</button>
+          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('INGRESO')">${iw(icons.ing,'var(--verde-tint)','var(--verde)')}<span style="flex:1">Nuevo Ingreso / Sueldo</span>${chev}</button>
+          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.cc?.abrirAlta()">${iw(icons.cc,'#f5f3ff','#7c3aed')}<span style="flex:1">Gasto Compartido (Clearing)</span>${chev}</button>
+          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.ahorro?.abrirAlta()">${iw(icons.ah,'var(--amarillo-tint)','var(--amarillo-text)')}<span style="flex:1">Guardar en Chanchito</span>${chev}</button>
         </div>`,
         confirmLabel: '',
         cancelLabel: 'Cancelar'
@@ -1002,8 +1003,8 @@ class AppInit {
             confirmLabel: 'Aceptar',
             cancelLabel: 'Cerrar'
           });
-        } else {
-          alert('Fluxo v6.0.0 — Gestión Inteligente de Finanzas');
+        } else if (App.Toast) {
+          App.Toast.info('Fluxo v6.0.0 — Gestión Inteligente de Finanzas');
         }
       });
 
