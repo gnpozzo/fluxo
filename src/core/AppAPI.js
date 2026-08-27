@@ -26,10 +26,11 @@ class ApiService {
     const key = fnName + JSON.stringify(args);
     const now = Date.now();
     const cached = this._cache.get(key);
+    const argsArray = Array.isArray(args) ? args : [args];
 
     if (cached) {
        if (now - cached.timestamp < ttlMs) {
-         this.call(fnName, ...args).then(fresh => {
+         this.call(fnName, ...argsArray).then(fresh => {
            if (JSON.stringify(fresh) !== JSON.stringify(cached.data)) {
                this._cache.set(key, { timestamp: Date.now(), data: fresh });
                if (onRevalidate) onRevalidate(fresh);
@@ -39,7 +40,7 @@ class ApiService {
        }
     }
 
-    const data = await this.call(fnName, ...args);
+    const data = await this.call(fnName, ...argsArray);
     this._cache.set(key, { timestamp: Date.now(), data: data });
     return { data: data };
   }
@@ -125,9 +126,6 @@ class ApiService {
         window.App.Events.emit('auth:unauthorized');
       }
 
-      if (window.App && window.App.Toast) {
-        window.App.Toast.error(errorToThrow.message || 'Error de conexión con el servidor');
-      }
       if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: errorToThrow.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
       throw errorToThrow;
     }
