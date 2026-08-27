@@ -298,11 +298,18 @@
           <span>Fluxo Wealth AI</span>
           <span id="gemini-profile-pill" style="font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:12px; background:var(--primary-tint); color:var(--primary); margin-left:6px; cursor:pointer;" title="Clic para cambiar perfil de riesgo">MODERADO</span>
         </div>
-        <button class="gemini-panel-close" id="gemini-panel-close" aria-label="Cerrar panel">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="gemini-panel-action" id="gemini-panel-clear" aria-label="Limpiar historial" title="Reiniciar conversación" style="background:transparent; border:none; color:var(--texto-3); cursor:pointer; padding:4px; border-radius:6px; display:flex; align-items:center; justify-content:center;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+          <button class="gemini-panel-close" id="gemini-panel-close" aria-label="Cerrar panel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="gemini-panel-body" id="gemini-panel-body" style="display:flex; flex-direction:column;">
         <div class="gemini-panel-welcome" id="gemini-welcome-msg" style="text-align:center; padding:24px 16px; color:var(--texto-3);">

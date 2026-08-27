@@ -27,8 +27,50 @@ export class GeminiChatController {
   async init() {
     if (this.#initialized) return;
     this.#initialized = true;
+    this.#loadPersistedHistory();
     this.#initUI();
     this.#updateProfileUI();
+  }
+
+  #loadPersistedHistory() {
+    try {
+      const saved = localStorage.getItem('fluxo_advisor_history');
+      if (saved) {
+        this.#chatHistory = JSON.parse(saved);
+        if (this.#chatHistory.length > 0) {
+          const welcomeMsg = document.getElementById('gemini-welcome-msg');
+          const chatHistoryEl = document.getElementById('gemini-chat-history');
+          if (welcomeMsg) welcomeMsg.style.display = 'none';
+          if (chatHistoryEl) chatHistoryEl.style.display = 'flex';
+
+          this.#chatHistory.forEach(msg => {
+            this.#appendMessage(msg.role === 'user' ? 'user' : 'gemini', msg.text);
+          });
+          this.#scrollToBottom();
+        }
+      }
+    } catch (e) {
+      App.log('GeminiChatController', 'loadHistory', 'Error al cargar historial persistido:', e);
+    }
+  }
+
+  #saveHistory() {
+    try {
+      localStorage.setItem('fluxo_advisor_history', JSON.stringify(this.#chatHistory));
+    } catch (_) {}
+  }
+
+  resetChat() {
+    this.#chatHistory = [];
+    localStorage.removeItem('fluxo_advisor_history');
+    const chatHistoryEl = document.getElementById('gemini-chat-history');
+    const welcomeMsg = document.getElementById('gemini-welcome-msg');
+    if (chatHistoryEl) {
+      chatHistoryEl.innerHTML = '';
+      chatHistoryEl.style.display = 'none';
+    }
+    if (welcomeMsg) welcomeMsg.style.display = 'block';
+    if (App.Toast) App.Toast.info('Conversación reiniciada.');
   }
 
   #updateProfileUI() {
@@ -51,6 +93,15 @@ export class GeminiChatController {
     const form = document.getElementById('gemini-chat-form');
     const input = document.getElementById('gemini-input');
     const pill = document.getElementById('gemini-profile-pill');
+    const clearBtn = document.getElementById('gemini-panel-clear');
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (confirm('¿Querés reiniciar la conversación y borrar el historial de este chat?')) {
+          this.resetChat();
+        }
+      });
+    }
 
     if (pill) {
       pill.addEventListener('click', () => {
@@ -294,6 +345,7 @@ export class GeminiChatController {
         role: 'model',
         text: modelText
       });
+      this.#saveHistory();
 
       this.#scrollToBottom();
 
