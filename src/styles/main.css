@@ -3014,9 +3014,15 @@ body {
 
 .dash-bento-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
   width: 100%;
+}
+
+@media (max-width: 768px) {
+  .dash-bento-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .bento-card {

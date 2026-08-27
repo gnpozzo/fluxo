@@ -281,6 +281,15 @@ class AppInit {
       saldoCard.classList.toggle('hidden', vistaId !== 'vista-dashboard');
     }
 
+    // Floating Action Buttons contextual visibility:
+    // En el Dashboard principal ya están las Acciones Directas en el Hero.
+    // En las pantallas internas (Tarjetas, Gastos Compartidos, Chanchito, Inversiones)
+    // el FAB flota para permitir registrar consumos rápidamente sin volver al inicio.
+    const fabGroup = document.getElementById('fab-group');
+    if (fabGroup) {
+      fabGroup.style.display = (vistaId === 'vista-dashboard' || vistaId === 'vista-admin') ? 'none' : 'flex';
+    }
+
     const moduloId  = this.#tabMap[vistaId];
 
     if (moduloId && App.Modules[moduloId]) {
