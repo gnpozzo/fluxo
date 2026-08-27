@@ -419,7 +419,6 @@ export class AdminModule extends BaseModule {
         const d = {
           nombre: form.querySelector('[name="nombre"]').value.trim(),
           moneda_principal: form.querySelector('[name="moneda_principal"]').value,
-          icono: form.querySelector('[name="icono"]:checked')?.value || 'home',
           activa: form.querySelector('[name="activa"]').checked,
           modulo_tarjetas_activo: form.querySelector('[name="modulo_tarjetas_activo"]').checked,
           modulo_cc_activo: form.querySelector('[name="modulo_cc_activo"]').checked,
