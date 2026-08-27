@@ -201,26 +201,35 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
           .map(m => m.name.replace('models/', ''));
       }
 
-      // Modelos preferidos en orden de prioridad
+      // Modelos preferidos de texto en orden de prioridad (3.6 Flash, 3.5 Flash-Lite, 2.5 Flash, etc.)
       const priorityOrder = [
+        'gemini-3.6-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
         'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash-lite',
         'gemini-2.0-flash',
-        'gemini-2.0-flash-exp',
-        'gemini-1.5-flash-latest',
         'gemini-1.5-flash',
-        'gemini-1.5-flash-8b',
-        'gemini-1.5-pro-latest',
-        'gemini-1.5-pro',
-        'gemini-1.0-pro'
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro'
       ];
 
-      // Ordenar los disponibles según nuestra preferencia o usar la lista candidata
+      // Ordenar los disponibles según nuestra preferencia, descartando modelos exclusivos de audio/TTS/imágenes
       let modelsToTry = [];
       if (availableModels.length > 0) {
-        modelsToTry = priorityOrder.filter(m => availableModels.includes(m));
-        // Agregar cualquier otro modelo disponible que soporte generateContent
-        availableModels.forEach(m => {
-          if (!modelsToTry.includes(m) && (m.includes('flash') || m.includes('pro'))) modelsToTry.push(m);
+        // Filtrar modelos puramente de voz/TTS o imágenes
+        const textModels = availableModels.filter(m => 
+          !m.includes('tts') && 
+          !m.includes('audio') && 
+          !m.includes('imagen') && 
+          !m.includes('embedding') &&
+          !m.includes('bison')
+        );
+
+        modelsToTry = priorityOrder.filter(m => textModels.includes(m));
+        textModels.forEach(m => {
+          if (!modelsToTry.includes(m)) modelsToTry.push(m);
         });
       }
 
@@ -236,8 +245,7 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               system_instruction: { parts: [{ text: systemPrompt }] },
-              contents: contents,
-              generationConfig: { temperature: 0.4 }
+              contents: contents
             })
           });
 
@@ -247,7 +255,8 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
           } else {
             const errBody = await resp.json().catch(() => null);
             lastError = errBody?.error?.message || `HTTP ${resp.status}`;
-            if (resp.status === 400 || resp.status === 403) break;
+            // Si es 400 por clave inválida general o cuota, detén la cascada
+            if (resp.status === 403) break;
           }
         } catch (callErr) {
           lastError = callErr.message;
