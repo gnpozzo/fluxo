@@ -2530,7 +2530,7 @@ body {
 }
 
 .main-content {
-  padding: 24px 32px !important;
+  padding: 28px 24px !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   flex: 1;
@@ -2544,7 +2544,7 @@ body {
 }
 
 .main-content > .vista-container.active {
-  max-width: 1280px !important;
+  max-width: 1140px !important;
   width: 100% !important;
   margin: 0 auto !important;
 }
@@ -2557,14 +2557,14 @@ body {
 }
 
 /* ================================================================
-   FINTECH CLEAN DESIGN SYSTEM (Revolut/Nubank/Wise Aesthetic)
+   FINTECH CLEAN DESIGN SYSTEM (Navy Header + Modern Bento Grid)
    ================================================================ */
 
-/* 1. App Header - Minimalist & Glassmorphism */
+/* 1. App Header - Brand Navy with Crisp Contrast */
 .app-header {
-  height: 60px !important;
-  background: var(--superficie) !important;
-  border-bottom: 1px solid var(--borde) !important;
+  height: 64px !important;
+  background: #1D195D !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
@@ -2574,9 +2574,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: background-color 0.25s, border-color 0.25s;
+  transition: background-color 0.25s;
 }
 
 .app-header-logo {
@@ -2586,14 +2584,11 @@ body {
 }
 
 .app-header-logo img {
-  height: 32px !important;
+  height: 34px !important;
   width: auto;
   object-fit: contain;
-  filter: none !important;
-}
-
-[data-theme="dark"] .app-header-logo img {
   filter: brightness(0) invert(1) !important;
+  opacity: 1 !important;
 }
 
 .app-header-actions {
@@ -2602,13 +2597,13 @@ body {
   gap: 12px;
 }
 
-/* Header Selectors */
+/* Header Selectors & Inputs */
 .app-header .welcome-select-wrap {
   display: inline-flex !important;
   align-items: center !important;
   position: relative !important;
-  background: var(--fondo) !important;
-  border: 1px solid var(--borde) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   border-radius: var(--r-full, 9999px) !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -2616,13 +2611,14 @@ body {
 }
 
 .app-header .welcome-select-wrap:hover {
-  border-color: var(--borde-fuerte);
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
 }
 
 .app-header .welcome-select-wrap select {
   background: transparent !important;
   border: none !important;
-  color: var(--texto) !important;
+  color: #ffffff !important;
   padding: 6px 32px 6px 14px !important;
   margin: 0 !important;
   outline: none !important;
@@ -2634,10 +2630,15 @@ body {
   width: auto !important;
 }
 
+.app-header .welcome-select-wrap select option {
+  background: #1D195D !important;
+  color: #ffffff !important;
+}
+
 .app-header .welcome-select-wrap input[type="month"] {
   background: transparent !important;
   border: none !important;
-  color: var(--texto) !important;
+  color: #ffffff !important;
   padding: 6px 14px 6px 32px !important;
   margin: 0 !important;
   outline: none !important;
@@ -2647,13 +2648,18 @@ body {
   width: auto !important;
 }
 
+.app-header .welcome-select-wrap input[type="month"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) !important;
+  cursor: pointer !important;
+}
+
 .app-header .welcome-select-wrap select + .ws-icon {
   position: absolute !important;
   right: 10px !important;
   left: auto !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
-  color: var(--texto-3) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
   pointer-events: none !important;
 }
 
@@ -2663,16 +2669,16 @@ body {
   right: auto !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
-  color: var(--texto-3) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
   pointer-events: none !important;
 }
 
-/* Header Currency Pills */
+/* Header Currency Switcher */
 .app-header .currency-pills {
   display: inline-flex !important;
   align-items: center !important;
-  background: var(--fondo) !important;
-  border: 1px solid var(--borde) !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: var(--r-full, 9999px) !important;
   padding: 2px !important;
   gap: 2px !important;
@@ -2682,7 +2688,7 @@ body {
   background: transparent !important;
   border: none !important;
   border-radius: var(--r-full, 9999px) !important;
-  color: var(--texto-3) !important;
+  color: rgba(255, 255, 255, 0.6) !important;
   font-size: 0.78rem !important;
   font-weight: 700 !important;
   padding: 4px 10px !important;
@@ -2691,9 +2697,9 @@ body {
 }
 
 .app-header .currency-pill.active {
-  background: var(--superficie) !important;
-  color: var(--primary) !important;
-  box-shadow: var(--sombra-sm) !important;
+  background: #ffffff !important;
+  color: #1D195D !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* Header AI Advisor Button */
@@ -2704,16 +2710,16 @@ body {
   width: auto !important;
   padding: 6px 14px !important;
   border-radius: var(--r-full, 9999px) !important;
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(168, 85, 247, 0.08)) !important;
-  border: 1px solid rgba(168, 85, 247, 0.3) !important;
-  color: #8b5cf6 !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(168, 85, 247, 0.25)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
   cursor: pointer !important;
   transition: all 0.2s ease !important;
 }
 
 .btn-gemini-header:hover {
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.16), rgba(168, 85, 247, 0.16)) !important;
-  border-color: #8b5cf6 !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(168, 85, 247, 0.4)) !important;
+  border-color: #ffffff !important;
   transform: translateY(-1px);
 }
 
@@ -2724,10 +2730,10 @@ body {
 }
 
 .header-bell-btn {
-  background: var(--fondo) !important;
-  border: 1px solid var(--borde) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   border-radius: 50% !important;
-  color: var(--texto-2) !important;
+  color: #ffffff !important;
   width: 36px !important;
   height: 36px !important;
   display: flex !important;
@@ -2739,9 +2745,8 @@ body {
 }
 
 .header-bell-btn:hover {
-  background: var(--superficie-hover) !important;
-  color: var(--texto) !important;
-  border-color: var(--borde-fuerte) !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
 }
 
 /* 2. Top Row: Hero Saldo & Quick Actions Grid */
@@ -3009,20 +3014,9 @@ body {
 
 .dash-bento-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-@media (max-width: 1100px) {
-  .dash-bento-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 600px) {
-  .dash-bento-grid {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  width: 100%;
 }
 
 .bento-card {
