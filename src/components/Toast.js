@@ -72,6 +72,8 @@ export class ToastManager {
     this.#container = container;
   }
 
+  #activeMessages = new Set();
+
   /**
    * Crea y muestra un toast.
    * @param {'success'|'error'|'warning'|'info'} tipo
@@ -79,6 +81,12 @@ export class ToastManager {
    * @param {number} duration
    */
   #show(tipo, mensaje, duration) {
+    if (!mensaje) return;
+    const msgKey = `${tipo}:${mensaje}`;
+    if (this.#activeMessages.has(msgKey)) return;
+    this.#activeMessages.add(msgKey);
+    setTimeout(() => this.#activeMessages.delete(msgKey), 2500);
+
     const iconMap = {
       success : 'success',
       error   : 'error',

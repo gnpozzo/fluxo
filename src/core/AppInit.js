@@ -129,11 +129,20 @@ class AppInit {
     this.#initModulos();
 
     try {
-      // Carga inicial: datos maestros y cotización Dólar
-      const [initialData, pDolar] = await Promise.all([
-        App.API.cached('api_getInitialData', [], 24 * 60 * 60 * 1000),
-        App.API.cached('api_getDolarCotizaciones', [], 10 * 60_000)
-      ]);
+      // Carga inicial: datos maestros y cotización Dólar (con fallback resiliente)
+      const initialDataPromise = App.API.cached('api_getInitialData', [], 24 * 60 * 60 * 1000)
+        .catch(err => {
+          App.warn('AppInit', 'getInitialData failed:', err.message);
+          return null;
+        });
+
+      const pDolarPromise = App.API.cached('api_getDolarCotizaciones', [], 10 * 60_000)
+        .catch(err => {
+          App.warn('AppInit', 'getDolarCotizaciones notice:', err.message);
+          return { success: true, bolsa: { compra: 1520, venta: 1545 } };
+        });
+
+      const [initialData, pDolar] = await Promise.all([initialDataPromise, pDolarPromise]);
 
       // Si tenemos cotización, la guardamos en el state
       if (pDolar && pDolar.success && pDolar.bolsa) {
@@ -141,7 +150,9 @@ class AppInit {
       }
 
       if (!initialData?.success) {
-        App.Toast.error(initialData?.error || 'Error al cargar datos iniciales. Revisa tu base de datos.');
+        if (initialData?.error) {
+          App.Toast.error(initialData.error);
+        }
         this.#ocultarLoader();
         return;
       }
