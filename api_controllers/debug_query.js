@@ -28,6 +28,18 @@ export default async function handler(req, res) {
       webhookInfo = { error: 'TELEGRAM_BOT_TOKEN not found in server process.env' };
     }
 
+    let geminiModels = null;
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (geminiKey) {
+      try {
+        const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
+        const gData = await gRes.json();
+        geminiModels = (gData.models || []).map(m => m.name.replace('models/', '')).filter(n => n.includes('flash') || n.includes('pro'));
+      } catch (gErr) {
+        geminiModels = { error: gErr.message };
+      }
+    }
+
     const [tarjetas, cuentas, consumos, movimientos, botSessions] = await Promise.all([
       supabase.from('tarjetas').select('*'),
       supabase.from('cuentas_principales').select('*'),
@@ -38,6 +50,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
+      gemini_models: geminiModels,
       telegram_webhook: webhookInfo,
       tarjetas: tarjetas.data,
       cuentas: cuentas.data,
