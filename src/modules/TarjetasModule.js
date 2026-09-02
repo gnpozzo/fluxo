@@ -91,6 +91,14 @@ export class TarjetasModule extends BaseModule {
     if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
     if (!this.#cuentas.length)    this.#cuentas    = App.Store.cuentas     || [];
 
+    // Map id_tarjeta based on tarjeta_nombre if missing (e.g. from RPC responses)
+    (consumos || []).forEach(c => {
+      if (!c.id_tarjeta && c.tarjeta_nombre) {
+        const found = this.#tarjetas.find(t => t.nombre.toLowerCase() === c.tarjeta_nombre.toLowerCase());
+        if (found) c.id_tarjeta = found.id_tarjeta;
+      }
+    });
+
     // Filter consumos to only those from this account's tarjetas
     const validTcIds = new Set(this.#tarjetas.map(t => t.id_tarjeta));
     const filteredConsumos = (consumos || []).filter(c => validTcIds.has(c.id_tarjeta));
@@ -993,10 +1001,24 @@ export class TarjetasModule extends BaseModule {
         dbRecord: diff.db_record
       });
     });
+    (payload.exact_matches || []).forEach(match => {
+      txList.push({
+        ...match,
+        id: 'match_' + Math.random().toString(36).substr(2, 9),
+        type: 'MATCH'
+      });
+    });
 
     this.#txListImportar = txList;
 
-    document.getElementById('tc-import-count').textContent = txList.length;
+    const newCount = txList.filter(t => t.type === 'NEW').length;
+    const diffCount = txList.filter(t => t.type === 'DIFF').length;
+    const matchCount = txList.filter(t => t.type === 'MATCH').length;
+
+    const countEl = document.getElementById('tc-import-count');
+    if (countEl) {
+      countEl.innerHTML = `${txList.length} <span style="font-size:0.8rem; font-weight:normal; color:var(--texto-3)">(${newCount} nuevos, ${diffCount} modificaciones, ${matchCount} ya registrados)</span>`;
+    }
 
     const tbody = document.getElementById('tc-import-table-body');
     if (!tbody) return;
@@ -1009,6 +1031,10 @@ export class TarjetasModule extends BaseModule {
 
     tbody.innerHTML = txList.map((tx, idx) => {
       const isCuotas = tx.cuota_total && tx.cuota_total > 1;
+      const isMatch = tx.type === 'MATCH';
+      const isDiff = tx.type === 'DIFF';
+      const isChecked = !isMatch;
+
       const typeSelect = `
         <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-type-${tx.id}">
           <option value="SIMPLE" ${!isCuotas ? 'selected' : ''}>Simple</option>
@@ -1016,18 +1042,26 @@ export class TarjetasModule extends BaseModule {
         </select>
       `;
 
-      const badgeHtml = tx.type === 'DIFF'
-        ? `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(245, 158, 11, 0.15); color:#F59E0B;" title="Reemplazará un consumo existente que tiene diferencias">Modifica</span>`
-        : `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(16, 185, 129, 0.15); color:#10B981;" title="Nuevo consumo a registrar">Nuevo</span>`;
+      let badgeHtml = '';
+      if (isDiff) {
+        badgeHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(245, 158, 11, 0.15); color:#F59E0B;" title="Reemplazará un consumo existente que tiene diferencias">Modifica</span>`;
+      } else if (isMatch) {
+        badgeHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(107, 114, 128, 0.15); color:#9CA3AF;" title="Ya existe en la base de datos (desmarcado para no duplicar)">Ya registrado</span>`;
+      } else {
+        badgeHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(16, 185, 129, 0.15); color:#10B981;" title="Nuevo consumo a registrar">Nuevo</span>`;
+      }
 
-      const diffDescHtml = tx.type === 'DIFF' && tx.dbRecord
-        ? `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Reemplaza: "${App.Utils.escapeHtml(tx.dbRecord.descripcion)}" - ${App.Utils.formatearMoneda(tx.dbRecord.importe)})</small>`
-        : '';
+      let diffDescHtml = '';
+      if (isDiff && tx.dbRecord) {
+        diffDescHtml = `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Reemplaza: "${App.Utils.escapeHtml(tx.dbRecord.descripcion)}" - ${App.Utils.formatearMoneda(tx.dbRecord.importe)})</small>`;
+      } else if (isMatch) {
+        diffDescHtml = `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Ya existe en la base de datos — desmarcado para no duplicar)</small>`;
+      }
 
       return `
-        <tr style="border-bottom:1px solid var(--border-color)">
+        <tr style="border-bottom:1px solid var(--border-color); ${isMatch ? 'opacity:0.75;' : ''}">
           <td style="padding:10px; text-align:center">
-            <input type="checkbox" class="tx-select-row" data-id="${tx.id}" checked>
+            <input type="checkbox" class="tx-select-row" data-id="${tx.id}" ${isChecked ? 'checked' : ''}>
           </td>
           <td style="padding:10px; white-space:nowrap">${App.Utils.formatearFecha(tx.fecha)}</td>
           <td style="padding:10px; text-align:center">${badgeHtml}</td>
@@ -1067,11 +1101,14 @@ export class TarjetasModule extends BaseModule {
     });
 
     const selectAllChk = document.getElementById('tc-import-select-all');
-    selectAllChk?.addEventListener('change', () => {
-      tbody.querySelectorAll('.tx-select-row').forEach(chk => {
-        chk.checked = selectAllChk.checked;
+    if (selectAllChk) {
+      selectAllChk.checked = txList.length > 0 && txList.every(t => t.type !== 'MATCH');
+      selectAllChk.addEventListener('change', () => {
+        tbody.querySelectorAll('.tx-select-row').forEach(chk => {
+          chk.checked = selectAllChk.checked;
+        });
       });
-    });
+    }
   }
 
   async #confirmarImportacion(modal) {
@@ -1146,7 +1183,18 @@ export class TarjetasModule extends BaseModule {
         importedCount++;
       }
 
-      App.Toast.success(`Importación finalizada con éxito! Se cargaron ${importedCount} consumos.`);
+      // Check which month the imported transactions belong to
+      const sampleTx = checkedRowChks[0] ? this.#txListImportar.find(t => t.id === checkedRowChks[0].dataset.id) : null;
+      const txMonth = sampleTx?.fecha ? sampleTx.fecha.substring(0, 7) : null;
+
+      let msg = `¡Importación finalizada con éxito! Se cargaron ${importedCount} consumos.`;
+      if (txMonth && txMonth !== App.Store.mes) {
+        const [y, m] = txMonth.split('-');
+        const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+        const mesNombre = dateObj.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+        msg += ` (Quedaron registrados en el período ${mesNombre})`;
+      }
+      App.Toast.success(msg, 7000);
       App.API.invalidateAll();
       if (App.Events) App.Events.emit('data:changed');
       this.destruir();

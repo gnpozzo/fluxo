@@ -134,7 +134,14 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     "total_usd": número
   },
   "exact_matches": [
-    { "descripcion": "...", "importe": 123, "fecha": "YYYY-MM-DD" }
+    {
+      "descripcion": "...",
+      "importe": 123,
+      "cuota_actual": null,
+      "cuota_total": null,
+      "fecha": "YYYY-MM-DD",
+      "id_categoria": "UUID de la categoría seleccionada"
+    }
   ],
   "similar_different": [
     {

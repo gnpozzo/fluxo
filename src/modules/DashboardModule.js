@@ -717,6 +717,10 @@ export class DashboardModule extends BaseModule {
     const consumosByTc = {};
     let totalGlobal = 0;
     (data.consumos || []).forEach(c => {
+      if (!c.id_tarjeta && c.tarjeta_nombre) {
+        const found = tarjetas.find(t => t.nombre.toLowerCase() === c.tarjeta_nombre.toLowerCase());
+        if (found) c.id_tarjeta = found.id_tarjeta;
+      }
       const tid = c.id_tarjeta;
       if (!validTcIds.has(tid)) return; // Skip consumos from other accounts' tarjetas
       if (!consumosByTc[tid]) consumosByTc[tid] = { total: 0, count: 0, items: [] };
