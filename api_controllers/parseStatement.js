@@ -15,32 +15,38 @@ async function callGemini(key, modelName, systemInstruction, history, responseMi
     payload.generationConfig = { responseMimeType };
   }
   
-  let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  
-  if (!response.ok && modelName === 'gemini-3.5-flash') {
-    console.warn(`[parseStatement] Model ${modelName} failed with status ${response.status}. Retrying with fallback gemini-3.1-flash-lite.`);
-    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+  const modelsToTry = [
+    modelName,
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-flash-latest'
+  ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+  let lastError = null;
+  for (const model of modelsToTry) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (response.ok) {
+        const result = await response.json();
+        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      } else {
+        const errTxt = await response.text();
+        lastError = `${response.status} - ${errTxt}`;
+        console.warn(`[parseStatement] Model ${model} failed: ${lastError}`);
+      }
+    } catch (e) {
+      lastError = e.message;
+      console.warn(`[parseStatement] Model ${model} threw: ${lastError}`);
+    }
   }
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
-  }
-  
-  const result = await response.json();
-  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new Error('Gemini did not return any text.');
-  }
-  return text;
+
+  throw new Error(`Gemini API error: ${lastError || 'No model responded'}`);
 }
 
 export default async function handler(req, res) {
@@ -174,7 +180,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 }
 `;
 
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     
     const parts = [];
     if (mimeType === 'application/pdf') {
