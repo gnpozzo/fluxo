@@ -49,6 +49,126 @@ async function callGemini(key, modelName, systemInstruction, history, responseMi
   throw new Error(`Gemini API error: ${lastError || 'No model responded'}`);
 }
 
+function tryParseSantanderXlsx(buffer) {
+  try {
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) return null;
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+    if (!rows || rows.length < 10) return null;
+
+    let ultimos4 = null, fechaCierre = null, fechaVto = null, totalArs = 0, totalUsd = 0;
+    let isSantander = false;
+
+    for (let i = 0; i < Math.min(20, rows.length); i++) {
+      const row = rows[i] || [];
+      const text = row.join(' ');
+      if (text.includes('Movimientos del resumen') || text.includes('terminada en')) {
+        isSantander = true;
+      }
+      const m4 = text.match(/terminada en (\d{4})/i);
+      if (m4 && !ultimos4) ultimos4 = m4[1];
+
+      if (row.includes('Fecha de cierre') && rows[i + 1]) {
+        const [d, m, y] = String(rows[i + 1][0] || '').trim().split('/');
+        if (y && m && d) fechaCierre = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        const [vd, vm, vy] = String(rows[i + 1][1] || '').trim().split('/');
+        if (vy && vm && vd) fechaVto = `${vy}-${vm.padStart(2, '0')}-${vd.padStart(2, '0')}`;
+      }
+
+      if (row.includes('Total a pagar') && rows[i + 1]) {
+        const parseM = s => parseFloat(String(s || '').replace(/[^0-9,-]/g, '').replace(',', '.')) || 0;
+        totalArs = parseM(rows[i + 1][0]);
+        totalUsd = parseM(rows[i + 1][1]);
+      }
+    }
+
+    if (!isSantander) return null;
+
+    const transactions = [];
+    let inTx = false, inOther = false, lastDate = fechaCierre;
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (row.includes('Fecha') && row.includes('Descripción')) { inTx = true; inOther = false; continue; }
+      if (row.some(c => String(c).includes('Total de Visa') || String(c).includes('Total de Mastercard') || String(c).includes('Total de Tarjeta'))) { inTx = false; continue; }
+      if (row.some(c => String(c).includes('Otros conceptos'))) { inOther = true; inTx = false; continue; }
+
+      if (inTx && row.length >= 2) {
+        const rawDate = row[0];
+        const desc = String(row[1] || '').trim();
+        const cuotasStr = String(row[2] || '').trim();
+        const montoArsStr = row[4];
+        const montoUsdStr = row[5];
+
+        if (!desc || desc.startsWith('Su pago') || desc.startsWith('Cr.rg')) continue;
+
+        if (rawDate) {
+          const [d, m, y] = String(rawDate).trim().split('/');
+          if (y && m && d) lastDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+
+        let importe = 0, moneda = 'ARS';
+        if (montoUsdStr) {
+          importe = parseFloat(String(montoUsdStr).replace(/[^0-9,-]/g, '').replace(',', '.')) || 0;
+          moneda = 'USD';
+        } else if (montoArsStr) {
+          importe = parseFloat(String(montoArsStr).replace(/[^0-9,-]/g, '').replace(',', '.')) || 0;
+          moneda = 'ARS';
+        }
+
+        if (importe <= 0) continue;
+
+        let cuotaAct = 1, cuotaTot = 1;
+        const cm = cuotasStr.match(/(\d+)\s+de\s+(\d+)/i);
+        if (cm) {
+          cuotaAct = parseInt(cm[1], 10);
+          cuotaTot = parseInt(cm[2], 10);
+        }
+
+        transactions.push({
+          fecha: lastDate,
+          descripcion: moneda === 'USD' ? `${desc} USD ${importe}` : desc,
+          importe,
+          moneda,
+          cuota_actual: cuotaTot > 1 ? cuotaAct : null,
+          cuota_total: cuotaTot > 1 ? cuotaTot : null
+        });
+      }
+
+      if (inOther && row.length >= 2) {
+        const desc = String(row[0] || '').trim();
+        if (!desc || desc.startsWith('Descripción') || desc.startsWith('Aviso')) continue;
+        const importe = parseFloat(String(row[1] || '').replace(/[^0-9,-]/g, '').replace(',', '.')) || 0;
+        if (importe > 0) {
+          transactions.push({
+            fecha: fechaCierre,
+            descripcion: desc,
+            importe,
+            moneda: 'ARS',
+            cuota_actual: null,
+            cuota_total: null
+          });
+        }
+      }
+    }
+
+    return {
+      card_info: { ultimos_4_digitos: ultimos4 },
+      statement_info: {
+        fecha_cierre: fechaCierre,
+        fecha_vencimiento: fechaVto,
+        total_ars: totalArs,
+        total_usd: totalUsd
+      },
+      transactions
+    };
+  } catch (err) {
+    console.warn('[tryParseSantanderXlsx] Fallback to Gemini:', err);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
@@ -59,11 +179,6 @@ export default async function handler(req, res) {
 
     if (!fileBase64 || !mimeType) {
       return res.status(400).json({ success: false, error: 'Missing fileBase64 or mimeType in request body.' });
-    }
-
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) {
-      return res.status(500).json({ success: false, error: 'GEMINI_API_KEY not configured on server.' });
     }
 
     // 1. Fetch active cards
@@ -95,43 +210,30 @@ export default async function handler(req, res) {
       .gte('fecha', sixMonthsAgoStr);
     if (dbConsErr) throw dbConsErr;
 
-    const systemInstruction = `
-Eres un asistente de procesamiento de resúmenes de tarjeta de crédito en formato PDF y XLSX para la aplicación Fluxo.
-Tu tarea es analizar el documento adjunto y compararlo con los consumos ya registrados en la base de datos para identificar nuevos consumos y consumos que difieren.
+    let extractedData = null;
 
-Tarjetas de crédito disponibles en el sistema:
-${JSON.stringify(tarjetas.map(t => ({ id_tarjeta: t.id_tarjeta, nombre: t.nombre, banco: t.banco, ultimos_4_digitos: t.ultimos_4_digitos, id_cuenta_principal: t.id_cuenta_principal })))}
+    // Try direct XLSX parsing first for instant speed and 100% precision
+    if (mimeType !== 'application/pdf') {
+      const buffer = Buffer.from(fileBase64, 'base64');
+      extractedData = tryParseSantanderXlsx(buffer);
+    }
 
-Categorías de egreso disponibles en el sistema:
-${JSON.stringify(categorias.filter(c => c.tipo_mov === 'EGRESO').map(c => ({ id_categoria: c.id_categoria, nombre: c.nombre })))}
+    // Fallback to Gemini for PDFs or unrecognized formats
+    if (!extractedData) {
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        return res.status(500).json({ success: false, error: 'GEMINI_API_KEY not configured on server.' });
+      }
 
-Consumos ya registrados en la base de datos (últimos 6 meses):
-${JSON.stringify(dbConsumos)}
+      const systemInstruction = `
+Eres un asistente de procesamiento de resúmenes de tarjeta de crédito para Fluxo.
+Extrae todas las compras, consumos, impuestos y percepciones del documento (ignora pagos como "SU PAGO EN PESOS").
+Determina los metadatos del resumen y la tarjeta.
 
-INSTRUCCIONES DE PROCESAMIENTO:
-1. **Identificar la Tarjeta**: Busca en el documento a qué tarjeta corresponde (por ejemplo, Visa o Mastercard y sus últimos 4 dígitos). Compara esto con las "Tarjetas de crédito disponibles" y selecciona la que coincida.
-2. **Extraer Metadatos del Resumen**:
-   - Fecha de cierre (fecha_cierre): YYYY-MM-DD
-   - Fecha de vencimiento (fecha_vencimiento): YYYY-MM-DD
-   - Total en Pesos (total_ars)
-   - Total en Dólares (total_usd)
-3. **Extraer Transacciones**: Extrae todas las compras, consumos, impuestos, percepciones o intereses del resumen. Ignora pagos o créditos (por ejemplo, "SU PAGO EN PESOS").
-   - Para transacciones en cuotas, busca formatos como "C.03/09" o "Cuota 3 de 9" y extrae cuota_actual (3) y cuota_total (9).
-   - Determina la fecha de la transacción (YYYY-MM-DD). Usa el año correspondiente al cierre del resumen (2026).
-4. **Comparar con la Base de Datos**:
-   - Compara las transacciones del resumen con los "Consumos ya registrados" para la tarjeta seleccionada en el mes de facturación.
-   - **Coincidencia Exacta (exact_matches)**: Si una transacción en el resumen coincide en descripción (concepto similar, ej. 'MERCADOLIBRE' y 'Mercado Libre'), importe, cuotas y moneda con un registro en la base de datos para la misma fecha o periodo de facturación, clasifícala como coincidencia exacta para evitar duplicados.
-   - **Similares con Diferencias (similar_different)**: Si el comercio/concepto coincide pero el importe o el plan de cuotas difiere (por ejemplo, en la DB figura como simple por $80.000 pero en el resumen es cuota 9/12 por $73.721), clasifícalo aquí. Debes incluir el "db_record" completo y el "statement_record" con la información correcta.
-   - **Nuevos Consumos (new_consumptions)**: Si la transacción en el resumen no tiene un registro similar en la base de datos, clasifícala como nuevo consumo.
-5. **Clasificar Categorías**: Para cada nuevo consumo o consumo modificado, selecciona la categoría más adecuada de las "Categorías de egreso disponibles" y asigna su "id_categoria".
-
-Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de código markdown, sin texto adicional:
+Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de código markdown:
 {
-  "tipo_registro": "pdf_analisis",
   "card_info": {
-    "id_tarjeta": "UUID de la tarjeta coincidente",
-    "nombre": "Nombre de la tarjeta",
-    "ultimos_4_digitos": "4 digitos"
+    "ultimos_4_digitos": "4 dígitos de la tarjeta"
   },
   "statement_info": {
     "fecha_cierre": "YYYY-MM-DD",
@@ -139,92 +241,119 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     "total_ars": número,
     "total_usd": número
   },
-  "exact_matches": [
+  "transactions": [
     {
-      "descripcion": "...",
-      "importe": 123,
-      "cuota_actual": null,
-      "cuota_total": null,
       "fecha": "YYYY-MM-DD",
-      "id_categoria": "UUID de la categoría seleccionada"
-    }
-  ],
-  "similar_different": [
-    {
-      "db_record": {
-        "id_consumo_tarjeta": "UUID del registro existente",
-        "recur_group_id": "UUID del grupo recurrente o null",
-        "descripcion": "...",
-        "importe": 123
-      },
-      "statement_record": {
-        "descripcion": "...",
-        "importe": 123,
-        "cuota_actual": 9,
-        "cuota_total": 12,
-        "fecha": "YYYY-MM-DD",
-        "id_categoria": "UUID de la categoría seleccionada"
-      }
-    }
-  ],
-  "new_consumptions": [
-    {
-      "descripcion": "...",
-      "importe": 123,
-      "cuota_actual": null,
-      "cuota_total": null,
-      "fecha": "YYYY-MM-DD",
-      "id_categoria": "UUID de la categoría seleccionada"
+      "descripcion": "Comercio o concepto",
+      "importe": 123.45,
+      "moneda": "ARS" o "USD",
+      "cuota_actual": número o null,
+      "cuota_total": número o null
     }
   ]
 }
 `;
 
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    
-    const parts = [];
-    if (mimeType === 'application/pdf') {
-      parts.push({
-        inlineData: {
-          mimeType: mimeType,
-          data: fileBase64
-        }
-      });
-    } else {
-      // Parse XLSX
-      const buffer = Buffer.from(fileBase64, 'base64');
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const csvText = XLSX.utils.sheet_to_csv(worksheet);
-      
-      parts.push({
-        text: `A continuación se detallan los datos del resumen de la tarjeta en formato CSV:\n\n${csvText}`
-      });
+      const parts = [];
+      if (mimeType === 'application/pdf') {
+        parts.push({ inlineData: { mimeType, data: fileBase64 } });
+      } else {
+        const buffer = Buffer.from(fileBase64, 'base64');
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const csvText = XLSX.utils.sheet_to_csv(worksheet);
+        parts.push({ text: `Datos en CSV:\n\n${csvText}` });
+      }
+      parts.push({ text: 'Extrae los datos y transacciones de este resumen.' });
+
+      const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const contentText = await callGemini(geminiKey, modelName, systemInstruction, [{ role: 'user', parts }], 'application/json');
+
+      try {
+        extractedData = JSON.parse(contentText);
+      } catch (e) {
+        console.error('[parseStatement Gemini Parsing Error]', contentText);
+        return res.status(500).json({ success: false, error: 'No se pudo interpretar la respuesta estructurada de la IA.' });
+      }
     }
 
-    parts.push({
-      text: 'Analiza este resumen de tarjeta de crédito y compáralo con la base de datos.'
+    // 4. Identify Card
+    const ultimos4 = extractedData.card_info?.ultimos_4_digitos;
+    let matchedCard = null;
+    if (ultimos4) {
+      matchedCard = tarjetas.find(t => t.ultimos_4_digitos === ultimos4);
+    }
+    if (!matchedCard) {
+      matchedCard = tarjetas[0];
+    }
+
+    const cardInfo = {
+      id_tarjeta: matchedCard.id_tarjeta,
+      nombre: matchedCard.nombre,
+      ultimos_4_digitos: matchedCard.ultimos_4_digitos || ultimos4 || ''
+    };
+
+    // 5. Default category mapping helper
+    const servCat = categorias.find(c => c.nombre.toLowerCase().includes('servicio')) || categorias[0];
+    const variosCat = categorias.find(c => c.nombre.toLowerCase().includes('varios') || c.nombre.toLowerCase().includes('general')) || categorias[0];
+    const superCat = categorias.find(c => c.nombre.toLowerCase().includes('super') || c.nombre.toLowerCase().includes('alimento'));
+
+    function inferCategory(desc) {
+      const d = (desc || '').toLowerCase();
+      if (d.includes('epe') || d.includes('gas') || d.includes('litoral') || d.includes('claro') || d.includes('impuesto') || d.includes('iibb') || d.includes('iva') || d.includes('db.rg') || d.includes('adt') || d.includes('segunda')) {
+        return servCat.id_categoria;
+      }
+      if (d.includes('coto') || d.includes('jumbo') || d.includes('carrefour') || d.includes('dia') || d.includes('super')) {
+        return superCat ? superCat.id_categoria : variosCat.id_categoria;
+      }
+      return variosCat.id_categoria;
+    }
+
+    // 6. Deterministic comparison against dbConsumos
+    const cardConsumos = (dbConsumos || []).filter(c => c.id_tarjeta === matchedCard.id_tarjeta);
+    const exactMatches = [];
+    const similarDiff = [];
+    const newConsumptions = [];
+
+    (extractedData.transactions || []).forEach(tx => {
+      tx.id_categoria = inferCategory(tx.descripcion);
+      const normTx = (tx.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      const match = cardConsumos.find(db => {
+        const sameImp = Math.abs(Number(db.importe) - Number(tx.importe)) < 0.05;
+        const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const sameDesc = normDb.includes(normTx.slice(0, 8)) || normTx.includes(normDb.slice(0, 8));
+        return sameImp && sameDesc;
+      });
+
+      if (match) {
+        const dbCuotaAct = match.cuota_actual || 1;
+        const dbCuotaTot = match.cuota_total || 1;
+        const txCuotaAct = tx.cuota_actual || 1;
+        const txCuotaTot = tx.cuota_total || 1;
+
+        if (dbCuotaAct !== txCuotaAct || dbCuotaTot !== txCuotaTot) {
+          similarDiff.push({
+            db_record: match,
+            statement_record: tx
+          });
+        } else {
+          exactMatches.push(tx);
+        }
+      } else {
+        newConsumptions.push(tx);
+      }
     });
 
-    const history = [
-      {
-        role: 'user',
-        parts: parts
-      }
-    ];
+    const payload = {
+      card_info: cardInfo,
+      statement_info: extractedData.statement_info || {},
+      exact_matches: exactMatches,
+      similar_different: similarDiff,
+      new_consumptions: newConsumptions
+    };
 
-    const contentText = await callGemini(geminiKey, modelName, systemInstruction, history, 'application/json');
-    
-    let parsedResult;
-    try {
-      parsedResult = JSON.parse(contentText);
-    } catch (e) {
-      console.error('[parseStatement Gemini Parsing Error]', contentText);
-      return res.status(500).json({ success: false, error: 'No se pudo interpretar la respuesta estructurada de la IA.' });
-    }
-
-    return res.status(200).json({ success: true, payload: parsedResult });
+    return res.status(200).json({ success: true, payload });
 
   } catch (err) {
     console.error('[API -> parseStatement Error]', err.message);
