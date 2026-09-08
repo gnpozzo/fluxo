@@ -143,14 +143,6 @@
       <!-- ── APP HEADER ────────────────────────────────────────── -->
       <header class="app-header">
         <div style="display:flex;align-items:center;gap:14px">
-          <!-- Back button (visible on sub-tabs with prominent styling) -->
-          <button id="btn-header-back" class="btn-header-back-pill" style="display:none;" title="Volver al Dashboard" aria-label="Volver al Dashboard">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            <span class="btn-back-text">Dashboard</span>
-          </button>
           <div class="app-header-logo" id="app-header-logo" style="cursor:pointer;" title="Volver al inicio">
             <img src="https://i.imgur.com/zbLZveO.png" alt="Fluxo">
           </div>
@@ -262,7 +254,21 @@
         <div id="welcome-bar" style="display:none;"></div>
         <!-- Hidden greeting placeholders for script compatibility -->
         <h2 id="welcome-name" style="display:none;">Hola</h2>
-        <p id="welcome-subtitle" style="display:none;">Resumen de tu patrimonio</p>
+        <!-- Subview Global Breadcrumb / Back Bar -->
+        <div id="subview-nav-bar" class="subview-nav-bar" style="display:none;">
+          <button id="btn-subview-back" class="btn-subview-back" title="Volver al Dashboard" aria-label="Volver al Dashboard">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            <span>Volver al Dashboard</span>
+          </button>
+          <div class="subview-breadcrumb-path">
+            <span class="subview-bc-parent" id="subview-bc-parent">Dashboard</span>
+            <span class="subview-bc-sep">/</span>
+            <span class="subview-bc-active" id="subview-breadcrumb-title">Módulo</span>
+          </div>
+        </div>
 
         <!-- Paneles de contenido (módulos) -->
         <div id="vista-dashboard"     class="vista-container active" role="tabpanel"></div>

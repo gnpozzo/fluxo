@@ -242,10 +242,22 @@ class AppInit {
     // Ocultar todos los paneles de contenido
     document.querySelectorAll('.vista-container').forEach(v => v.classList.remove('active'));
 
-    // Control Back Button visibility (Show back button on sub-modules)
-    const backBtn = document.getElementById('btn-header-back');
-    if (backBtn) {
-      backBtn.style.display = vistaId === 'vista-dashboard' ? 'none' : 'inline-flex';
+    // Control Subview Breadcrumb / Back Bar visibility (shown on sub-modules)
+    const subviewNavBar = document.getElementById('subview-nav-bar');
+    const subviewTitle = document.getElementById('subview-breadcrumb-title');
+    if (subviewNavBar) {
+      const isDashboard = (vistaId === 'vista-dashboard');
+      subviewNavBar.style.display = isDashboard ? 'none' : 'flex';
+      if (!isDashboard && subviewTitle) {
+        const titles = {
+          'vista-tarjetas': 'Tarjetas de Crédito',
+          'vista-cc': 'Gastos Compartidos',
+          'vista-ahorro': 'Chanchito (Ahorro)',
+          'vista-inversiones': 'Inversiones',
+          'vista-admin': 'Configuración'
+        };
+        subviewTitle.textContent = titles[vistaId] || 'Módulo';
+      }
     }
 
     // Desactivar todos los nav items del sidebar
@@ -582,13 +594,15 @@ class AppInit {
       btn.addEventListener('click', () => this.#navegarTab(btn.dataset.vista));
     });
 
-    // Bind header back button and logo
-    const backBtn = document.getElementById('btn-header-back');
-    if (backBtn) {
-      backBtn.addEventListener('click', () => {
-        this.#navegarTab('vista-dashboard');
-      });
-    }
+    // Bind subview back button and breadcrumb parent
+    document.getElementById('btn-subview-back')?.addEventListener('click', () => {
+      this.#navegarTab('vista-dashboard');
+    });
+    document.getElementById('subview-bc-parent')?.addEventListener('click', () => {
+      this.#navegarTab('vista-dashboard');
+    });
+
+    // Bind logo to return to dashboard
     const headerLogo = document.getElementById('app-header-logo');
     if (headerLogo) {
       headerLogo.addEventListener('click', () => {
