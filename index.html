@@ -23,13 +23,21 @@
            <p style="color:var(--texto-2);margin-top:10px;">Inicia sesión para continuar</p>
         </div>
         <form id="form-login" onsubmit="event.preventDefault()">
-          <div style="margin-bottom:20px;">
-            <label style="display:block;margin-bottom:8px;color:var(--texto-2);font-size:0.9rem;">Email</label>
-            <input type="email" id="login-email" required style="width:100%;padding:12px;border:1px solid var(--borde);border-radius:8px;background:var(--fondo);color:var(--texto);">
+          <div id="login-name-group" style="margin-bottom:16px;">
+            <label style="display:block;margin-bottom:6px;color:var(--texto-2);font-size:0.85rem;">Nombre y Apellido <span style="font-size:0.75rem;color:var(--texto-3);">(para registro)</span></label>
+            <input type="text" id="login-name" placeholder="Ej: Gonzalo Pozzo" style="width:100%;padding:10px 12px;border:1px solid var(--borde);border-radius:8px;background:var(--fondo);color:var(--texto);font-size:0.9rem;">
           </div>
-          <div style="margin-bottom:30px;">
-            <label style="display:block;margin-bottom:8px;color:var(--texto-2);font-size:0.9rem;">Contraseña</label>
-            <input type="password" id="login-password" required style="width:100%;padding:12px;border:1px solid var(--borde);border-radius:8px;background:var(--fondo);color:var(--texto);">
+          <div style="margin-bottom:16px;">
+            <label style="display:block;margin-bottom:6px;color:var(--texto-2);font-size:0.85rem;">Email</label>
+            <input type="email" id="login-email" required style="width:100%;padding:10px 12px;border:1px solid var(--borde);border-radius:8px;background:var(--fondo);color:var(--texto);font-size:0.9rem;">
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="display:block;margin-bottom:6px;color:var(--texto-2);font-size:0.85rem;">Contraseña</label>
+            <input type="password" id="login-password" required style="width:100%;padding:10px 12px;border:1px solid var(--borde);border-radius:8px;background:var(--fondo);color:var(--texto);font-size:0.9rem;">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;font-size:0.85rem;color:var(--texto-2);">
+            <input type="checkbox" id="login-remember" checked style="cursor:pointer;width:16px;height:16px;accent-color:var(--primary);">
+            <label for="login-remember" style="cursor:pointer;user-select:none;">Recordar inicio de sesión</label>
           </div>
           <div style="display:flex;gap:12px;margin-bottom:16px;">
             <button type="submit" id="btn-login-submit" class="btn btn-primary" style="flex:1;padding:12px;border-radius:8px;font-weight:600;display:flex;justify-content:center;align-items:center;gap:8px;">
@@ -280,27 +288,13 @@
         <div id="vista-admin"        class="vista-container"        role="tabpanel"></div>
       </main>
 
-      <!-- FLOATING ACTION BUTTON GROUP -->
+      <!-- FLOATING ACTION BUTTON GROUP (Solo Carga Rápida '+' en submódulos) -->
       <div class="fab-group" id="fab-group">
         <!-- Carga Rápida (FAB - MAIN) -->
         <button id="btn-fab-quick-add" class="fab-button fab-main" aria-label="Carga Rápida" title="Agregar consumo / movimiento">
           <span class="icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           </span>
-        </button>
-
-        <!-- Gemini AI (FAB) -->
-        <button id="btn-gemini" class="fab-button btn-gemini" title="Asistente Gemini AI" aria-label="Abrir asistente Gemini">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="currentColor" stroke="none"/>
-          </svg>
-        </button>
-
-        <!-- Dark mode toggle (FAB) -->
-        <button id="btn-theme-toggle" class="fab-button" title="Cambiar tema" aria-label="Cambiar tema">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/>
-          </svg>
         </button>
       </div>
 
@@ -413,32 +407,31 @@
     'use strict';
     (function() {
       const THEME_KEY = 'app_theme';
-      const btn       = document.getElementById('btn-theme-toggle');
       const saved     = sessionStorage.getItem(THEME_KEY) || 'light';
       document.documentElement.setAttribute('data-theme', saved);
 
-      // Actualizar ícono del botón según tema activo
-      function updateThemeIcon(theme) {
-        const iconPath = btn?.querySelector('path');
-        if (!iconPath) return;
-        if (theme === 'dark') {
-          // Ícono sol para dark mode (click → volver a light)
-          iconPath.setAttribute('d', 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7z');
-        } else {
-          // Ícono luna para light mode (click → ir a dark)
-          iconPath.setAttribute('d', 'M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z');
+      function syncThemeUI(theme) {
+        const themeText = document.getElementById('dropdown-theme-text');
+        if (themeText) {
+          themeText.textContent = theme === 'dark' ? 'Modo claro' : 'Modo oscuro';
         }
       }
 
-      updateThemeIcon(saved);
-
-      btn?.addEventListener('click', () => {
+      window.toggleAppTheme = function() {
         const current = document.documentElement.getAttribute('data-theme');
         const next    = current === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', next);
         sessionStorage.setItem(THEME_KEY, next);
-        updateThemeIcon(next);
-      });
+        syncThemeUI(next);
+        window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: next } }));
+      };
+
+      // Sincronizar texto inicial de tema
+      if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', () => syncThemeUI(saved));
+      } else {
+        syncThemeUI(saved);
+      }
 
       // --- Sidebar toggle for mobile ---
       const sidebarToggle = document.getElementById('sidebar-toggle');

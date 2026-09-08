@@ -119,7 +119,11 @@ export class CCModule extends BaseModule {
     this.#kpiOtro = new App.KpiCard(grid, { titulo: 'Sus gastos',   icono: 'wallet',   colorClass: 'kpi-purple',onFormat: App.Utils.formatearMoneda });
     this.#kpiNeto = new App.KpiCard(grid, { titulo: 'Saldo neto',   icono: 'investment',colorClass: 'kpi-green', onFormat: App.Utils.formatearMoneda });
 
-    document.getElementById('cc-acciones').innerHTML = '';
+    document.getElementById('cc-acciones').innerHTML = `
+      <button id="cc-btn-nuevo" class="btn btn-primary">
+        ${App.Icons.get('add', 'icon-sm')} Nuevo gasto compartido
+      </button>
+    `;
 
     this.#table = new App.DataTable(
       document.getElementById('cc-tabla-wrap'),

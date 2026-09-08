@@ -86,7 +86,8 @@ export default async function handler(req, res) {
     case 'getNotificaciones': return await getNotificaciones(req, res);
     case 'getPortfolio': return await getPortfolio(req, res);
     case 'getProyeccionTC': return await getProyeccionTC(req, res);
-    case 'getUserInfo': return await getUserInfo(req, res);
+    case 'getUserInfo':
+    case 'api_getUserInfo': return await getUserInfo(req, res);
     case 'updateAhorro': return await updateAhorro(req, res);
     case 'updateConsumoCC': return await updateConsumoCC(req, res);
     case 'updateConsumoTC': return await updateConsumoTC(req, res);

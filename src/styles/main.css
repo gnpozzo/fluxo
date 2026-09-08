@@ -716,10 +716,10 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
 }
 
 .table-card {
-  background    : var(--color-surface, #fff);
-  border-radius : var(--radius-xl, 1rem);
-  box-shadow    : var(--shadow-sm, 0 1px 3px rgba(0,0,0,.06));
-  border        : none; /* Removed border to match mockup */
+  background    : var(--superficie);
+  border-radius : 16px;
+  box-shadow    : 0 4px 20px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.02);
+  border        : 1px solid var(--borde);
   overflow      : hidden;
   margin-bottom : var(--space-6, 1.5rem);
 }
@@ -728,33 +728,33 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   width           : 100%;
   border-collapse : collapse;
   text-align      : left;
-  font-size       : var(--text-sm, 0.875rem);
+  font-size       : 0.88rem;
 }
 
 .table thead th {
-  background     : transparent; /* Match mockup transparent header */
-  color          : var(--color-text-muted, #6b7280);
-  font-weight    : 600;
+  background     : var(--fondo);
+  color          : var(--texto-3);
+  font-weight    : 700;
   text-transform : uppercase;
-  font-size      : 0.75rem;
+  font-size      : 0.72rem;
   letter-spacing : 0.05em;
-  padding        : var(--space-3, 0.75rem) var(--space-4, 1rem);
-  border-bottom  : 1px solid var(--color-border, #e5e7eb);
+  padding        : 12px 18px;
+  border-bottom  : 1px solid var(--borde);
   white-space    : nowrap;
 }
 
 .table tbody tr td {
-  padding       : var(--space-4, 1rem);
-  border-bottom : 1px solid var(--color-border-light, #f3f4f6);
-  color         : var(--color-text, #111827);
+  padding       : 14px 18px;
+  border-bottom : 1px solid var(--borde);
+  color         : var(--texto);
   font-weight   : 500;
 }
 
 .table tbody tr {
-  transition : background-color 0.15s;
+  transition : background-color 0.15s ease;
 }
 .table tbody tr:hover {
-  background : var(--color-hover, #f9fafb);
+  background : var(--superficie-hover);
 }
 
 .table tbody tr.dt-row-clickable {
@@ -1858,85 +1858,104 @@ button.btn-secundario:hover {
 
 .kpi-grid {
   display               : grid;
-  grid-template-columns : repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns : repeat(3, 1fr);
   gap                   : var(--space-4, 1rem);
-  margin-bottom         : var(--space-5, 1.25rem);
+  margin-bottom         : var(--space-6, 1.5rem);
+}
+
+@media (max-width: 900px) {
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
 }
 
 .kpi-card {
   display       : flex;
   align-items   : center;
-  gap           : var(--space-4, 1rem);
-  padding       : var(--space-5, 1.25rem);
-  border-radius : var(--radius-xl, 1rem);
-  background    : var(--color-surface, #fff);
-  border        : 1px solid var(--color-border-light, #f3f4f6);
-  box-shadow    : 0 4px 15px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
-  transition    : box-shadow 0.2s, transform 0.15s;
+  gap           : 16px;
+  padding       : 20px 22px;
+  border-radius : 16px;
+  background    : var(--superficie);
+  border        : 1px solid var(--borde);
+  box-shadow    : 0 4px 16px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition    : all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .kpi-card.kpi-clickable {
   cursor : pointer;
 }
 .kpi-card.kpi-clickable:hover {
-  box-shadow : var(--shadow-md, 0 4px 12px rgba(0,0,0,.1));
+  box-shadow : 0 8px 24px rgba(0,0,0,0.06);
   transform  : translateY(-2px);
+  border-color: var(--borde-fuerte);
 }
 
 .kpi-icon-wrap {
-  width         : 48px;
-  height        : 48px;
-  border-radius : var(--radius-lg, 0.75rem);
+  width         : 46px;
+  height        : 46px;
+  border-radius : 12px;
   display       : flex;
   align-items   : center;
   justify-content: center;
   flex-shrink   : 0;
+  transition    : transform 0.2s ease;
+}
+
+.kpi-card:hover .kpi-icon-wrap {
+  transform: scale(1.05);
 }
 
 /* Variantes de color */
-.kpi-blue   .kpi-icon-wrap { background: #eff6ff; color: #2563eb; }
-.kpi-green  .kpi-icon-wrap { background: #ecfdf5; color: #059669; }
-.kpi-red    .kpi-icon-wrap { background: #fef2f2; color: #dc2626; }
-.kpi-purple .kpi-icon-wrap { background: #f5f3ff; color: #7c3aed; }
-.kpi-amber  .kpi-icon-wrap { background: #fffbeb; color: #d97706; }
+.kpi-blue   .kpi-icon-wrap { background: rgba(37, 99, 235, 0.08); color: #2563eb; }
+.kpi-green  .kpi-icon-wrap { background: rgba(16, 185, 129, 0.1); color: #059669; }
+.kpi-red    .kpi-icon-wrap { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+.kpi-purple .kpi-icon-wrap { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
+.kpi-amber  .kpi-icon-wrap { background: rgba(217, 119, 6, 0.1); color: #d97706; }
+
+[data-theme="dark"] .kpi-blue   .kpi-icon-wrap { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+[data-theme="dark"] .kpi-green  .kpi-icon-wrap { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+[data-theme="dark"] .kpi-red    .kpi-icon-wrap { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+[data-theme="dark"] .kpi-purple .kpi-icon-wrap { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+[data-theme="dark"] .kpi-amber  .kpi-icon-wrap { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
 
 .kpi-content {
   display       : flex;
   flex-direction: column;
-  gap           : 2px;
+  gap           : 3px;
   min-width     : 0;
 }
 
 .kpi-label {
-  font-size   : var(--text-xs, 0.75rem);
-  font-weight : 500;
-  color       : var(--color-text-muted, #6b7280);
+  font-size      : 0.72rem;
+  font-weight    : 700;
+  color          : var(--texto-3);
   text-transform : uppercase;
-  letter-spacing : 0.05em;
+  letter-spacing : 0.06em;
 }
 
 .kpi-value {
-  font-size   : 1.45rem;
-  font-weight : 700;
-  color       : var(--color-text, #111827);
-  white-space : nowrap;
-  letter-spacing: -0.01em;
+  font-size      : 1.65rem;
+  font-weight    : 800;
+  color          : var(--texto);
+  white-space    : nowrap;
+  letter-spacing : -0.025em;
+  line-height    : 1.2;
 }
 
 .kpi-subtitle {
-  font-size : var(--text-xs, 0.75rem);
-  color     : var(--color-text-muted, #6b7280);
+  font-size : 0.75rem;
+  color     : var(--texto-3);
 }
 
 .kpi-variation {
-  font-size   : var(--text-sm, 0.875rem);
+  font-size   : 0.85rem;
   font-weight : 600;
 }
-.kpi-var-positivo { color: var(--color-success, #059669); }
-.kpi-var-negativo { color: var(--color-error,   #dc2626); }
-.kpi-var-neutral  { color: var(--color-text-muted, #6b7280); }
+.kpi-var-positivo { color: var(--verde); }
+.kpi-var-negativo { color: var(--rojo); }
+.kpi-var-neutral  { color: var(--texto-3); }
 
-.kpi-error { color: var(--color-error, #dc2626); font-size: var(--text-sm); }
+.kpi-error { color: var(--rojo); font-size: 0.85rem; }
 
 /* Form module-dashboard.html */
 
@@ -2671,6 +2690,135 @@ body {
 .subview-bc-active {
   color: var(--texto);
   font-weight: 700;
+}
+
+/* ============================================================
+   Submodule View Styling (Tarjetas, CC, Ahorro, Inversiones)
+   ============================================================ */
+
+.module-view-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.module-view-title svg {
+  width: 22px;
+  height: 22px;
+  color: var(--primary);
+  background: var(--primary-tint);
+  padding: 9px;
+  border-radius: 12px;
+  box-sizing: content-box;
+  border: 1px solid var(--borde);
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .module-view-title svg {
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.module-view-title span {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--texto);
+  letter-spacing: -0.025em;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.acciones-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.acciones-container .btn {
+  border-radius: var(--r-full, 9999px) !important;
+  padding: 8px 18px !important;
+  font-size: 0.84rem !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.acciones-container .btn:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Modern Segmented Control Pills */
+.selector-vista-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  background: var(--fondo) !important;
+  border: 1.5px solid var(--borde) !important;
+  border-radius: var(--r-full, 9999px) !important;
+  padding: 4px !important;
+  gap: 4px !important;
+}
+
+.selector-vista-container .btn-vista {
+  padding: 6px 16px !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  border-radius: var(--r-full, 9999px) !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  background: transparent !important;
+  color: var(--texto-2) !important;
+  box-shadow: none !important;
+  line-height: 1.2 !important;
+}
+
+.selector-vista-container .btn-vista.active,
+.selector-vista-container .btn-vista.btn-primary {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+}
+
+.selector-vista-container .btn-vista:not(.active):hover {
+  background: var(--superficie-hover) !important;
+  color: var(--texto) !important;
+}
+
+/* Financial Ticker Chips (Inversiones Cotizaciones Dólar) */
+#inv-dolar-info {
+  display: flex !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  margin-bottom: 20px !important;
+}
+
+#inv-dolar-info > div {
+  padding: 10px 16px !important;
+  border-radius: 12px !important;
+  background: var(--superficie) !important;
+  border: 1px solid var(--borde) !important;
+  min-width: 145px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+  transition: transform 0.15s, border-color 0.15s !important;
+}
+
+#inv-dolar-info > div:hover {
+  transform: translateY(-2px) !important;
+  border-color: var(--borde-fuerte) !important;
 }
 
 .app-header-actions {

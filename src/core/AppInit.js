@@ -59,7 +59,8 @@ class AppInit {
       try {
         const email = document.getElementById('login-email').value;
         const pwd = document.getElementById('login-password').value;
-        await App.Auth.login(email, pwd);
+        const remember = document.getElementById('login-remember')?.checked !== false;
+        await App.Auth.login(email, pwd, remember);
         overlay.style.display = 'none';
         document.querySelector('.main-wrapper').style.display = '';
         document.getElementById('app-sidebar').style.display = 'flex';
@@ -80,13 +81,14 @@ class AppInit {
         try {
           const email = document.getElementById('login-email').value;
           const pwd = document.getElementById('login-password').value;
+          const fullName = document.getElementById('login-name')?.value?.trim() || '';
           if (!email || pwd.length < 6) {
              App.Toast.error('Ingresa un email y una contraseña (mín. 6 chars)');
              regBtn.disabled = false;
              regBtn.innerHTML = 'Crear Cuenta';
              return;
           }
-          await App.Auth.signUp(email, pwd);
+          await App.Auth.signUp(email, pwd, fullName);
           
           if (App.Auth.session) {
              overlay.style.display = 'none';
@@ -95,7 +97,7 @@ class AppInit {
              this.#mostrarLoader();
              this.#proceedWithBoot();
           } else {
-             App.Toast.success('Registrado con éxito. Revisa tu casilla de inicio.');
+             App.Toast.success('Registrado con éxito. Revisa tu casilla para verificar tu cuenta e ingresar.');
              regBtn.disabled = false;
              regBtn.innerHTML = 'Crear Cuenta';
           }
@@ -113,7 +115,8 @@ class AppInit {
         goBtn.disabled = true;
         goBtn.innerHTML = 'Conectando con Google...';
         try {
-          await App.Auth.loginWithGoogle();
+          const remember = document.getElementById('login-remember')?.checked !== false;
+          await App.Auth.loginWithGoogle(remember);
           // The page will redirect to Google's OAuth, no further logic needed here.
         } catch (err) {
           App.Toast.error(err.message || 'Error con Google Auth');
@@ -924,53 +927,71 @@ class AppInit {
 
   async #cargarUsuario() {
     try {
-      const res = await App.API.call('api_getUserInfo');
-      if (res?.success) {
-        const metadata = res.user_metadata || {};
-        const email = res.email || '';
-        
+      // 1. Obtener usuario inmediatamente desde la sesión activa de Supabase en memoria
+      let user = App.Auth?.user;
+      if (!user && App.Auth?.supabase) {
+        const { data } = await App.Auth.supabase.auth.getUser();
+        user = data?.user;
+        if (user && App.Auth) App.Auth.user = user;
+      }
+
+      let email = user?.email || '';
+      let metadata = user?.user_metadata || {};
+
+      // 2. Si aún no está en memoria, consultar backend
+      if (!email) {
+        const res = await App.API.call('api_getUserInfo');
+        if (res?.success) {
+          email = res.email || '';
+          metadata = res.user_metadata || {};
+        }
+      }
+
+      if (email) {
         let fullName = metadata.full_name || metadata.name;
         if (!fullName) {
           const usernamePart = email.split('@')[0];
-          fullName = usernamePart.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+          fullName = usernamePart.split(/[._-]/).filter(Boolean).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
         }
         const primerNombre = fullName.split(' ')[0] || fullName;
 
-        // Welcome greeting
+        // Saludo en topbar
         const elWelcome = document.getElementById('welcome-name');
         if (elWelcome) {
           elWelcome.textContent = `Hola, ${primerNombre}`;
         }
 
-        // Nombre en topbar (hidden but accessible)
+        // Nombre en topbar (accesibilidad)
         const elNombre = document.getElementById('user-info-container');
         if (elNombre) {
           elNombre.textContent = fullName;
           elNombre.title       = email;
         }
 
-        // Tooltip updates
+        // Tooltip del avatar
         const tooltip = document.getElementById('avatar-tooltip');
         if (tooltip) {
           tooltip.innerHTML = `<strong>${App.Utils.escapeHtml(fullName)}</strong><br>${App.Utils.escapeHtml(email)}`;
         }
 
-        // Populate Dropdown Profile Info
+        // Poblar datos en el Dropdown de perfil
         const dName = document.getElementById('dropdown-user-name');
         const dEmail = document.getElementById('dropdown-user-email');
         if (dName) dName.textContent = fullName;
         if (dEmail) dEmail.textContent = email;
 
-        // Avatar: Imagen con iniciales o Google photo
+        // Avatar: Imagen con foto o iniciales
         const elAvatar = document.getElementById('topbar-avatar');
         if (elAvatar) {
-          const avatarUrl = metadata.avatar_url || metadata.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=4F46E5&color=fff&bold=true`;
-          elAvatar.innerHTML = `<img src="${avatarUrl}" alt="Avatar">`;
+          const avatarUrl = metadata.avatar_url || metadata.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=1D195D&color=fff&bold=true`;
+          elAvatar.innerHTML = `<img src="${avatarUrl}" alt="Avatar" onerror="this.outerHTML='<span style=\\'font-weight:700;font-size:0.85rem;\\'>${(primerNombre||'U')[0].toUpperCase()}</span>'">`;
         }
 
         App.Store.setUsuario({ email: email, name: fullName });
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[AppInit] Error al cargar usuario:', err);
+    }
   }
 
   #setupCredentialsDropdown() {
@@ -983,6 +1004,19 @@ class AppInit {
         document.getElementById('notifications-dropdown')?.classList.remove('open');
         const isOpen = dropdown.classList.toggle('open');
         avatar.setAttribute('aria-expanded', isOpen);
+
+        if (isOpen) {
+          // Re-sincronizar credenciales si el dropdown tiene valor por defecto
+          const dName = document.getElementById('dropdown-user-name');
+          if (!dName || dName.textContent === '—' || !dName.textContent.trim()) {
+            this.#cargarUsuario();
+          }
+          const themeText = document.getElementById('dropdown-theme-text');
+          if (themeText) {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            themeText.textContent = currentTheme === 'dark' ? 'Modo claro' : 'Modo oscuro';
+          }
+        }
       });
 
       avatar.addEventListener('keydown', (e) => {
@@ -1006,12 +1040,10 @@ class AppInit {
 
       document.getElementById('dropdown-opt-theme')?.addEventListener('click', () => {
         dropdown.classList.remove('open');
-        document.getElementById('btn-theme-toggle')?.click();
-        
-        const themeText = document.getElementById('dropdown-theme-text');
-        if (themeText) {
-          const currentTheme = document.documentElement.getAttribute('data-theme');
-          themeText.textContent = currentTheme === 'dark' ? 'Modo claro' : 'Modo oscuro';
+        if (typeof window.toggleAppTheme === 'function') {
+          window.toggleAppTheme();
+        } else {
+          document.getElementById('btn-theme-toggle')?.click();
         }
       });
 

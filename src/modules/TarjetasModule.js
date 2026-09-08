@@ -501,7 +501,9 @@ export class TarjetasModule extends BaseModule {
         const btn = e.target.closest('button');
         if (!btn) return;
         
-        if (btn.id === 'tc-btn-mes') {
+        if (btn.id === 'tc-btn-nuevo') {
+          this.#abrirModalAlta();
+        } else if (btn.id === 'tc-btn-mes') {
           document.getElementById('tc-btn-mes')?.classList.replace('btn-ghost', 'btn-primary');
           document.getElementById('tc-btn-proy')?.classList.replace('btn-primary', 'btn-ghost');
           document.getElementById('tc-tabla-wrap')?.classList.remove('hidden');
@@ -800,8 +802,11 @@ export class TarjetasModule extends BaseModule {
     const accContainer = document.getElementById('tc-acciones');
     if (!accContainer) return;
     accContainer.innerHTML = `
-      <button id="tc-btn-importar" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border-color)">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-sm"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar Resumen
+      <button id="tc-btn-nuevo" class="btn btn-primary">
+        ${App.Icons.get('add', 'icon-sm')} Nuevo consumo
+      </button>
+      <button id="tc-btn-importar" class="btn btn-secondary" style="display:inline-flex;align-items:center;gap:6px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-sm"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar resumen
       </button>
     `;
     

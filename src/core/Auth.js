@@ -15,21 +15,30 @@ class AuthService {
     // Supabase createClient lo borra de la URL casi instantáneamente.
     const capturedHash = window.location.hash || (window.location.href.includes('#') ? '#' + window.location.href.split('#')[1] : '');
     
-    // 1. Obtener la configuración dinámica de lado del servidor
-    // Esto previene fallos si VITE_SUPABASE_URL no está seteado pre-build en Vercel
+    // 1. Obtener la configuración dinámica de lado del servidor y storage según 'recordar sesión'
+    const rememberMe = localStorage.getItem('fluxo_remember_me') !== 'false';
+    const storageEngine = rememberMe ? window.localStorage : window.sessionStorage;
+    const clientOptions = {
+      auth: {
+        persistSession: true,
+        storage: storageEngine,
+        autoRefreshToken: true
+      }
+    };
+
     try {
       const res = await fetch('/api/getConfig');
       const config = await res.json();
       const url = config.url || import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co';
       const anonKey = config.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock_key';
       
-      supabase = createClient(url, anonKey);
+      supabase = createClient(url, anonKey, clientOptions);
     } catch (err) {
       console.error('Error fetching Supabase Config:', err);
       // Fallback a build-time estático
       const url = import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co';
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock_key';
-      supabase = createClient(url, anonKey);
+      supabase = createClient(url, anonKey, clientOptions);
     }
 
     // 2. Extraer sesión usando SDK inicializado
@@ -74,16 +83,20 @@ class AuthService {
 
     // Listener permanente en background
     supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         this.session = session;
         this.user = session?.user;
+      } else if (event === 'SIGNED_OUT') {
+        this.session = null;
+        this.user = null;
       }
     });
 
     return !!this.session;
   }
 
-  async login(email, password) {
+  async login(email, password, remember = true) {
+    localStorage.setItem('fluxo_remember_me', remember ? 'true' : 'false');
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
@@ -94,7 +107,8 @@ class AuthService {
     return data;
   }
 
-  async loginWithGoogle() {
+  async loginWithGoogle(remember = true) {
+    localStorage.setItem('fluxo_remember_me', remember ? 'true' : 'false');
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -106,14 +120,19 @@ class AuthService {
     return data;
   }
 
-  async signUp(email, password) {
+  async signUp(email, password, fullName = '') {
+    const options = {};
+    if (fullName && fullName.trim()) {
+      options.data = { full_name: fullName.trim(), name: fullName.trim() };
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
-      password
+      password,
+      options: Object.keys(options).length > 0 ? options : undefined
     });
     if (error) throw error;
     this.session = data.session;
-    this.user = data.session.user;
+    this.user = data.session?.user || data.user;
     return data;
   }
 
@@ -122,6 +141,7 @@ class AuthService {
     if (error) throw error;
     this.session = null;
     this.user = null;
+    localStorage.removeItem('fluxo_remember_me');
   }
 
   getToken() {
