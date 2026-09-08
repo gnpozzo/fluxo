@@ -142,12 +142,14 @@
 
       <!-- ── APP HEADER ────────────────────────────────────────── -->
       <header class="app-header">
-        <div style="display:flex;align-items:center;gap:12px">
-          <!-- Back button (visible on sub-tabs) -->
-          <button id="btn-header-back" class="btn-icon-sm" style="display:none;" title="Volver al inicio" aria-label="Volver al inicio">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-              <polyline points="15 18 9 12 15 6"></polyline>
+        <div style="display:flex;align-items:center;gap:14px">
+          <!-- Back button (visible on sub-tabs with prominent styling) -->
+          <button id="btn-header-back" class="btn-header-back-pill" style="display:none;" title="Volver al Dashboard" aria-label="Volver al Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
             </svg>
+            <span class="btn-back-text">Dashboard</span>
           </button>
           <div class="app-header-logo" id="app-header-logo" style="cursor:pointer;" title="Volver al inicio">
             <img src="https://i.imgur.com/zbLZveO.png" alt="Fluxo">
@@ -163,9 +165,12 @@
           </div>
 
           <!-- Month Selector -->
-          <div class="welcome-select-wrap">
+          <div class="welcome-select-wrap" id="month-select-ui">
             <svg class="ws-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
             <input type="month" id="selector-mes" aria-label="Seleccionar mes">
           </div>
@@ -179,7 +184,14 @@
           <!-- Gemini AI Advisor Button (Top Bar Header) -->
           <button id="btn-header-gemini" class="btn-icon-sm btn-gemini-header" title="Asesor Financiero IA" aria-label="Abrir asesor IA">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.24L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" fill="currentColor"/>
+              <path d="M12 0C12 6.627 6.627 12 0 12C6.627 12 12 17.373 12 24C12 17.373 17.373 12 24 12C17.373 12 12 6.627 12 0Z" fill="url(#gemini-header-grad)"/>
+              <defs>
+                <linearGradient id="gemini-header-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#4E8CFF"/>
+                  <stop offset="50%" stop-color="#9B72CB"/>
+                  <stop offset="100%" stop-color="#D96570"/>
+                </linearGradient>
+              </defs>
             </svg>
             <span class="btn-gemini-text">AI Advisor</span>
           </button>

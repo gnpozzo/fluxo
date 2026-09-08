@@ -18,6 +18,9 @@ export class DashboardModule extends BaseModule {
   #movData     = [];
   #accordionOpen = false;
   #viewMode = 'detail'; // 'portfolio' | 'detail'
+  #drilldownOpen = false;
+  #drilldownFilter = 'INGRESO'; // 'INGRESO' | 'EGRESO' | 'ALL'
+  #drilldownSearch = '';
 
   get movData() { return this.#movData; }
 
@@ -261,6 +264,9 @@ export class DashboardModule extends BaseModule {
 
     this.#movData = movimientos || [];
     this.#renderMovTable();
+    if (this.#drilldownOpen) {
+      this.#renderDrilldown();
+    }
   }
 
   // --- SECCIÓN 3: BUILD DOM ---
@@ -292,25 +298,31 @@ export class DashboardModule extends BaseModule {
           </div>
 
           <div class="fhc-breakdown-row">
-            <div class="fhc-stat-box fhc-stat-ing">
+            <div class="fhc-stat-box fhc-stat-ing" id="dash-hero-stat-ing" role="button" tabindex="0" title="Ver movimientos de Ingresos">
               <div class="fhc-stat-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
               </div>
               <div class="fhc-stat-info">
-                <span class="fhc-stat-label">Ingresos</span>
+                <span class="fhc-stat-label">Ingresos <span class="fhc-drilldown-hint">▾ Ver</span></span>
                 <span class="fhc-stat-val positivo" id="dash-breakdown-ingresos">$ 0,00</span>
+              </div>
+              <div class="fhc-stat-chevron">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
 
             <div class="fhc-stat-divider"></div>
 
-            <div class="fhc-stat-box fhc-stat-egr">
+            <div class="fhc-stat-box fhc-stat-egr" id="dash-hero-stat-egr" role="button" tabindex="0" title="Ver movimientos de Egresos">
               <div class="fhc-stat-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
               </div>
               <div class="fhc-stat-info">
-                <span class="fhc-stat-label">Egresos</span>
+                <span class="fhc-stat-label">Egresos <span class="fhc-drilldown-hint">▾ Ver</span></span>
                 <span class="fhc-stat-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
+              </div>
+              <div class="fhc-stat-chevron">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
           </div>
@@ -366,6 +378,41 @@ export class DashboardModule extends BaseModule {
           </div>
         </div>
 
+      </div>
+
+      <!-- ═══ ACORDEÓN / CONSOLA DE DRILL-DOWN DE MOVIMIENTOS ═══ -->
+      <div class="dash-hero-drilldown" id="dash-hero-drilldown" style="display: none;">
+        <div class="dh-drilldown-header">
+          <div class="dh-drilldown-left">
+            <div class="dh-drilldown-badge" id="drilldown-badge">
+              <span class="dh-badge-dot"></span>
+              <span class="dh-badge-title" id="drilldown-title">Movimientos</span>
+            </div>
+            <div class="dh-drilldown-summary" id="drilldown-summary">—</div>
+          </div>
+
+          <div class="dh-drilldown-center">
+            <div class="dh-filter-tabs">
+              <button class="dh-tab-btn" data-filter="INGRESO" id="drilldown-tab-ing">Ingresos</button>
+              <button class="dh-tab-btn" data-filter="EGRESO" id="drilldown-tab-egr">Egresos</button>
+              <button class="dh-tab-btn" data-filter="ALL" id="drilldown-tab-all">Todos</button>
+            </div>
+          </div>
+
+          <div class="dh-drilldown-right">
+            <div class="dh-search-box">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="drilldown-search-input" placeholder="Buscar concepto o categoría..." autocomplete="off">
+            </div>
+            <button class="dh-close-btn" id="drilldown-close-btn" title="Cerrar panel de movimientos" aria-label="Cerrar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="dh-drilldown-body" id="drilldown-body-container">
+          <!-- Movimientos dinámicos renderizados aquí -->
+        </div>
       </div>
 
       <!-- ═══ BENTO GRID: 4 MÓDULOS DE RESUMEN PATRIMONIAL ═══ -->
@@ -560,6 +607,32 @@ export class DashboardModule extends BaseModule {
     // Inversiones detail
     document.getElementById('dash-inversiones-detail')?.addEventListener('click', () => {
       document.querySelector('[data-vista="vista-inversiones"]')?.click();
+    });
+
+    // Drilldown Hero Stat Boxes
+    document.getElementById('dash-hero-stat-ing')?.addEventListener('click', () => this.#toggleDrilldown('INGRESO'));
+    document.getElementById('dash-hero-stat-egr')?.addEventListener('click', () => this.#toggleDrilldown('EGRESO'));
+
+    const handleKeyEnter = (el, fn) => {
+      el?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          fn();
+        }
+      });
+    };
+    handleKeyEnter(document.getElementById('dash-hero-stat-ing'), () => this.#toggleDrilldown('INGRESO'));
+    handleKeyEnter(document.getElementById('dash-hero-stat-egr'), () => this.#toggleDrilldown('EGRESO'));
+
+    // Drilldown Controls
+    document.getElementById('drilldown-close-btn')?.addEventListener('click', () => this.#closeDrilldown());
+    document.getElementById('drilldown-tab-ing')?.addEventListener('click', () => this.#setDrilldownFilter('INGRESO'));
+    document.getElementById('drilldown-tab-egr')?.addEventListener('click', () => this.#setDrilldownFilter('EGRESO'));
+    document.getElementById('drilldown-tab-all')?.addEventListener('click', () => this.#setDrilldownFilter('ALL'));
+
+    document.getElementById('drilldown-search-input')?.addEventListener('input', (e) => {
+      this.#drilldownSearch = e.target.value;
+      this.#renderDrilldown();
     });
   }
 
@@ -918,6 +991,190 @@ export class DashboardModule extends BaseModule {
       );
       if (resp.data?.success) applyInversiones(resp.data);
     } catch (e) { App.error('Dashboard', '#loadInversiones', e.message, e); }
+  }
+
+  // --- SECCIÓN 8C: DRILL-DOWN DE MOVIMIENTOS EN VIVO ---
+
+  #toggleDrilldown(tipo) {
+    if (this.#drilldownOpen && this.#drilldownFilter === tipo) {
+      this.#closeDrilldown();
+    } else {
+      this.#openDrilldown(tipo);
+    }
+  }
+
+  #openDrilldown(tipo) {
+    this.#drilldownOpen = true;
+    this.#drilldownFilter = tipo;
+    this.#drilldownSearch = '';
+    const searchInput = document.getElementById('drilldown-search-input');
+    if (searchInput) searchInput.value = '';
+
+    const el = document.getElementById('dash-hero-drilldown');
+    if (el) {
+      el.style.display = 'block';
+      this.#renderDrilldown();
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  #closeDrilldown() {
+    this.#drilldownOpen = false;
+    const el = document.getElementById('dash-hero-drilldown');
+    if (el) el.style.display = 'none';
+
+    const ingBox = document.getElementById('dash-hero-stat-ing');
+    const egrBox = document.getElementById('dash-hero-stat-egr');
+    if (ingBox) ingBox.classList.remove('is-active');
+    if (egrBox) egrBox.classList.remove('is-active');
+  }
+
+  #setDrilldownFilter(tipo) {
+    this.#drilldownFilter = tipo;
+    this.#renderDrilldown();
+  }
+
+  #renderDrilldown() {
+    const drilldownEl = document.getElementById('dash-hero-drilldown');
+    const bodyEl = document.getElementById('drilldown-body-container');
+    const titleEl = document.getElementById('drilldown-title');
+    const badgeEl = document.getElementById('drilldown-badge');
+    const summaryEl = document.getElementById('drilldown-summary');
+    if (!drilldownEl || !bodyEl) return;
+
+    // Filter by type
+    let filtered = this.#movData || [];
+    if (this.#drilldownFilter === 'INGRESO') {
+      filtered = filtered.filter(m => m.tipo_mov === 'INGRESO');
+    } else if (this.#drilldownFilter === 'EGRESO') {
+      filtered = filtered.filter(m => m.tipo_mov === 'EGRESO');
+    }
+
+    // Filter by live search text
+    if (this.#drilldownSearch.trim()) {
+      const q = this.#drilldownSearch.toLowerCase().trim();
+      filtered = filtered.filter(m => {
+        const desc = (m.descripcion || '').toLowerCase();
+        const cat = (m.categoria_nombre || '').toLowerCase();
+        const medio = (m.medio_pago || '').toLowerCase();
+        return desc.includes(q) || cat.includes(q) || medio.includes(q);
+      });
+    }
+
+    // Calculate sum of filtered
+    const totalFiltered = filtered.reduce((acc, m) => acc + Number(m.importe || 0), 0);
+
+    // Update Header Badge and Title
+    if (badgeEl) {
+      badgeEl.className = 'dh-drilldown-badge badge-' + this.#drilldownFilter.toLowerCase();
+    }
+    if (titleEl) {
+      if (this.#drilldownFilter === 'INGRESO') titleEl.textContent = 'Movimientos: Ingresos';
+      else if (this.#drilldownFilter === 'EGRESO') titleEl.textContent = 'Movimientos: Egresos';
+      else titleEl.textContent = 'Movimientos: Todos';
+    }
+    if (summaryEl) {
+      const countLabel = filtered.length === 1 ? '1 movimiento' : `${filtered.length} movimientos`;
+      summaryEl.textContent = `${countLabel} • Total: ${App.Utils.formatearMoneda(totalFiltered)}`;
+    }
+
+    // Update active tab buttons
+    ['ing', 'egr', 'all'].forEach(k => {
+      const btn = document.getElementById(`drilldown-tab-${k}`);
+      if (btn) {
+        const isAct = (k === 'ing' && this.#drilldownFilter === 'INGRESO') ||
+                      (k === 'egr' && this.#drilldownFilter === 'EGRESO') ||
+                      (k === 'all' && this.#drilldownFilter === 'ALL');
+        btn.classList.toggle('active', isAct);
+      }
+    });
+
+    // Update active state on hero stat boxes
+    const ingBox = document.getElementById('dash-hero-stat-ing');
+    const egrBox = document.getElementById('dash-hero-stat-egr');
+    if (ingBox) ingBox.classList.toggle('is-active', this.#drilldownOpen && this.#drilldownFilter === 'INGRESO');
+    if (egrBox) egrBox.classList.toggle('is-active', this.#drilldownOpen && this.#drilldownFilter === 'EGRESO');
+
+    if (filtered.length === 0) {
+      bodyEl.innerHTML = `
+        <div class="dh-empty-state">
+          <div class="dh-empty-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          </div>
+          <span>No se encontraron movimientos para esta selección</span>
+        </div>
+      `;
+      return;
+    }
+
+    const getCategoryIconSvg = (catName, tipo) => {
+      const cat = (catName || '').toLowerCase();
+      if (tipo === 'INGRESO') {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+      }
+      if (cat.includes('super') || cat.includes('alimen') || cat.includes('comida')) {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
+      }
+      if (cat.includes('serv') || cat.includes('luz') || cat.includes('gas') || cat.includes('internet')) {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+      }
+      if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+      }
+      if (cat.includes('salud') || cat.includes('farmacia')) {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
+      }
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
+    };
+
+    const rowsHtml = filtered.map(r => {
+      const esIngreso = r.tipo_mov === 'INGRESO';
+      const iconClass = esIngreso ? 'icon-green' : 'icon-subtle';
+      const sign = esIngreso ? '+' : '-';
+      const valClass = esIngreso ? 'positivo' : 'negativo';
+      const catName = r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General');
+      const desc = r.descripcion || catName;
+      const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
+      const medio = r.medio_pago ? `<span class="dh-pill-medio">${App.Utils.escapeHtml(r.medio_pago)}</span>` : '';
+
+      return `
+        <div class="dh-drill-row" data-id="${r.id_movimiento || r.id}">
+          <div class="dh-col-main">
+            <div class="dh-item-icon ${iconClass}">
+              ${getCategoryIconSvg(catName, r.tipo_mov)}
+            </div>
+            <div class="dh-col-desc-wrap">
+              <span class="dh-row-desc">${App.Utils.escapeHtml(desc)}</span>
+              <span class="dh-row-date">${fechaStr}</span>
+            </div>
+          </div>
+          <div class="dh-col-cat">
+            <span class="dh-cat-pill">${App.Utils.escapeHtml(catName)}</span>
+          </div>
+          <div class="dh-col-medio">
+            ${medio}
+          </div>
+          <div class="dh-col-amount ${valClass}">
+            ${sign} ${App.Utils.formatearMoneda(r.importe)}
+          </div>
+          <div class="dh-col-action">
+            <button class="btn-icon-sm dh-row-btn" title="Ver detalle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    bodyEl.innerHTML = `<div class="dh-rows-list">${rowsHtml}</div>`;
+
+    bodyEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
+      rowEl.addEventListener('click', () => {
+        const id = rowEl.dataset.id;
+        const row = this.#movData.find(m => (m.id_movimiento || m.id) == id);
+        if (row) this.#abrirModalDetalleMov(row);
+      });
+    });
   }
 
   #abrirModalDetalleMov(row) {

@@ -287,7 +287,8 @@ class AppInit {
     // el FAB flota para permitir registrar consumos rápidamente sin volver al inicio.
     const fabGroup = document.getElementById('fab-group');
     if (fabGroup) {
-      fabGroup.style.display = (vistaId === 'vista-dashboard' || vistaId === 'vista-admin') ? 'none' : 'flex';
+      const shouldHide = (vistaId === 'vista-dashboard' || vistaId === 'vista-admin');
+      fabGroup.classList.toggle('hidden-contextual', shouldHide);
     }
 
     const moduloId  = this.#tabMap[vistaId];
