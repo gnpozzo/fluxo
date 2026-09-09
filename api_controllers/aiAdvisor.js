@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import XLSX from 'xlsx';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -11,11 +12,14 @@ export default async function handler(req, res) {
       mes, 
       globalCurrency = 'ARS',
       riskProfile = 'MODERADO', 
-      projectGoal = null 
+      projectGoal = null,
+      fileBase64 = null,
+      mimeType = null,
+      fileName = null
     } = req.body || {};
 
-    if (!message) {
-      return res.status(400).json({ success: false, error: 'Mensaje requerido' });
+    if (!message && !fileBase64) {
+      return res.status(400).json({ success: false, error: 'Mensaje o archivo requerido' });
     }
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
@@ -25,7 +29,10 @@ export default async function handler(req, res) {
 
     // 1. Obtener datos financieros de Supabase
     let financialContext = {
-      cuentaNombre: cuentaId || 'Principal',
+      cuentaId: cuentaId,
+      cuentaNombre: 'Principal',
+      cuentasDisponibles: [],
+      categoriasDisponibles: [],
       ingresosMes: 0,
       egresosMes: 0,
       gastosPorCategoria: {},
@@ -40,79 +47,106 @@ export default async function handler(req, res) {
       const supabase = getSupabaseClient(req);
       const userId = req.user?.id;
 
-      if (userId && cuentaId && mes) {
-        const start = mes + '-01';
-        const [y, m] = mes.split('-').map(Number);
-        const lastDay = new Date(y, m, 0).getDate();
-        const end = `${mes}-${String(lastDay).padStart(2, '0')}`;
+      if (userId) {
+        // Cuentas del usuario
+        const { data: accounts } = await supabase
+          .from('cuentas_principales')
+          .select('id_cuenta_principal, nombre')
+          .eq('user_id', userId);
+        if (accounts) {
+          financialContext.cuentasDisponibles = accounts;
+          const matchedAcc = accounts.find(a => a.id_cuenta_principal === cuentaId);
+          if (matchedAcc) {
+            financialContext.cuentaNombre = matchedAcc.nombre;
+          } else if (accounts.length > 0) {
+            financialContext.cuentaNombre = accounts[0].nombre;
+            financialContext.cuentaId = accounts[0].id_cuenta_principal;
+          }
+        }
 
-        // Movimientos del mes con categorías scoped to user_id
-        const { data: movs } = await supabase
-          .from('movimientos')
-          .select('*, categorias (nombre)')
-          .eq('id_cuenta_principal', cuentaId)
-          .eq('user_id', userId)
-          .gte('fecha', start)
-          .lte('fecha', end);
+        // Categorías activas
+        const { data: cats } = await supabase
+          .from('categorias')
+          .select('id_categoria, nombre, tipo_mov')
+          .eq('activa', true);
+        if (cats) {
+          financialContext.categoriasDisponibles = cats;
+        }
 
-        if (movs) {
-          movs.forEach(mov => {
-            const imp = Math.abs(Number(mov.importe || 0));
-            const cat = mov.categorias?.nombre || 'Otros';
-            if (mov.tipo_mov === 'INGRESO') {
-              financialContext.ingresosMes += imp;
-            } else {
-              financialContext.egresosMes += imp;
-              financialContext.gastosPorCategoria[cat] = (financialContext.gastosPorCategoria[cat] || 0) + imp;
-              if (mov.tipo_egreso === 'RECURRENTE' || mov.tipo_egreso === 'CUOTA') {
-                financialContext.gastosRecurrentes.push({
-                  descripcion: mov.descripcion,
-                  categoria: cat,
-                  importe: imp,
-                  tipo: mov.tipo_egreso
-                });
+        if (financialContext.cuentaId && mes) {
+          const start = mes + '-01';
+          const [y, m] = mes.split('-').map(Number);
+          const lastDay = new Date(y, m, 0).getDate();
+          const end = `${mes}-${String(lastDay).padStart(2, '0')}`;
+
+          // Movimientos del mes con categorías
+          const { data: movs } = await supabase
+            .from('movimientos')
+            .select('*, categorias (nombre)')
+            .eq('id_cuenta_principal', financialContext.cuentaId)
+            .eq('user_id', userId)
+            .gte('fecha', start)
+            .lte('fecha', end);
+
+          if (movs) {
+            movs.forEach(mov => {
+              const imp = Math.abs(Number(mov.importe || 0));
+              const cat = mov.categorias?.nombre || 'Otros';
+              if (mov.tipo_mov === 'INGRESO') {
+                financialContext.ingresosMes += imp;
+              } else {
+                financialContext.egresosMes += imp;
+                financialContext.gastosPorCategoria[cat] = (financialContext.gastosPorCategoria[cat] || 0) + imp;
+                if (mov.tipo_egreso === 'RECURRENTE' || mov.tipo_egreso === 'CUOTA') {
+                  financialContext.gastosRecurrentes.push({
+                    descripcion: mov.descripcion,
+                    categoria: cat,
+                    importe: imp,
+                    tipo: mov.tipo_egreso
+                  });
+                }
               }
-            }
-          });
-        }
+            });
+          }
 
-        // Deuda de tarjetas scoped to user_id
-        const { data: tcConsumos } = await supabase
-          .from('consumos_tc')
-          .select('importe, cuota_actual, cuota_total, descripcion, id_tarjeta')
-          .eq('user_id', userId)
-          .gte('fecha', start)
-          .lte('fecha', end);
+          // Deuda de tarjetas
+          const { data: tcConsumos } = await supabase
+            .from('consumos_tc')
+            .select('importe, cuota_actual, cuota_total, descripcion, id_tarjeta')
+            .eq('user_id', userId)
+            .gte('fecha', start)
+            .lte('fecha', end);
 
-        if (tcConsumos) {
-          financialContext.deudaTarjetasTotal = tcConsumos.reduce((acc, c) => acc + Number(c.importe || 0), 0);
-        }
+          if (tcConsumos) {
+            financialContext.deudaTarjetasTotal = tcConsumos.reduce((acc, c) => acc + Number(c.importe || 0), 0);
+          }
 
-        // Ahorros scoped to user_id
-        const { data: ahorros } = await supabase
-          .from('ahorros')
-          .select('moneda, importe')
-          .eq('user_id', userId);
+          // Ahorros
+          const { data: ahorros } = await supabase
+            .from('ahorros')
+            .select('moneda, importe')
+            .eq('user_id', userId);
 
-        if (ahorros) {
-          ahorros.forEach(a => {
-            if (a.moneda === 'USD') financialContext.ahorroTotalUSD += Number(a.importe || 0);
-            else financialContext.ahorroTotalARS += Number(a.importe || 0);
-          });
-        }
+          if (ahorros) {
+            ahorros.forEach(a => {
+              if (a.moneda === 'USD') financialContext.ahorroTotalUSD += Number(a.importe || 0);
+              else financialContext.ahorroTotalARS += Number(a.importe || 0);
+            });
+          }
 
-        // Inversiones scoped to user_id
-        const { data: invs } = await supabase
-          .from('inversiones_movimientos')
-          .select('ticker, tipo_operacion, cantidad_nominales, precio_compra, moneda')
-          .eq('user_id', userId);
+          // Inversiones
+          const { data: invs } = await supabase
+            .from('inversiones_movimientos')
+            .select('ticker, tipo_operacion, cantidad_nominales, precio_compra, moneda')
+            .eq('user_id', userId);
 
-        if (invs) {
-          financialContext.carteraInversiones = invs;
+          if (invs) {
+            financialContext.carteraInversiones = invs;
+          }
         }
       }
     } catch (dbErr) {
-      console.warn('[aiAdvisor] Context gathering notice:', dbErr.message);
+      console.warn('[FluxoAI -> Context gathering notice]:', dbErr.message);
     }
 
     // 2. Obtener datos de mercado en vivo
@@ -141,55 +175,100 @@ export default async function handler(req, res) {
       }
     } catch (_) {}
 
-    // 3. Compilar System Prompt especializado
+    // 3. Procesar archivo adjunto si existe
+    let fileTextExtraction = '';
+    let hasInlineAttachment = false;
+    let inlineMimeType = null;
+    let inlineData = null;
+
+    if (fileBase64) {
+      const isXlsx = (fileName && (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv'))) ||
+                     (mimeType && (mimeType.includes('sheet') || mimeType.includes('excel') || mimeType.includes('csv')));
+
+      if (isXlsx) {
+        try {
+          const buf = Buffer.from(fileBase64, 'base64');
+          const wb = XLSX.read(buf, { type: 'buffer' });
+          const sheetNames = wb.SheetNames || [];
+          let tablesText = [];
+          for (const sName of sheetNames.slice(0, 3)) {
+            const sheet = wb.Sheets[sName];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            if (rows && rows.length > 0) {
+              const rowsSlice = rows.slice(0, 80);
+              const tableMd = rowsSlice.map(r => Array.isArray(r) ? r.join(' | ') : String(r)).join('\n');
+              tablesText.push(`--- HOJA "${sName}" (${rows.length} filas) ---\n${tableMd}`);
+            }
+          }
+          fileTextExtraction = `\n\n[PLANILLA ADJUNTA "${fileName || 'datos.xlsx'}"]:\n${tablesText.join('\n\n')}\n`;
+        } catch (parseXlsErr) {
+          console.warn('[FluxoAI] Error parsing XLSX buffer:', parseXlsErr.message);
+          fileTextExtraction = `\n[Nota: Archivo XLSX adjunto "${fileName || 'documento'}" recibido].`;
+        }
+      } else {
+        // PDF o Imagen: compatible con Gemini Vision / Multimodal API
+        hasInlineAttachment = true;
+        inlineMimeType = mimeType || (fileName?.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+        inlineData = fileBase64;
+      }
+    }
+
+    // 4. Compilar System Prompt con criterio propio y cuestionamiento financiero
     const balanceMes = financialContext.ingresosMes - financialContext.egresosMes;
-    const systemPrompt = `Eres "Fluxo AI Wealth Advisor", un asesor financiero matriculado, planificador patrimonial y estratega de inversiones de élite en Argentina y mercados globales.
-Tu misión es asistir al usuario con rigurosidad matemática, visión estratégica y claridad empática.
+    const cuentasTxt = financialContext.cuentasDisponibles.map(a => `${a.nombre} (ID: ${a.id_cuenta_principal})`).join(', ') || 'Principal';
+    const categoriasTxt = financialContext.categoriasDisponibles.map(c => `${c.nombre} (${c.tipo_mov}, ID: ${c.id_categoria})`).join(', ') || 'General';
+
+    const systemPrompt = `Eres "FluxoAI", un asesor financiero matriculado, planificador patrimonial y estratega de inversiones con CRITERIO PROPIO, PENSAMIENTO CRÍTICO y DISCIPLINA FINANCIERA RIGUROSA en Argentina y mercados globales.
+
+TUS PRINCIPIOS Y PERSONALIDAD:
+1. PENSAMIENTO CRÍTICO Y CUESTIONAMIENTO:
+   - NO des nada por hecho y NO seas un simple asistente complaciente que aprueba cualquier plan.
+   - Cuestiona al usuario cuando tome decisiones financieramente imprudentes, apresuradas o sin cálculo:
+     * Si el usuario quiere invertir en renta variable, cripto o instrumentos volátiles teniendo deudas de tarjeta de crédito (CFT > 100-150% anual), CUESTIONA FIRMEMENTE esa postura. Explica con números que cancelar la deuda de tarjeta otorga un rendimiento 100% libre de riesgo superior a cualquier activo bursátil.
+     * Si plantea un objetivo de ahorro irreal que recortaría gastos esenciales fijos (colegio, alquiler, seguros del hogar, servicios básicos), adviértele las consecuencias y propone metas escalonadas.
+     * Si propone instrumentos en pesos con tasa fija nominal frente a expectativas de devaluación o inflación acelerada, analiza la tasa real negativa.
+   - Cuestiónate también a ti mismo: explica pros y contras, riesgos ocultos, comisiones de broker y falta de liquidez.
+
+2. ASESORAMIENTO Y CONSULTA DE INSTRUMENTOS BURSÁTILES:
+   - Cuando el usuario pregunte por un instrumento (ej. un Bono Soberano como GD30/AL30, LECAP, ON corporativa en USD como YCA6O/PAMPA, o CEDEAR como SPY/NVDA/AAPL):
+     a) Detalla condiciones de emisión o pliego (moneda, legislación, cupón, amortización, paridad o TIR estimada).
+     b) Evalúa si es adecuado para su Perfil de Riesgo (${riskProfile}) y horizonte temporal.
+     c) Cuestiona si la concentración en ese activo es prudente o si existen alternativas con mejor relación riesgo-retorno o mayor liquidez.
+
+3. EXTRACCIÓN E INCORPORACIÓN INTELIGENTE DE GASTOS Y MOVIMIENTOS:
+   - Si el usuario adjunta un archivo (planilla XLSX, PDF de resumen bancario, factura, ticket o imagen) o pide incorporar movimientos a una cuenta:
+     a) Identifica minuciosamente cada transacción (fecha YYYY-MM-DD, descripción limpia, importe positivo, tipo 'EGRESO' o 'INGRESO').
+     b) Asigna la cuenta destino (por defecto "${financialContext.cuentaNombre}" con ID "${financialContext.cuentaId}", o la que el usuario indique entre: ${cuentasTxt}).
+     c) Asigna la categoría más adecuada de la lista oficial: ${categoriasTxt}.
+     d) Presenta un desglose ordenado y claro de los gastos detectados.
+     e) Y AL FINAL DE LA RESPUESTA, incluye OBLIGATORIAMENTE el siguiente bloque de acción para permitir la carga directa con 1 clic:
+     [ACCION_IMPORTAR_MOVIMIENTOS: {"cuentaId": "${financialContext.cuentaId}", "cuentaNombre": "${financialContext.cuentaNombre}", "movimientos": [{"fecha": "YYYY-MM-DD", "descripcion": "...", "importe": 123.45, "tipo_mov": "EGRESO", "id_categoria": "..."}]}]
+
+4. TEST DE PERFIL DE INVERSOR INTERACTIVO:
+   - Formula UNA PREGUNTA POR TURNO (no las 3 juntas) e incluye al final:
+     [OPCIONES: A) Opción 1 | B) Opción 2 | C) Opción 3]
+   - Al responder la última, define el perfil definitivo: "Tu perfil es: CONSERVADOR" (o MODERADO / AGRESIVO).
 
 DATOS DEL USUARIO Y CONTEXTO PATRIMONIAL ACTUAL:
-- Cuenta Activa: ${financialContext.cuentaNombre} | Período: ${mes || 'Actual'} | Moneda base: ${globalCurrency}
-- Perfil de Riesgo del Inversor: ${riskProfile} (CONSERVADOR / MODERADO / AGRESIVO)
-- Ingresos del Mes: $${financialContext.ingresosMes.toLocaleString('es-AR')}
-- Egresos del Mes: $${financialContext.egresosMes.toLocaleString('es-AR')}
-- Balance / Flujo Neto del Mes: $${balanceMes.toLocaleString('es-AR')}
-- Compromisos en Tarjetas de Crédito este mes: $${financialContext.deudaTarjetasTotal.toLocaleString('es-AR')}
+- Cuenta Activa: ${financialContext.cuentaNombre} (ID: ${financialContext.cuentaId}) | Período: ${mes || 'Actual'} | Moneda base: ${globalCurrency}
+- Cuentas del Usuario: ${cuentasTxt}
+- Perfil de Riesgo: ${riskProfile}
+- Ingresos del Mes: $${financialContext.ingresosMes.toLocaleString('es-AR')} | Egresos: $${financialContext.egresosMes.toLocaleString('es-AR')} | Balance Neto: $${balanceMes.toLocaleString('es-AR')}
+- Deuda en Tarjetas este mes: $${financialContext.deudaTarjetasTotal.toLocaleString('es-AR')}
 - Fondo en Chanchito (Ahorro líquido): $${financialContext.ahorroTotalARS.toLocaleString('es-AR')} ARS | US$ ${financialContext.ahorroTotalUSD.toLocaleString('es-AR')} USD
 - Gastos por Categoría: ${JSON.stringify(financialContext.gastosPorCategoria, null, 2)}
-- Gastos Recurrentes / Cuotas activas: ${JSON.stringify(financialContext.gastosRecurrentes.slice(0, 8), null, 2)}
-- Tenencias actuales de Inversión: ${JSON.stringify(financialContext.carteraInversiones.slice(0, 10), null, 2)}
+- Gastos Recurrentes / Cuotas: ${JSON.stringify(financialContext.gastosRecurrentes.slice(0, 8), null, 2)}
+- Cartera de Inversiones: ${JSON.stringify(financialContext.carteraInversiones.slice(0, 8), null, 2)}
 
-CONDICIONES MACROECONÓMICAS Y MERCADO DE CAPITALES VIVO:
-- Dólar MEP: $${marketContext.dolarMEP} | Dólar CCL: $${marketContext.dolarCCL} | Dólar Blue: $${marketContext.dolarBlue} | Oficial: $${marketContext.dolarOficial}
-- Riesgo País: ${marketContext.riesgoPais} pb
-- Tasa Renta Fija Pesos (LECAPs/Tasa Real): ${marketContext.tasaLECAPsMensualTNA}
-- Tasa Renta Fija Dólares (ONs Corporativas Hard Dollar como YPF, Pampa, Telecom): ${marketContext.rendimientoONsUSD}
-- Renta Variable / CEDEARs recomendados: ${marketContext.cedearsDestacados.join(', ')}
+CONDICIONES MACROECONÓMICAS Y MERCADO FINANCIERO:
+- Dólar MEP: $${marketContext.dolarMEP} | CCL: $${marketContext.dolarCCL} | Blue: $${marketContext.dolarBlue} | Oficial: $${marketContext.dolarOficial}
+- Riesgo País: ${marketContext.riesgoPais} pb | Inflación mensual estimada: ${marketContext.inflacionEstimadaMensual}
+- Rendimiento LECAPs: ${marketContext.tasaLECAPsMensualTNA} | ONs Hard Dollar: ${marketContext.rendimientoONsUSD}
+- CEDEARs destacados: ${marketContext.cedearsDestacados.join(', ')}
 
-TUS CAPACIDADES Y REGLAS DE CONDUCTA:
-1. TEST Y EVALUACIÓN DE PERFIL DE RIESGO INTERACTIVO (PASO A PASO):
-   - NUNCA envíes las 3 preguntas juntas de golpe.
-   - Envía SIEMPRE DE A 1 PREGUNTA por turno y aguarda la respuesta del usuario antes de pasar a la siguiente.
-   - En cada pregunta del test, formula la pregunta de manera muy clara y breve, y al final incluye obligatoriamente las opciones en una línea con el formato exacto:
-     [OPCIONES: A) Opción 1 | B) Opción 2 | C) Opción 3]
-   - Cuando el usuario responda la pregunta 3, realiza el diagnóstico definitivo indicando:
-     "Tu perfil es: CONSERVADOR" (o MODERADO / AGRESIVO) junto con la explicación de su tolerancia al riesgo y la estrategia de cartera sugerida.
-2. PLANIFICACIÓN DE METAS DE AHORRO Y RECORTE DE PARTIDAS:
-   - Si el usuario dice que quiere ahorrar $X por mes para un proyecto:
-     a) Analiza sus gastos por categoría y detecta partidas prescindibles o reducibles.
-     b) Especifica exactamente QUÉ partidas recortar, CUÁNTO recortar y a partir de qué mes.
-     c) Realiza una PROYECCIÓN CRONOLÓGICA DE AHORRO acumulado (ej. a 3, 6, 12 meses con y sin rendimiento).
-3. ESTRATEGIA DE INVERSIÓN Y DIVERSIFICACIÓN POR PROYECTO:
-   - Para el dinero ahorrado mes a mes, diseña una cartera diversificada acorde a su Perfil (${riskProfile}) y plazo del proyecto.
-   - Distribuye porcentualmente entre Renta Fija en Pesos (LECAPs), Renta Fija en USD (ONs) y Renta Variable (CEDEARs).
-   - Justifica con inflación y devaluación actual.
-4. MEMORIA DE PATRONES, PROYECTOS Y PREFERENCIAS:
-   - Mantén en memoria todo lo conversado en turnos anteriores: proyectos definidos, montos de ahorro acordados, instrumentos preferidos y metas patrimoniales.
-   - Si el usuario retoma un proyecto o meta que te mencionó antes, haz referencia a esos datos previos para darle una experiencia de asesoramiento continuo y personalizado.
-5. ESTILO Y FORMATO LIMPIO:
-   - NO uses encabezados gigantes con "###" ni bloques de código con \`\`\` markdown.
-   - Escribe en texto limpio, fluido, directo y profesional en español. Usa negritas puntuales para resaltar conceptos clave.`;
+FORMATO: Escribe con elegancia, precisión profesional en español y negritas destacadas. Evita encabezados gigantes ### o bloques de código \`\`\`.`;
 
-    // 4. Llamar a la API de Gemini con lista de modelos en cascada
+    // 5. Preparar contents para la API de Gemini
     const contents = [];
     (chatHistory || []).forEach(msg => {
       contents.push({
@@ -198,17 +277,26 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
       });
     });
 
+    const userTextParts = [{ text: (message || '') + fileTextExtraction }];
+    if (hasInlineAttachment && inlineData && inlineMimeType) {
+      userTextParts.push({
+        inlineData: {
+          mimeType: inlineMimeType,
+          data: inlineData
+        }
+      });
+    }
+
     contents.push({
       role: 'user',
-      parts: [{ text: message }]
+      parts: userTextParts
     });
 
-    // 4. Descubrimiento dinámico de modelos soportados por la API Key
+    // 6. Descubrimiento dinámico de modelos soportados por la API Key
     let geminiData = null;
     let lastError = null;
 
     try {
-      // Consultar qué modelos tiene habilitados exactamente esta API Key
       const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, { signal: AbortSignal.timeout(4000) });
       let availableModels = [];
       if (listResp.ok) {
@@ -218,24 +306,17 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
           .map(m => m.name.replace('models/', ''));
       }
 
-      // Modelos preferidos de texto en orden de prioridad (3.6 Flash, 3.5 Flash-Lite, 2.5 Flash, etc.)
       const priorityOrder = [
-        'gemini-3.6-flash',
-        'gemini-3.5-flash-lite',
-        'gemini-3.5-flash',
         'gemini-2.5-flash',
-        'gemini-2.5-pro',
-        'gemini-2.5-flash-lite',
         'gemini-2.0-flash',
         'gemini-1.5-flash',
         'gemini-1.5-flash-latest',
+        'gemini-2.5-pro',
         'gemini-1.5-pro'
       ];
 
-      // Ordenar los disponibles según nuestra preferencia, descartando modelos exclusivos de audio/TTS/imágenes
       let modelsToTry = [];
       if (availableModels.length > 0) {
-        // Filtrar modelos puramente de voz/TTS o imágenes
         const textModels = availableModels.filter(m => 
           !m.includes('tts') && 
           !m.includes('audio') && 
@@ -243,7 +324,6 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
           !m.includes('embedding') &&
           !m.includes('bison')
         );
-
         modelsToTry = priorityOrder.filter(m => textModels.includes(m));
         textModels.forEach(m => {
           if (!modelsToTry.includes(m)) modelsToTry.push(m);
@@ -272,7 +352,6 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
           } else {
             const errBody = await resp.json().catch(() => null);
             lastError = errBody?.error?.message || `HTTP ${resp.status}`;
-            // Si es 400 por clave inválida general o cuota, detén la cascada
             if (resp.status === 403) break;
           }
         } catch (callErr) {
@@ -284,7 +363,7 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
     }
 
     if (!geminiData) {
-      throw new Error(`Gemini API error: ${lastError || 'No se pudo contactar el modelo de IA'}`);
+      throw new Error(`FluxoAI Error: ${lastError || 'No se pudo contactar el modelo de IA'}`);
     }
 
     const replyText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No pude generar una recomendación en este momento.';
@@ -300,7 +379,7 @@ TUS CAPACIDADES Y REGLAS DE CONDUCTA:
     });
 
   } catch (err) {
-    console.error('[aiAdvisor -> ERROR]', err.message);
+    console.error('[FluxoAI -> ERROR]', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 }

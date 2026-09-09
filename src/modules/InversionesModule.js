@@ -94,7 +94,7 @@ export class InversionesModule extends BaseModule {
       }
 
       return `
-        <div class="ticker-card" title="${App.Utils.escapeHtml(it.name || it.symbol)}">
+        <div class="ticker-card" style="cursor:pointer;" data-symbol="${App.Utils.escapeHtml(it.symbol)}" data-name="${App.Utils.escapeHtml(it.name || it.symbol)}" data-price="${it.price}" title="${App.Utils.escapeHtml(it.name || it.symbol)} — Clic para consultar con FluxoAI">
           <div class="ticker-card-top">
             <span class="ticker-card-symbol">${App.Utils.escapeHtml(it.symbol)}</span>
             <span class="ticker-badge">${it.badge || 'MKT'}</span>
@@ -135,20 +135,45 @@ export class InversionesModule extends BaseModule {
     const btnPause = document.getElementById('ticker-btn-pause');
 
     if (wrapper) {
-      btnLeft?.addEventListener('click', () => { wrapper.scrollLeft -= 220; });
-      btnRight?.addEventListener('click', () => { wrapper.scrollLeft += 220; });
+      // Navegación con bucle infinito / circular wrap
+      btnLeft?.addEventListener('click', () => {
+        if (wrapper.scrollLeft <= 5) {
+          wrapper.scrollTo({ left: wrapper.scrollWidth - wrapper.clientWidth, behavior: 'smooth' });
+        } else {
+          wrapper.scrollBy({ left: -240, behavior: 'smooth' });
+        }
+      });
+
+      btnRight?.addEventListener('click', () => {
+        if (wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 10) {
+          wrapper.scrollTo({ left: 0, behavior: 'smooth' });
+        } else {
+          wrapper.scrollBy({ left: 240, behavior: 'smooth' });
+        }
+      });
+
+      // Click en instrumento para consultar con FluxoAI
+      wrapper.querySelectorAll('.ticker-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const sym = card.dataset.symbol;
+          const nom = card.dataset.name;
+          const precio = card.dataset.price;
+          window.App?.Gemini?.consultarInstrumento({ symbol: sym, name: nom, price: precio });
+        });
+      });
 
       let isPaused = false;
       const scrollStep = () => {
         if (!isPaused && wrapper) {
-          wrapper.scrollLeft += 1;
-          if (wrapper.scrollLeft >= wrapper.scrollWidth - wrapper.clientWidth - 2) {
+          if (wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 3) {
             wrapper.scrollLeft = 0;
+          } else {
+            wrapper.scrollLeft += 1;
           }
         }
       };
 
-      const timer = setInterval(scrollStep, 40);
+      const timer = setInterval(scrollStep, 35);
       wrapper.addEventListener('mouseenter', () => { isPaused = true; });
       wrapper.addEventListener('mouseleave', () => { if (btnPause?.textContent !== '▶') isPaused = false; });
 
@@ -245,6 +270,18 @@ export class InversionesModule extends BaseModule {
         wrap.querySelector(`[data-monitor-panel="${btn.dataset.monitorTab}"]`)?.classList.remove('hidden');
       });
     });
+
+    // Bind click en cualquier fila o tarjeta interactiva de mercado para consultar a FluxoAI
+    wrap.querySelectorAll('[data-inv-symbol]').forEach(el => {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        const sym = el.dataset.invSymbol;
+        const nom = el.dataset.invName || sym;
+        const precio = el.dataset.invPrice || '';
+        const tipo = el.dataset.invTipo || '';
+        window.App?.Gemini?.consultarInstrumento({ symbol: sym, name: nom, price: precio, tipo });
+      });
+    });
   }
 
   // --- BUILDERS DE CADA PANEL ---
@@ -270,7 +307,7 @@ export class InversionesModule extends BaseModule {
         const arrow = (m.change || 0) >= 0 ? '▲' : '▼';
         const pct = m.change != null ? m.change.toFixed(2) : '0.00';
         const priceStr = m.price != null ? new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(m.price) : '—';
-        html += `<div style="padding:12px 14px;border:1px solid var(--borde);border-radius:var(--r);background:var(--superficie);box-shadow:var(--sombra-sm);">
+        html += `<div data-inv-symbol="${App.Utils.escapeHtml(m.name)}" data-inv-name="${App.Utils.escapeHtml(m.name)}" data-inv-price="${priceStr}" data-inv-tipo="Mundo" title="Clic para consultar con FluxoAI" style="padding:12px 14px;border:1px solid var(--borde);border-radius:var(--r);background:var(--superficie);box-shadow:var(--sombra-sm);cursor:pointer;transition:transform .15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
             <span style="font-size:1.1rem;">${m.icon || ''}</span>
             <span style="font-weight:600;font-size:0.82rem;color:var(--texto-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${App.Utils.escapeHtml(m.name)}</span>
@@ -296,9 +333,11 @@ export class InversionesModule extends BaseModule {
     arr.forEach(b => {
       const clr = (b.pct_change || 0) >= 0 ? 'var(--verde)' : 'var(--rojo)';
       const pct = b.pct_change != null ? Number(b.pct_change).toFixed(2) : '0.00';
-      html += `<tr>
-        <td><strong>${App.Utils.escapeHtml(b.symbol)}</strong></td>
-        <td style="text-align:right;font-weight:600;">US$ ${Number(b.price_usd || 0).toFixed(2)}</td>
+      const sym = App.Utils.escapeHtml(b.symbol || '');
+      const priceStr = 'US$ ' + Number(b.price_usd || 0).toFixed(2);
+      html += `<tr data-inv-symbol="${sym}" data-inv-name="Bono Soberano ${sym}" data-inv-price="${priceStr}" data-inv-tipo="Bono Soberano" title="Clic para consultar ${sym} con FluxoAI" style="cursor:pointer;">
+        <td><strong>${sym}</strong></td>
+        <td style="text-align:right;font-weight:600;">${priceStr}</td>
         <td style="text-align:right;color:var(--texto-3);">${Number(b.bid || 0).toFixed(2)}</td>
         <td style="text-align:right;color:var(--texto-3);">${Number(b.ask || 0).toFixed(2)}</td>
         <td style="text-align:right;font-weight:700;color:${clr};">${Number(b.pct_change) >= 0 ? '+' : ''}${pct}%</td>
@@ -316,9 +355,10 @@ export class InversionesModule extends BaseModule {
       const tipo = l.type || 'LECAP';
       const accent = tipo === 'BONCAP' ? 'var(--amarillo-text)' : 'var(--primary)';
       const priceStr = l.price ? Number(l.price).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
-      html += `<div style="padding:14px 16px;border:1px solid var(--borde);border-radius:var(--r);background:var(--superficie);border-left:3px solid ${accent};">
+      const sym = App.Utils.escapeHtml(l.symbol || '');
+      html += `<div data-inv-symbol="${sym}" data-inv-name="${tipo} ${sym}" data-inv-price="$ ${priceStr}" data-inv-tipo="${tipo}" title="Clic para consultar ${sym} con FluxoAI" style="padding:14px 16px;border:1px solid var(--borde);border-radius:var(--r);background:var(--superficie);border-left:3px solid ${accent};cursor:pointer;transition:transform .15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-weight:700;font-size:0.95rem;color:var(--texto);">${App.Utils.escapeHtml(l.symbol)}</span>
+          <span style="font-weight:700;font-size:0.95rem;color:var(--texto);">${sym}</span>
           <span style="font-size:0.65rem;font-weight:600;padding:2px 6px;border-radius:4px;background:${accent}22;color:${accent};">${tipo}</span>
         </div>
         <div style="font-size:1.3rem;font-weight:800;margin-top:6px;color:${accent};">$ ${priceStr}</div>
@@ -346,9 +386,10 @@ export class InversionesModule extends BaseModule {
       const pct = o.pct_change != null ? Number(o.pct_change).toFixed(2) : '0.00';
       const clr = Number(o.pct_change || 0) >= 0 ? 'var(--verde)' : 'var(--rojo)';
       const sym = App.Utils.escapeHtml(o.symbol || '');
-      html += `<tr>
+      const priceStr = 'US$ ' + price.toFixed(2);
+      html += `<tr data-inv-symbol="${sym}" data-inv-name="Obligación Negociable ${sym}" data-inv-price="${priceStr}" data-inv-tipo="ON" title="Clic para consultar ${sym} con FluxoAI" style="cursor:pointer;">
         <td><strong style="color:var(--verde);">${sym}</strong></td>
-        <td style="text-align:right;font-weight:600;">US$ ${price.toFixed(2)}</td>
+        <td style="text-align:right;font-weight:600;">${priceStr}</td>
         <td style="text-align:right;color:var(--texto-3);">${Number(o.px_bid || 0).toFixed(2)}</td>
         <td style="text-align:right;color:var(--texto-3);">${Number(o.px_ask || 0).toFixed(2)}</td>
         <td style="text-align:right;font-weight:700;color:${clr};">${Number(o.pct_change || 0) >= 0 ? '+' : ''}${pct}%</td>
@@ -374,9 +415,11 @@ export class InversionesModule extends BaseModule {
       const pct = c.pct_change != null ? Number(c.pct_change).toFixed(2) : '0.00';
       const clr = Number(c.pct_change || 0) >= 0 ? 'var(--verde)' : 'var(--rojo)';
       const vol = c.v ? Number(c.v).toLocaleString('es-AR') : '—';
-      html += `<tr>
-        <td><strong>${App.Utils.escapeHtml(c.symbol)}</strong></td>
-        <td style="text-align:right;font-weight:600;">$ ${price.toLocaleString('es-AR', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      const sym = App.Utils.escapeHtml(c.symbol || '');
+      const priceStr = '$ ' + price.toLocaleString('es-AR', {minimumFractionDigits:2,maximumFractionDigits:2});
+      html += `<tr data-inv-symbol="${sym}" data-inv-name="CEDEAR ${sym}" data-inv-price="${priceStr}" data-inv-tipo="CEDEAR" title="Clic para consultar ${sym} con FluxoAI" style="cursor:pointer;">
+        <td><strong>${sym}</strong></td>
+        <td style="text-align:right;font-weight:600;">${priceStr}</td>
         <td style="text-align:right;font-weight:700;color:${clr};">${Number(c.pct_change || 0) >= 0 ? '+' : ''}${pct}%</td>
         <td style="text-align:right;color:var(--texto-3);">${vol}</td>
         <td style="text-align:right;color:var(--texto-3);">${Number(c.px_bid || 0).toFixed(2)}</td>

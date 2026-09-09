@@ -65,22 +65,27 @@ export default async function handler(req, res) {
     // 1. Delete original (scoped to user_id)
     if (scope === 'SINGLE' && origId) {
       await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', origId).eq('user_id', userId);
-      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
+      const { error: delTcErr } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
+      if (delTcErr) throw delTcErr;
     } else if (scope === 'SERIES' && recurGrp) {
       const origFecha = toIsoDateStr(original.fecha?.value || original.fecha || '2000-01-01');
-      const { data: tcs } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
+      const { data: tcs, error: qErr } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
         .eq('recur_group_id', recurGrp)
         .eq('user_id', userId)
         .gte('fecha', origFecha);
         
+      if (qErr) throw qErr;
+
       if (tcs && tcs.length > 0) {
         const ids = tcs.map(r => r.id_consumo_tarjeta);
         await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids).eq('user_id', userId);
-        await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids).eq('user_id', userId);
+        const { error: delSeriesErr } = await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids).eq('user_id', userId);
+        if (delSeriesErr) throw delSeriesErr;
       }
     } else if (origId) {
       await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', origId).eq('user_id', userId);
-      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
+      const { error: delSingleErr } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
+      if (delSingleErr) throw delSingleErr;
     }
     
     // 2. Resolve card account and due date
@@ -108,13 +113,22 @@ export default async function handler(req, res) {
     (allUserCuentas || []).forEach(c => { cuentaNombreMap[c.id_cuenta_principal] = c.nombre; });
 
     // 3. Create new records
-    if (scope === 'SINGLE') data.tipo = 'SIMPLE';
+    let tipo = consumo.tipoConsumo || consumo.tipo;
+    if (scope === 'SINGLE') {
+      tipo = 'SIMPLE';
+    } else if (!tipo || tipo === 'COMUN' || tipo === 'SIMPLE') {
+      if (recurGrp?.startsWith('REC_')) {
+        tipo = 'RECURRENTE';
+      } else if (recurGrp?.startsWith('INSTL_') || Number(consumo.cuotaTotal) > 1) {
+        tipo = 'CUOTAS';
+      }
+    }
+
     const tcRows = [];
     const movRows = [];
     const cleanImporte = Number(String(consumo.importe || 0).replace(',', '.'));
     const fechaBase = parseDateSafe(consumo.fecha);
     const fechaISO = toIsoDateStr(fechaBase);
-    const tipo = consumo.tipoConsumo || consumo.tipo;
     const targetAccountId = consumo.idCuentaImputar;
 
     if (tipo === 'SIMPLE' || tipo === 'COMUN') {
@@ -263,8 +277,20 @@ export default async function handler(req, res) {
       }
     }
 
-    if (tcRows.length > 0) await supabase.from('consumos_tc').insert(tcRows);
-    if (movRows.length > 0) await supabase.from('movimientos').insert(movRows);
+    if (tcRows.length > 0) {
+      const { error: tcErr } = await supabase.from('consumos_tc').insert(tcRows);
+      if (tcErr) {
+        console.error('[updateConsumoTC] Error inserting tcRows:', tcErr);
+        throw tcErr;
+      }
+    }
+    if (movRows.length > 0) {
+      const { error: movErr } = await supabase.from('movimientos').insert(movRows);
+      if (movErr) {
+        console.error('[updateConsumoTC] Error inserting movRows:', movErr);
+        throw movErr;
+      }
+    }
 
     return res.status(200).json({ success: true, data: {} });
   } catch (err) {

@@ -323,7 +323,7 @@ export class TarjetasModule extends BaseModule {
 
     const rawFecha = App.Utils.toInputDate(data?.fecha?.value || data?.fecha);
 
-    const tipoConsumo = data?.tipo_consumo || 'COMUN';
+    const tipoConsumo = data?.tipo_consumo || (data?.recur_group_id?.startsWith('REC_') ? 'RECURRENTE' : (Number(data?.cuota_total) > 1 ? 'CUOTAS' : 'COMUN'));
 
     return `
       <form id="form-tc" class="form-grid">
@@ -415,7 +415,7 @@ export class TarjetasModule extends BaseModule {
            <input class="input" type="number" name="compartir_porcentaje" min="1" max="99" value="50">
         </div>` : ''}
 
-        ${data && (data.recur_group_id || data.tipo_consumo === 'CUOTAS' || data.tipo_consumo === 'RECURRENTE') ? `
+        ${data && (data.recur_group_id || tipoConsumo === 'CUOTAS' || tipoConsumo === 'RECURRENTE') ? `
         <div class="form-group full-width" style="background:var(--bg-2);padding:10px 14px;border-radius:var(--radius-md);margin-top:6px;border:1px solid var(--borde-1);">
           <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:6px;color:var(--texto-1)">Alcance de la modificación</label>
           <div style="display:flex;gap:16px;font-size:0.85rem;">

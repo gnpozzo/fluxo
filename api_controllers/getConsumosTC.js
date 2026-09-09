@@ -164,6 +164,8 @@ export default async function handler(req, res) {
         c.cuenta_imputada_nombre = null;
         c.cuenta_imputada_icono = null;
       }
+
+      c.tipo_consumo = c.recur_group_id?.startsWith('REC_') ? 'RECURRENTE' : (Number(c.cuota_total) > 1 ? 'CUOTAS' : 'COMUN');
     });
 
     let saldoTotal = 0;
