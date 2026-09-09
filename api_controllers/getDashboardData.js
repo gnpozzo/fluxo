@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 
 // [Origen -> api -> getDashboardData.js]
 // v6.0.0
@@ -26,10 +27,21 @@ export default async function handler(req, res) {
 
     if (!cuenta) throw new Error("Parámetros insuficientes");
 
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'No autenticado' });
+    }
+
+    const isOwner = await verifyCuentaOwnership(supabase, cuenta, userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+    }
+
     const { data: movimientos, error: movError } = await supabase
       .from('movimientos')
       .select('*, categorias (nombre)')
       .eq('id_cuenta_principal', cuenta)
+      .eq('user_id', userId)
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
       .order('fecha', { ascending: false });

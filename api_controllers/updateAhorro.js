@@ -6,6 +6,9 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const request = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     const { id_ahorro, data } = request;
     const { fecha, tipo_transfer, moneda, idSubcuenta, descripcion } = data;
     const importe = Number(data.importe);
@@ -22,7 +25,7 @@ export default async function handler(req, res) {
     
     const tipo_mov_principal = (tipo_transfer === 'DEPOSITO') ? 'EGRESO' : 'INGRESO';
     
-    // Update ahorros
+    // Update ahorros (scoped to user_id)
     const ahResult = await supabase.from('ahorros').update({
       fecha: fecha,
       tipo_transfer: tipo_transfer,
@@ -30,16 +33,16 @@ export default async function handler(req, res) {
       importe: importe,
       id_subcuenta: idSubcuenta,
       descripcion: descripcion
-    }).eq('id_ahorro', id_ahorro);
+    }).eq('id_ahorro', id_ahorro).eq('user_id', userId);
     if (ahResult.error) throw ahResult.error;
     
-    // Update movimientos
+    // Update movimientos (scoped to user_id)
     const movResult = await supabase.from('movimientos').update({
       fecha: fecha,
       tipo_mov: tipo_mov_principal,
       descripcion: desc_principal,
       importe: importePrincipal
-    }).eq('id_transfer_ahorro', id_ahorro);
+    }).eq('id_transfer_ahorro', id_ahorro).eq('user_id', userId);
     if (movResult.error) throw movResult.error;
     
     return res.status(200).json({ success: true, data: { id_ahorro: id_ahorro } });

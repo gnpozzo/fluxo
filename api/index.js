@@ -41,13 +41,20 @@ import updateConsumoTC from '../api_controllers/updateConsumoTC.js';
 import updateMovimiento from '../api_controllers/updateMovimiento.js';
 import telegramWebhook from '../api_controllers/telegramWebhook.js';
 import sendReminders from '../api_controllers/sendReminders.js';
-import debug_query from '../api_controllers/debug_query.js';
 import parseStatement from '../api_controllers/parseStatement.js';
 import aiAdvisor from '../api_controllers/aiAdvisor.js';
+import { authenticateUser } from '../api_lib/auth.js';
 
 
 export default async function handler(req, res) {
   const endpoint = req.query?.endpoint || req.url.split('?')[0].split('/').pop();
+  
+  // Public endpoints exempt from user JWT check
+  const publicEndpoints = ['getConfig', 'telegramWebhook', 'sendReminders'];
+  if (!publicEndpoints.includes(endpoint)) {
+    const user = await authenticateUser(req, res);
+    if (!user) return; // 401 response already handled by authenticateUser
+  }
   
   switch(endpoint) {
     case 'admin_deleteAhorroSubcuenta': return await admin_deleteAhorroSubcuenta(req, res);
@@ -94,7 +101,6 @@ export default async function handler(req, res) {
     case 'updateMovimiento': return await updateMovimiento(req, res);
     case 'telegramWebhook': return await telegramWebhook(req, res);
     case 'sendReminders': return await sendReminders(req, res);
-    case 'debug_query': return await debug_query(req, res);
     case 'parseStatement': return await parseStatement(req, res);
     case 'aiAdvisor': return await aiAdvisor(req, res);
 

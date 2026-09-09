@@ -8,13 +8,9 @@ export default async function handler(req, res) {
     const authHeader = req.headers?.authorization || '';
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-    const { data, error } = token
-      ? await supabase.auth.getUser(token)
-      : await supabase.auth.getUser();
-
-    const user = data?.user;
+    const user = req.user || (token ? (await supabase.auth.getUser(token)).data?.user : null);
     
-    if (error || !user) {
+    if (!user) {
       return res.status(200).json({ success: false, email: 'Usuario no disponible' });
     }
     

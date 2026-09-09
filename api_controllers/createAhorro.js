@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -7,9 +8,17 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const ahorroData = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     const { idCuenta, fecha, tipo_transfer, moneda, idSubcuenta, descripcion } = ahorroData;
     const importe = Number(ahorroData.importe);
     
+    if (idCuenta) {
+      const isOwner = await verifyCuentaOwnership(supabase, idCuenta, userId);
+      if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+    }
+
     const ID_CATEGORIA_AHORRO = 'CAT_AHORRO';
     let importePrincipal = importe;
     let desc_principal = `${tipo_transfer} de Ahorro (${moneda}) - ${descripcion || ''}`;
@@ -30,6 +39,7 @@ export default async function handler(req, res) {
     const movResult = await supabase.from('movimientos').insert({
       id_movimiento: idMovimiento,
       id_cuenta_principal: idCuenta,
+      user_id: userId,
       fecha: fecha,
       id_categoria: ID_CATEGORIA_AHORRO,
       tipo_mov: tipo_mov_principal,
@@ -43,6 +53,7 @@ export default async function handler(req, res) {
     // Insert into ahorros
     const ahResult = await supabase.from('ahorros').insert({
       id_ahorro: idAhorro,
+      user_id: userId,
       id_movimiento_origen: idMovimiento,
       fecha: fecha,
       tipo_transfer: tipo_transfer,

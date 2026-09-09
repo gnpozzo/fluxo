@@ -18,15 +18,19 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const request = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     const { original, data, scope } = request;
     
-    // 1. DELETE
+    // 1. DELETE (scoped to user_id)
     if (scope === 'SINGLE') {
-      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', original.consumoId);
+      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', original.consumoId).eq('user_id', userId);
       if (error) throw error;
     } else if (scope === 'SERIES') {
       const { error } = await supabase.from('cc_consumos').delete()
         .eq('recur_group_id', original.recurGroupId)
+        .eq('user_id', userId)
         .gte('fecha', original.fecha);
       if (error) throw error;
     }
@@ -35,6 +39,11 @@ export default async function handler(req, res) {
     if (scope === 'SINGLE') data.tipo = 'SIMPLE';
     
     const consumo = data;
+    if (consumo?.idCuenta) {
+      const isOwner = await verifyCuentaOwnership(supabase, consumo.idCuenta, userId);
+      if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+    }
+
     const tipo = consumo.tipo || (consumo.tipoConsumo === 'COMUN' ? 'SIMPLE' : (consumo.tipoConsumo || 'SIMPLE'));
     const porcentajeImputado = (consumo.porcentajeImputado !== undefined && consumo.porcentajeImputado !== null)
       ? consumo.porcentajeImputado
@@ -49,6 +58,7 @@ export default async function handler(req, res) {
       ccItems.push({
         id_cc_consumo: crypto.randomUUID(),
         id_cuenta_principal: consumo.idCuenta,
+        user_id: userId,
         id_categoria: consumo.idCategoria,
         id_usuario: consumo.idUsuario || null,
         fecha: fechaISO,
@@ -64,6 +74,7 @@ export default async function handler(req, res) {
         ccItems.push({
           id_cc_consumo: crypto.randomUUID(),
           id_cuenta_principal: consumo.idCuenta,
+          user_id: userId,
           id_categoria: consumo.idCategoria,
           id_usuario: consumo.idUsuario || null,
           fecha: fechaISO,
@@ -82,6 +93,7 @@ export default async function handler(req, res) {
         ccItems.push({
           id_cc_consumo: crypto.randomUUID(),
           id_cuenta_principal: consumo.idCuenta,
+          user_id: userId,
           id_categoria: consumo.idCategoria,
           id_usuario: consumo.idUsuario || null,
           fecha: fechaISO,

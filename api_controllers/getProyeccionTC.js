@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -20,6 +21,16 @@ export default async function handler(req, res) {
 
     if (!cuenta || !mesYYYYMM) {
       return res.status(400).json({ success: false, error: 'Faltan parámetros idCuenta o mes (YYYY-MM)' });
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'No autenticado' });
+    }
+
+    const isOwner = await verifyCuentaOwnership(supabase, cuenta, userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
 
     const start = new Date(mesYYYYMM + '-01T12:00:00Z');
@@ -45,7 +56,8 @@ export default async function handler(req, res) {
       const { data: tarjetas, error: tErr } = await supabase
         .from('tarjetas')
         .select('id_tarjeta')
-        .eq('id_cuenta_principal', cuenta);
+        .eq('id_cuenta_principal', cuenta)
+        .eq('user_id', userId);
 
       if (tErr) throw tErr;
 
@@ -55,6 +67,7 @@ export default async function handler(req, res) {
           .from('consumos_tc')
           .select('fecha, importe')
           .in('id_tarjeta', tarjetaIds)
+          .eq('user_id', userId)
           .gte('fecha', fechaInicio)
           .lte('fecha', fechaFin);
 

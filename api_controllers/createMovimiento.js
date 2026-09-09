@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 function addMonthsSafe(date, months) {
@@ -22,18 +23,34 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const mov = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
+    // Validate account ownership
+    const isOwner = await verifyCuentaOwnership(supabase, mov.idCuenta, userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada no pertenece al usuario autenticado.' });
+    }
+
     const rows = [];
     const fechaBase = new Date(mov.fecha + 'T12:00:00Z');
 
     let pctRetenido = 100;
     const destinos = [];
     if (mov.esSplit && Array.isArray(mov.splitDestinos)) {
-      mov.splitDestinos.forEach(d => {
+      for (const d of mov.splitDestinos) {
         const pct = parseFloat(d.pct);
         if (isNaN(pct) || pct <= 0) throw new Error('Porcentaje de distribución inválido.');
+        
+        // Verify ownership of destination account
+        const destOwner = await verifyCuentaOwnership(supabase, d.cuenta, userId);
+        if (!destOwner) {
+          return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta de destino no pertenece al usuario autenticado.' });
+        }
+
         pctRetenido -= pct;
         destinos.push({ cuenta: d.cuenta, pct: pct / 100 });
-      });
+      }
       if (pctRetenido < 0) throw new Error('La suma de porcentajes de distribución supera el 100%.');
     }
 
@@ -76,6 +93,7 @@ export default async function handler(req, res) {
           rows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: d.cuenta,
+            user_id: userId,
             fecha: fechaISO,
             id_categoria: mov.idCategoria,
             tipo_mov: mov.tipo,
@@ -93,6 +111,7 @@ export default async function handler(req, res) {
         rows.push({
           id_movimiento: crypto.randomUUID(),
           id_cuenta_principal: mov.idCuenta,
+          user_id: userId,
           fecha: fechaISO,
           id_categoria: mov.idCategoria,
           tipo_mov: mov.tipo,
@@ -108,6 +127,7 @@ export default async function handler(req, res) {
         const row = {
           id_movimiento: crypto.randomUUID(),
           id_cuenta_principal: mov.idCuenta,
+          user_id: userId,
           fecha: fechaISO,
           id_categoria: mov.idCategoria,
           tipo_mov: mov.tipo,

@@ -38,17 +38,20 @@ export default async function handler(req, res) {
 
     try {
       const supabase = getSupabaseClient(req);
-      if (cuentaId && mes) {
+      const userId = req.user?.id;
+
+      if (userId && cuentaId && mes) {
         const start = mes + '-01';
         const [y, m] = mes.split('-').map(Number);
         const lastDay = new Date(y, m, 0).getDate();
         const end = `${mes}-${String(lastDay).padStart(2, '0')}`;
 
-        // Movimientos del mes con categorías
+        // Movimientos del mes con categorías scoped to user_id
         const { data: movs } = await supabase
           .from('movimientos')
           .select('*, categorias (nombre)')
           .eq('id_cuenta_principal', cuentaId)
+          .eq('user_id', userId)
           .gte('fecha', start)
           .lte('fecha', end);
 
@@ -73,10 +76,11 @@ export default async function handler(req, res) {
           });
         }
 
-        // Deuda de tarjetas
+        // Deuda de tarjetas scoped to user_id
         const { data: tcConsumos } = await supabase
           .from('consumos_tc')
           .select('importe, cuota_actual, cuota_total, descripcion, id_tarjeta')
+          .eq('user_id', userId)
           .gte('fecha', start)
           .lte('fecha', end);
 
@@ -84,10 +88,11 @@ export default async function handler(req, res) {
           financialContext.deudaTarjetasTotal = tcConsumos.reduce((acc, c) => acc + Number(c.importe || 0), 0);
         }
 
-        // Ahorros
+        // Ahorros scoped to user_id
         const { data: ahorros } = await supabase
-          .from('ahorros_movimientos')
-          .select('moneda, importe');
+          .from('ahorros')
+          .select('moneda, importe')
+          .eq('user_id', userId);
 
         if (ahorros) {
           ahorros.forEach(a => {
@@ -96,10 +101,11 @@ export default async function handler(req, res) {
           });
         }
 
-        // Inversiones
+        // Inversiones scoped to user_id
         const { data: invs } = await supabase
           .from('inversiones_movimientos')
-          .select('ticker, tipo_operacion, cantidad_nominales, precio_compra, moneda');
+          .select('ticker, tipo_operacion, cantidad_nominales, precio_compra, moneda')
+          .eq('user_id', userId);
 
         if (invs) {
           financialContext.carteraInversiones = invs;

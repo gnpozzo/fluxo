@@ -3,10 +3,21 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const { data: categorias, error: errCat } = await supabase.from('categorias').select('*').order('tipo_mov', { ascending: true }).order('nombre', { ascending: true });
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
+    const { data: categorias, error: errCat } = await supabase
+      .from('categorias')
+      .select('*')
+      .or(`user_id.is.null,user_id.eq.${userId}`)
+      .order('tipo_mov', { ascending: true })
+      .order('nombre', { ascending: true });
     if (errCat) throw errCat;
     
-    const { data: cuentas, error: errC } = await supabase.from('cuentas_principales').select('id_cuenta_principal,nombre');
+    const { data: cuentas, error: errC } = await supabase
+      .from('cuentas_principales')
+      .select('id_cuenta_principal,nombre')
+      .eq('user_id', userId);
     if (errC) throw errC;
     
     const cuentaMap = {};

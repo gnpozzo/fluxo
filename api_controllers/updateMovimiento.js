@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 function addMonthsSafe(date, months) {
@@ -17,8 +18,18 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const request = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     const { original, data, scope } = request;
     const mov = data;
+
+    if (mov?.idCuenta) {
+      const isOwner = await verifyCuentaOwnership(supabase, mov.idCuenta, userId);
+      if (!isOwner) {
+        return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada no pertenece al usuario autenticado.' });
+      }
+    }
 
     const isOriginalRecurrente = !!original.recurGroupId;
     const isOriginalSplit = !!original.splitGroupId;
@@ -26,13 +37,13 @@ export default async function handler(req, res) {
     const isComplexityChanging = isMovRecurrente !== isOriginalRecurrente || mov.esSplit !== isOriginalSplit;
 
     if (scope !== 'SINGLE' || isComplexityChanging) {
-      // 1. DELETE
+      // 1. DELETE (scoped to user_id)
       if (scope === 'SINGLE') {
-        await supabase.from('movimientos').delete().eq('id_movimiento', original.movimientoId);
+        await supabase.from('movimientos').delete().eq('id_movimiento', original.movimientoId).eq('user_id', userId);
       } else if (scope === 'GROUP') {
-        await supabase.from('movimientos').delete().eq('split_group_id', original.splitGroupId);
+        await supabase.from('movimientos').delete().eq('split_group_id', original.splitGroupId).eq('user_id', userId);
       } else if (scope === 'SERIES') {
-        await supabase.from('movimientos').delete().eq('recur_group_id', original.recurGroupId).gte('fecha', original.fecha);
+        await supabase.from('movimientos').delete().eq('recur_group_id', original.recurGroupId).gte('fecha', original.fecha).eq('user_id', userId);
       }
 
       if (scope === 'SINGLE' && (isOriginalRecurrente || isOriginalSplit)) {
@@ -81,6 +92,7 @@ export default async function handler(req, res) {
             rows.push({
               id_movimiento: crypto.randomUUID(),
               id_cuenta_principal: d.cuenta,
+              user_id: userId,
               fecha: fechaISO,
               id_categoria: mov.idCategoria,
               tipo_mov: mov.tipo,
@@ -95,6 +107,7 @@ export default async function handler(req, res) {
           rows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: mov.idCuenta,
+            user_id: userId,
             fecha: fechaISO,
             id_categoria: mov.idCategoria,
             tipo_mov: mov.tipo,
@@ -109,6 +122,7 @@ export default async function handler(req, res) {
           rows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: mov.idCuenta,
+            user_id: userId,
             fecha: fechaISO,
             id_categoria: mov.idCategoria,
             tipo_mov: mov.tipo,
@@ -126,14 +140,14 @@ export default async function handler(req, res) {
       }
 
     } else {
-      // UPDATE SIMPLE
+      // UPDATE SIMPLE (scoped to user_id)
       const { error } = await supabase.from('movimientos').update({
         fecha: mov.fecha,
         id_categoria: mov.idCategoria,
         descripcion: mov.descripcion,
         importe: mov.importe,
         medio_pago: mov.medioPago
-      }).eq('id_movimiento', original.movimientoId);
+      }).eq('id_movimiento', original.movimientoId).eq('user_id', userId);
       if (error) throw error;
     }
 

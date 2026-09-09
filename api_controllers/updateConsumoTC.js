@@ -17,21 +17,25 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const request = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     const { original, data, scope } = request;
     
-    // 1. Delete original
+    // 1. Delete original (scoped to user_id)
     if (scope === 'SINGLE') {
-      await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', original.consumoId);
-      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', original.consumoId);
+      await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', original.consumoId).eq('user_id', userId);
+      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', original.consumoId).eq('user_id', userId);
     } else if (scope === 'SERIES') {
       const { data: tcs } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
         .eq('recur_group_id', original.recurGroupId)
+        .eq('user_id', userId)
         .gte('fecha', original.fecha);
         
       if (tcs && tcs.length > 0) {
         const ids = tcs.map(r => r.id_consumo_tarjeta);
-        await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids);
-        await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids);
+        await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids).eq('user_id', userId);
+        await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids).eq('user_id', userId);
       }
     }
     
@@ -50,6 +54,7 @@ export default async function handler(req, res) {
         id_consumo_tarjeta: idConsumo,
         id_tarjeta: consumo.idTarjeta,
         id_categoria: consumo.idCategoria,
+        user_id: userId,
         fecha: fechaISO,
         descripcion: consumo.descripcion,
         importe: consumo.importe
@@ -58,6 +63,7 @@ export default async function handler(req, res) {
         movRows.push({
           id_movimiento: crypto.randomUUID(),
           id_cuenta_principal: consumo.idCuentaImputar,
+          user_id: userId,
           fecha: fechaISO,
           id_categoria: consumo.idCategoria,
           tipo_mov: 'EGRESO',
@@ -78,6 +84,7 @@ export default async function handler(req, res) {
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
           id_categoria: consumo.idCategoria,
+          user_id: userId,
           fecha: fechaISO,
           descripcion: consumo.descripcion,
           importe: consumo.importe,
@@ -90,6 +97,7 @@ export default async function handler(req, res) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: consumo.idCuentaImputar,
+            user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
             tipo_mov: 'EGRESO',
@@ -110,6 +118,7 @@ export default async function handler(req, res) {
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
           id_categoria: consumo.idCategoria,
+          user_id: userId,
           fecha: fechaISO,
           descripcion: consumo.descripcion,
           importe: consumo.importe,
@@ -119,6 +128,7 @@ export default async function handler(req, res) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: consumo.idCuentaImputar,
+            user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
             tipo_mov: 'EGRESO',

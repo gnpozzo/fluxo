@@ -18,21 +18,25 @@ export default async function handler(req, res) {
       }
     }
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     if (request.scope === 'SINGLE') {
       if (!request.consumoId) throw new Error('consumoId requerido');
-      await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', request.consumoId);
-      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', request.consumoId);
+      await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', request.consumoId).eq('user_id', userId);
+      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', request.consumoId).eq('user_id', userId);
     } else if (request.scope === 'SERIES') {
       if (!request.recurGroupId || !request.fecha) throw new Error('Faltan recurGroupId o fecha');
       
       const { data: tcs } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
         .eq('recur_group_id', request.recurGroupId)
+        .eq('user_id', userId)
         .gte('fecha', request.fecha);
         
       if (tcs && tcs.length > 0) {
         const ids = tcs.map(r => r.id_consumo_tarjeta);
-        await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids);
-        await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids);
+        await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids).eq('user_id', userId);
+        await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids).eq('user_id', userId);
       }
     } else {
       throw new Error('Scope inválido');

@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 function addMonthsSafe(date, months) {
@@ -17,6 +18,21 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const consumo = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
+    // Validate tarjeta ownership
+    if (consumo.idTarjeta) {
+      const { data: tc } = await supabase.from('tarjetas').select('id_tarjeta').eq('id_tarjeta', consumo.idTarjeta).eq('user_id', userId).maybeSingle();
+      if (!tc) return res.status(403).json({ success: false, error: 'Acceso denegado: La tarjeta no pertenece al usuario autenticado.' });
+    }
+
+    // Validate account if imputed
+    if (consumo.imputar && consumo.idCuentaImputar) {
+      const isOwner = await verifyCuentaOwnership(supabase, consumo.idCuentaImputar, userId);
+      if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada para imputar no pertenece al usuario autenticado.' });
+    }
+
     const tcRows = [];
     const movRows = [];
     const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
@@ -29,6 +45,7 @@ export default async function handler(req, res) {
         id_consumo_tarjeta: idConsumo,
         id_tarjeta: consumo.idTarjeta,
         id_categoria: consumo.idCategoria,
+        user_id: userId,
         fecha: fechaISO,
         descripcion: consumo.descripcion,
         importe: consumo.importe
@@ -38,6 +55,7 @@ export default async function handler(req, res) {
         movRows.push({
           id_movimiento: crypto.randomUUID(),
           id_cuenta_principal: consumo.idCuentaImputar,
+          user_id: userId,
           fecha: fechaISO,
           id_categoria: consumo.idCategoria,
           tipo_mov: 'EGRESO',
@@ -61,6 +79,7 @@ export default async function handler(req, res) {
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
           id_categoria: consumo.idCategoria,
+          user_id: userId,
           fecha: fechaISO,
           descripcion: consumo.descripcion,
           importe: consumo.importe,
@@ -74,6 +93,7 @@ export default async function handler(req, res) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: consumo.idCuentaImputar,
+            user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
             tipo_mov: 'EGRESO',
@@ -97,6 +117,7 @@ export default async function handler(req, res) {
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
           id_categoria: consumo.idCategoria,
+          user_id: userId,
           fecha: fechaISO,
           descripcion: consumo.descripcion,
           importe: consumo.importe,
@@ -107,6 +128,7 @@ export default async function handler(req, res) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: consumo.idCuentaImputar,
+            user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
             tipo_mov: 'EGRESO',

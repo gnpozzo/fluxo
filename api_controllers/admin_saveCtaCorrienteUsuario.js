@@ -8,16 +8,21 @@ export default async function handler(req, res) {
     // AppAPI.js wrappea los argumentos en { args: [...] } si se usa call()
     const payload = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     let isNew = false;
     if (!payload.id_usuario) {
       isNew = true;
       payload.id_usuario = crypto.randomUUID();
     }
+    payload.user_id = userId;
     
     if (payload.es_yo === true || payload.es_yo === 'true') {
       const { error: resetError } = await supabase
         .from('cta_corriente_usuarios')
         .update({ es_yo: false })
+        .eq('user_id', userId)
         .neq('id_usuario', payload.id_usuario);
       if (resetError && (!resetError.message || (!resetError.message.includes('es_yo') && !resetError.message.includes('does not exist')))) {
         throw resetError;

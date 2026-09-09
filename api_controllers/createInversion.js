@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -7,7 +8,16 @@ export default async function handler(req, res) {
     const supabase = getSupabaseClient(req);
     const operacionData = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     const { idCuenta, tipoOp, fecha, moneda } = operacionData;
+
+    if (idCuenta) {
+      const isOwner = await verifyCuentaOwnership(supabase, idCuenta, userId);
+      if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+    }
+
     const ticker = operacionData.ticker.toUpperCase().trim();
     const cantidad = Number(operacionData.cantidad);
     const precio = Number(operacionData.precio);
@@ -29,6 +39,7 @@ export default async function handler(req, res) {
     const movResult = await supabase.from('movimientos').insert({
       id_movimiento: idMovimiento,
       id_cuenta_principal: idCuenta,
+      user_id: userId,
       fecha: fecha,
       id_categoria: ID_CATEGORIA_INVERSION,
       tipo_mov: tipo_mov_principal,
@@ -43,6 +54,8 @@ export default async function handler(req, res) {
     const invResult = await supabase.from('inversiones_movimientos').insert({
       id_inversion_mov: idInversion,
       id_movimiento_origen: idMovimiento,
+      id_cuenta_principal: idCuenta,
+      user_id: userId,
       ticker: ticker,
       fecha: fecha,
       tipo_operacion: tipoOp,

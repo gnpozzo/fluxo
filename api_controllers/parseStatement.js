@@ -177,29 +177,30 @@ export default async function handler(req, res) {
     const body = Array.isArray(req.body) ? req.body[0] : req.body;
     const { fileBase64, mimeType } = body || {};
 
-    if (!fileBase64 || !mimeType) {
-      return res.status(400).json({ success: false, error: 'Missing fileBase64 or mimeType in request body.' });
-    }
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    // 1. Fetch active cards
+    // 1. Fetch active cards for this user
     const { data: tarjetas, error: tErr } = await supabase
       .from('tarjetas')
       .select('*')
+      .eq('user_id', userId)
       .eq('activa', true);
     if (tErr) throw tErr;
 
     if (!tarjetas || tarjetas.length === 0) {
-      return res.status(400).json({ success: false, error: 'No active cards registered in database.' });
+      return res.status(400).json({ success: false, error: 'No tienes tarjetas activas registradas para conciliar.' });
     }
 
     // 2. Fetch active outflow categories
     const { data: categorias, error: cErr } = await supabase
       .from('categorias')
       .select('*')
+      .or(`user_id.is.null,user_id.eq.${userId}`)
       .eq('activa', true);
     if (cErr) throw cErr;
 
-    // 3. Fetch recent consumptions (last 6 months) to compare
+    // 3. Fetch recent consumptions (last 6 months) to compare scoped to user_id
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0];
@@ -207,6 +208,7 @@ export default async function handler(req, res) {
     const { data: dbConsumos, error: dbConsErr } = await supabase
       .from('consumos_tc')
       .select('id_consumo_tarjeta, id_tarjeta, id_categoria, fecha, descripcion, importe, cuota_actual, cuota_total, recur_group_id')
+      .eq('user_id', userId)
       .gte('fecha', sixMonthsAgoStr);
     if (dbConsErr) throw dbConsErr;
 

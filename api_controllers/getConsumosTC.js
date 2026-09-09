@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -17,6 +18,14 @@ export default async function handler(req, res) {
     
     if (!cuenta) throw new Error("Falta id de cuenta");
 
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
+    const isOwner = await verifyCuentaOwnership(supabase, cuenta, userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+    }
+
     let consumos = [];
     let error = null;
 
@@ -34,7 +43,8 @@ export default async function handler(req, res) {
       const { data: tarjetas } = await supabase
         .from('tarjetas')
         .select('id_tarjeta, nombre')
-        .eq('id_cuenta_principal', cuenta);
+        .eq('id_cuenta_principal', cuenta)
+        .eq('user_id', userId);
         
       if (tarjetas && tarjetas.length > 0) {
         const tarjetaMap = {};
@@ -52,7 +62,8 @@ export default async function handler(req, res) {
        const { data: tarjetas, error: tErr1 } = await supabase
          .from('tarjetas')
          .select('id_tarjeta, nombre')
-         .eq('id_cuenta_principal', cuenta);
+         .eq('id_cuenta_principal', cuenta)
+         .eq('user_id', userId);
        if (tErr1) throw tErr1;
        
        const tarjetaMap = {};
@@ -62,7 +73,7 @@ export default async function handler(req, res) {
        });
        
        if (tarjetaIds.length > 0) {
-         let query = supabase.from('consumos_tc').select('*, categorias (nombre)').in('id_tarjeta', tarjetaIds);
+         let query = supabase.from('consumos_tc').select('*, categorias (nombre)').in('id_tarjeta', tarjetaIds).eq('user_id', userId);
          if (fechaInicio) query = query.gte('fecha', fechaInicio);
          if (fechaFin) query = query.lte('fecha', fechaFin);
          const { data, error: tErr2 } = await query;
@@ -84,7 +95,8 @@ export default async function handler(req, res) {
       const { data: movsRes, error: movsErr } = await supabase
         .from('movimientos')
         .select('id_consumo_tarjeta_origen, id_cuenta_principal')
-        .in('id_consumo_tarjeta_origen', consumoIds);
+        .in('id_consumo_tarjeta_origen', consumoIds)
+        .eq('user_id', userId);
       if (!movsErr) {
         movimientos = movsRes || [];
       }

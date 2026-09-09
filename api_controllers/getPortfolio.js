@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -21,6 +22,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Falta parámetro idCuenta' });
     }
 
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'No autenticado' });
+    }
+
+    const isOwner = await verifyCuentaOwnership(supabase, idCuenta, userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+    }
+
     let movimientos = [];
 
     // 1. Consultar RPC o tabla
@@ -31,6 +42,8 @@ export default async function handler(req, res) {
       const { data, error } = await supabase
         .from('inversiones_movimientos')
         .select('*')
+        .eq('id_cuenta_principal', idCuenta)
+        .eq('user_id', userId)
         .order('fecha', { ascending: false });
 
       if (error) {

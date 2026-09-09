@@ -3,11 +3,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    // join with cuentas_principales
-    const { data: tarjetas, error: errT } = await supabase.from('tarjetas').select('*').order('nombre', { ascending: true });
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
+    // join with cuentas_principales scoped to user_id
+    const { data: tarjetas, error: errT } = await supabase.from('tarjetas').select('*').eq('user_id', userId).order('nombre', { ascending: true });
     if (errT) throw errT;
     
-    const { data: cuentas, error: errC } = await supabase.from('cuentas_principales').select('id_cuenta_principal,nombre');
+    const { data: cuentas, error: errC } = await supabase.from('cuentas_principales').select('id_cuenta_principal,nombre').eq('user_id', userId);
     if (errC) throw errC;
     
     const cuentaMap = {};

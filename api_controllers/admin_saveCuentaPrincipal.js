@@ -14,9 +14,13 @@ export default async function handler(req, res) {
       payload.id_cuenta_principal = crypto.randomUUID();
     }
 
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     // Filtrar solo las columnas existentes en la tabla cuentas_principales
     const cleanPayload = {
       id_cuenta_principal: payload.id_cuenta_principal,
+      user_id: userId,
       nombre: payload.nombre,
       moneda_principal: payload.moneda_principal || 'ARS',
       activa: payload.activa !== undefined ? payload.activa : true,

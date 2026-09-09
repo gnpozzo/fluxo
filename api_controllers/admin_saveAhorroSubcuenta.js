@@ -8,12 +8,16 @@ export default async function handler(req, res) {
     // AppAPI.js wrappea los argumentos en { args: [...] } si se usa call()
     const payload = Array.isArray(req.body) ? req.body[0] : req.body;
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     let isNew = false;
     if (!payload.id_subcuenta) {
       isNew = true;
       payload.id_subcuenta = crypto.randomUUID();
     }
-    
+    payload.user_id = userId;
+
     const { data, error } = await supabase.from('ahorro_subcuentas').upsert(payload).select().single();
     if (error) throw error;
     

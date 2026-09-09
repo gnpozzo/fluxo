@@ -18,14 +18,18 @@ export default async function handler(req, res) {
       }
     }
     
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
+
     if (request.scope === 'SINGLE') {
       if (!request.consumoId) throw new Error('consumoId requerido');
-      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', request.consumoId);
+      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', request.consumoId).eq('user_id', userId);
       if (error) throw error;
     } else if (request.scope === 'SERIES') {
       if (!request.recurGroupId || !request.fecha) throw new Error('Faltan recurGroupId o fecha');
       const { error } = await supabase.from('cc_consumos').delete()
         .eq('recur_group_id', request.recurGroupId)
+        .eq('user_id', userId)
         .gte('fecha', request.fecha);
       if (error) throw error;
     } else {

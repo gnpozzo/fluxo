@@ -27,3 +27,6 @@ Thumbs.db
 
 .vercel
 .env*
+*.pdf
+*.xlsx
+*.csv
