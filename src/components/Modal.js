@@ -175,9 +175,19 @@ export class Modal {
     this.#overlay.querySelector('.modal-cancel').addEventListener('click', () => this.#handleCancel());
     this.#overlay.querySelector('.modal-confirm').addEventListener('click',() => this.#handleConfirm());
 
-    // Click fuera cierra
-    this.#overlay.addEventListener('click', (e) => {
-      if (e.target === this.#overlay) this.#handleCancel();
+    // Click fuera cierra solo si tanto mousedown como mouseup ocurrieron en el overlay.
+    // Esto evita que el modal se cierre accidentalmente al arrastrar el mouse para seleccionar texto dentro de un input o campo.
+    let isMouseDownOnOverlay = false;
+
+    this.#overlay.addEventListener('mousedown', (e) => {
+      isMouseDownOnOverlay = (e.target === this.#overlay);
+    });
+
+    this.#overlay.addEventListener('mouseup', (e) => {
+      if (isMouseDownOnOverlay && e.target === this.#overlay) {
+        this.#handleCancel();
+      }
+      isMouseDownOnOverlay = false;
     });
 
     // ESC cierra
