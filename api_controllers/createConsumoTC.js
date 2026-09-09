@@ -32,11 +32,27 @@ export default async function handler(req, res) {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    // Validate tarjeta ownership
+    // Validate tarjeta ownership & resolve account linked to the card
+    let cardAccountId = null;
+    let cardVto = null;
     if (consumo.idTarjeta) {
-      const { data: tc } = await supabase.from('tarjetas').select('id_tarjeta').eq('id_tarjeta', consumo.idTarjeta).eq('user_id', userId).maybeSingle();
+      const { data: tc } = await supabase.from('tarjetas')
+        .select('id_tarjeta, id_cuenta_principal, fecha_vencimiento_actual')
+        .eq('id_tarjeta', consumo.idTarjeta)
+        .eq('user_id', userId)
+        .maybeSingle();
       if (!tc) return res.status(403).json({ success: false, error: 'Acceso denegado: La tarjeta no pertenece al usuario autenticado.' });
+      cardAccountId = tc.id_cuenta_principal;
+      cardVto = tc.fecha_vencimiento_actual;
     }
+
+    // Mapping of account names to format compensation movements cleanly
+    const { data: allUserCuentas } = await supabase
+      .from('cuentas_principales')
+      .select('id_cuenta_principal, nombre')
+      .eq('user_id', userId);
+    const cuentaNombreMap = {};
+    (allUserCuentas || []).forEach(c => { cuentaNombreMap[c.id_cuenta_principal] = c.nombre; });
 
     // Validate account if imputed
     if (consumo.imputar && consumo.idCuentaImputar) {
@@ -140,6 +156,7 @@ export default async function handler(req, res) {
         });
 
         if (consumo.imputar && rowAccountId) {
+          // 1. Egreso en la cuenta imputada (ej: Hogar)
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: rowAccountId,
@@ -154,6 +171,27 @@ export default async function handler(req, res) {
             id_consumo_tarjeta_origen: idConsumo,
             recur_group_id: recurGroupId
           });
+
+          // 2. Si es una imputación externa (la tarjeta pertenece a otra cuenta, ej: Personal):
+          // Se genera un INGRESO por reintegro en la cuenta de la tarjeta al vencimiento del resumen.
+          if (cardAccountId && rowAccountId !== cardAccountId) {
+            const fechaReintegro = stVto || cardVto || fechaISO;
+            const targetAccName = cuentaNombreMap[rowAccountId] || 'Externa';
+            movRows.push({
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: cardAccountId,
+              user_id: userId,
+              fecha: fechaReintegro,
+              id_categoria: 'CAT_REINTEGRO_TC',
+              tipo_mov: 'INGRESO',
+              descripcion: `Reintegro TC: ${item.descripcion}${cuotaTot > 1 ? ` (${cuotaAct}/${cuotaTot})` : ''} (${targetAccName})`,
+              importe: Number(item.importe || 0),
+              moneda: monedaItem,
+              medio_pago: 'Tarjeta de Crédito',
+              id_consumo_tarjeta_origen: idConsumo,
+              recur_group_id: recurGroupId
+            });
+          }
         }
 
         // Base para proyecciones futuras (vencimiento del resumen o fecha de compra)
@@ -197,6 +235,24 @@ export default async function handler(req, res) {
                 id_consumo_tarjeta_origen: idFuturo,
                 recur_group_id: recurGroupId
               });
+
+              if (cardAccountId && rowAccountId !== cardAccountId) {
+                const targetAccName = cuentaNombreMap[rowAccountId] || 'Externa';
+                movRows.push({
+                  id_movimiento: crypto.randomUUID(),
+                  id_cuenta_principal: cardAccountId,
+                  user_id: userId,
+                  fecha: fechaFutura,
+                  id_categoria: 'CAT_REINTEGRO_TC',
+                  tipo_mov: 'INGRESO',
+                  descripcion: `Reintegro TC: ${item.descripcion} (${cuotaFutura}/${cuotaTot}) (${targetAccName})`,
+                  importe: Number(item.importe || 0),
+                  moneda: monedaItem,
+                  medio_pago: 'Tarjeta de Crédito',
+                  id_consumo_tarjeta_origen: idFuturo,
+                  recur_group_id: recurGroupId
+                });
+              }
             }
           }
         }
@@ -237,6 +293,24 @@ export default async function handler(req, res) {
                 id_consumo_tarjeta_origen: idFuturo,
                 recur_group_id: recurGroupId
               });
+
+              if (cardAccountId && rowAccountId !== cardAccountId) {
+                const targetAccName = cuentaNombreMap[rowAccountId] || 'Externa';
+                movRows.push({
+                  id_movimiento: crypto.randomUUID(),
+                  id_cuenta_principal: cardAccountId,
+                  user_id: userId,
+                  fecha: fechaFutura,
+                  id_categoria: 'CAT_REINTEGRO_TC',
+                  tipo_mov: 'INGRESO',
+                  descripcion: `Reintegro TC: ${item.descripcion} (${targetAccName})`,
+                  importe: Number(item.importe || 0),
+                  moneda: monedaItem,
+                  medio_pago: 'Tarjeta de Crédito',
+                  id_consumo_tarjeta_origen: idFuturo,
+                  recur_group_id: recurGroupId
+                });
+              }
             }
           }
         }
@@ -333,6 +407,24 @@ export default async function handler(req, res) {
             medio_pago: 'Tarjeta de Crédito',
             id_consumo_tarjeta_origen: idConsumo
           });
+
+          if (cardAccountId && consumo.idCuentaImputar !== cardAccountId) {
+            const fechaReintegro = cardVto || fechaISO;
+            const targetAccName = cuentaNombreMap[consumo.idCuentaImputar] || 'Externa';
+            movRows.push({
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: cardAccountId,
+              user_id: userId,
+              fecha: fechaReintegro,
+              id_categoria: 'CAT_REINTEGRO_TC',
+              tipo_mov: 'INGRESO',
+              descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
+              importe: consumo.importe,
+              moneda: moneda,
+              medio_pago: 'Tarjeta de Crédito',
+              id_consumo_tarjeta_origen: idConsumo
+            });
+          }
         }
       } else if (consumo.tipoConsumo === 'CUOTAS') {
         const installmentGroupId = 'INSTL_' + crypto.randomUUID();
@@ -373,6 +465,24 @@ export default async function handler(req, res) {
             recur_group_id: installmentGroupId,
             id_consumo_tarjeta_origen: idConsumo
           });
+
+          if (cardAccountId && consumo.idCuentaImputar !== cardAccountId) {
+            const targetAccName = cuentaNombreMap[consumo.idCuentaImputar] || 'Externa';
+            movRows.push({
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: cardAccountId,
+              user_id: userId,
+              fecha: fechaISO,
+              id_categoria: 'CAT_REINTEGRO_TC',
+              tipo_mov: 'INGRESO',
+              descripcion: `Reintegro TC: ${consumo.descripcion} (${cuotaNumActual}/${consumo.cuotaTotal}) (${targetAccName})`,
+              importe: consumo.importe,
+              moneda: moneda,
+              medio_pago: 'Tarjeta de Crédito',
+              recur_group_id: installmentGroupId,
+              id_consumo_tarjeta_origen: idConsumo
+            });
+          }
         }
       }
 
@@ -410,6 +520,24 @@ export default async function handler(req, res) {
             recur_group_id: recurGroupId,
             id_consumo_tarjeta_origen: idConsumo
           });
+
+          if (cardAccountId && consumo.idCuentaImputar !== cardAccountId) {
+            const targetAccName = cuentaNombreMap[consumo.idCuentaImputar] || 'Externa';
+            movRows.push({
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: cardAccountId,
+              user_id: userId,
+              fecha: fechaISO,
+              id_categoria: 'CAT_REINTEGRO_TC',
+              tipo_mov: 'INGRESO',
+              descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
+              importe: consumo.importe,
+              moneda: moneda,
+              medio_pago: 'Tarjeta de Crédito',
+              recur_group_id: recurGroupId,
+              id_consumo_tarjeta_origen: idConsumo
+            });
+          }
         }
       }
     }

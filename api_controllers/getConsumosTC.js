@@ -118,7 +118,7 @@ export default async function handler(req, res) {
     if (consumoIds.length > 0) {
       const { data: movsRes, error: movsErr } = await supabase
         .from('movimientos')
-        .select('id_consumo_tarjeta_origen, id_cuenta_principal')
+        .select('id_consumo_tarjeta_origen, id_cuenta_principal, tipo_mov')
         .in('id_consumo_tarjeta_origen', consumoIds)
         .eq('user_id', userId);
       if (!movsErr) {
@@ -126,10 +126,20 @@ export default async function handler(req, res) {
       }
     }
 
+    const { data: allUserCuentas } = await supabase
+      .from('cuentas_principales')
+      .select('id_cuenta_principal, nombre, icono')
+      .eq('user_id', userId);
+    const cuentaMap = {};
+    (allUserCuentas || []).forEach(acc => { cuentaMap[acc.id_cuenta_principal] = acc; });
+
+    // Prioritize EGRESO movement to determine the account to which the consumption was charged
     const mapMovs = {};
     movimientos.forEach(m => {
       if (m.id_consumo_tarjeta_origen) {
-        mapMovs[m.id_consumo_tarjeta_origen] = m;
+        if (!mapMovs[m.id_consumo_tarjeta_origen] || m.tipo_mov === 'EGRESO') {
+          mapMovs[m.id_consumo_tarjeta_origen] = m;
+        }
       }
     });
 
@@ -137,14 +147,22 @@ export default async function handler(req, res) {
       const mov = mapMovs[c.id_consumo_tarjeta];
       if (mov) {
         c.imputado = true;
-        if (mov.id_cuenta_principal === cuenta) {
-          c.cuenta_imputada_nombre = 'Propios';
+        c.id_cuenta_imputada = mov.id_cuenta_principal;
+        c.es_incidencia_externa = (mov.id_cuenta_principal !== cuenta);
+        const accInfo = cuentaMap[mov.id_cuenta_principal];
+        if (c.es_incidencia_externa) {
+          c.cuenta_imputada_nombre = accInfo?.nombre || 'Externa';
+          c.cuenta_imputada_icono = accInfo?.icono || 'home';
         } else {
-          c.cuenta_imputada_nombre = 'Familiar / Otros';
+          c.cuenta_imputada_nombre = 'Propios';
+          c.cuenta_imputada_icono = accInfo?.icono || 'person';
         }
       } else {
         c.imputado = false;
+        c.id_cuenta_imputada = null;
+        c.es_incidencia_externa = false;
         c.cuenta_imputada_nombre = null;
+        c.cuenta_imputada_icono = null;
       }
     });
 
@@ -157,8 +175,8 @@ export default async function handler(req, res) {
       const imp = Number(c.importe || 0);
       saldoTotal += imp;
       
-      // Calculate incidence based on imputado flag or cuenta_imputada_nombre
-      if (c.imputado && c.cuenta_imputada_nombre !== 'Propios') {
+      // Calculate incidence based on imputado flag and external status
+      if (c.imputado && c.es_incidencia_externa) {
         incidenciaFamiliar += imp;
       } else {
         incidenciaPersonal += imp;

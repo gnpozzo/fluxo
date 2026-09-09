@@ -260,9 +260,14 @@ export class TarjetasModule extends BaseModule {
           { key: 'importe',         label: 'Importe',   sortable: true, align: 'right',
             render: (r) => `<span class="negativo">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>` },
           { key: 'imputacion',      label: 'Imputación',
-            render: (r) => r.imputado
-              ? `<span class="badge ${r.cuenta_imputada_nombre === 'Propios' ? 'badge-tc' : 'badge-recur'}">${r.cuenta_imputada_nombre}</span>`
-              : `<span class="badge badge-neutro">Sin Imputar</span>` }
+            render: (r) => {
+              if (!r.imputado) return `<span class="badge badge-neutro">Sin Imputar</span>`;
+              if (r.es_incidencia_externa) {
+                return `<span class="badge badge-recur" title="Imputado a cuenta ${App.Utils.escapeHtml(r.cuenta_imputada_nombre || '')}">🏛️ ${App.Utils.escapeHtml(r.cuenta_imputada_nombre || 'Externa')}</span>`;
+              }
+              return `<span class="badge badge-tc">Personal</span>`;
+            }
+          }
         ],
         emptyMsg  : 'No hay consumos para este período.',
         paginated : true,
@@ -382,21 +387,22 @@ export class TarjetasModule extends BaseModule {
           <input class="input" type="number" name="periodos" min="2" max="60" value="${data?.periodos || 12}">
         </div>
 
-        ${!data ? `
         <div class="form-group full-width">
           <label class="form-switch">
-            <input type="checkbox" class="toggle-switch" name="imputar" id="tc-chk-imputar">
+            <input type="checkbox" class="toggle-switch" name="imputar" id="tc-chk-imputar" ${data ? (data.imputado !== false ? 'checked' : '') : 'checked'}>
             <span>Imputar a cuenta de gastos</span>
           </label>
         </div>
-        <div id="tc-imputar-opts" class="form-group full-width hidden">
+        <div id="tc-imputar-opts" class="form-group full-width ${data && data.imputado === false ? 'hidden' : ''}">
           <label>Cuenta destino</label>
           <select class="input" name="cuenta_imputar">
             ${this.#cuentas
-              .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
+              .map(c => `<option value="${c.id_cuenta_principal}" ${(data?.id_cuenta_imputada || App.Store.cuenta) === c.id_cuenta_principal ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
               .join('')}
           </select>
         </div>
+
+        ${!data ? `
         <div class="form-group full-width">
           <label class="form-switch">
             <input type="checkbox" class="toggle-switch" name="compartir" id="tc-chk-compartir">
@@ -405,18 +411,22 @@ export class TarjetasModule extends BaseModule {
         </div>
         <div id="tc-compartir-opts" class="form-group full-width hidden">
            <label>Contacto pagador alternativo</label>
-           <!-- Si pago yo y se lo reclamo a ella, dejo mi porcentaje en 50, y lo mando al CC de mi cuenta. -->
            <p style="font-size:0.8rem;color:var(--texto-3);margin-top:0">Se creará automáticamente en Gastos Compartidos. Cargas qué % asumes vos del gasto.</p>
            <label>Mi porcentaje asumido (%)</label>
            <input class="input" type="number" name="compartir_porcentaje" min="1" max="99" value="50">
-        </div>
-        <div id="tc-imputar-opts" class="form-group full-width hidden">
-          <label>Cuenta destino</label>
-          <select class="input" name="cuenta_imputar">
-            ${this.#cuentas
-              .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
-              .join('')}
-          </select>
+        </div>` : ''}
+
+        ${data && (data.recur_group_id || data.tipo_consumo === 'CUOTAS' || data.tipo_consumo === 'RECURRENTE') ? `
+        <div class="form-group full-width" style="background:var(--bg-2);padding:10px 14px;border-radius:var(--radius-md);margin-top:6px;border:1px solid var(--borde-1);">
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:6px;color:var(--texto-1)">Alcance de la modificación</label>
+          <div style="display:flex;gap:16px;font-size:0.85rem;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="update_scope" value="SERIES" checked> A esta y cuotas/meses futuros
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="update_scope" value="SINGLE"> Solo a este mes
+            </label>
+          </div>
         </div>` : ''}
       </form>
     `;
@@ -431,6 +441,10 @@ export class TarjetasModule extends BaseModule {
     const chkImp = document.getElementById('tc-chk-imputar');
     chkImp?.addEventListener('change', () => {
       document.getElementById('tc-imputar-opts')?.classList.toggle('hidden', !chkImp.checked);
+    });
+    const chkComp = document.getElementById('tc-chk-compartir');
+    chkComp?.addEventListener('change', () => {
+      document.getElementById('tc-compartir-opts')?.classList.toggle('hidden', !chkComp.checked);
     });
   }
 
@@ -486,16 +500,17 @@ export class TarjetasModule extends BaseModule {
         }
         await this._handleCreate(payload, modal);
       } else {
+        const reqScope = d.update_scope || (this.#editData.recur_group_id ? 'SERIES' : 'SINGLE');
         const req = {
           data    : payload,
           original: {
-            consumoId   : this.#editData.id_consumo_tc,
+            consumoId   : this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta,
             recurGroupId: this.#editData.recur_group_id || null,
             fecha       : this.#editData.fecha?.value || this.#editData.fecha
           },
-          scope: 'SINGLE'
+          scope: reqScope
         };
-        await this._handleUpdate(this.#editData.id_consumo_tc, req, modal);
+        await this._handleUpdate(this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta, req, modal, reqScope);
       }
     } catch (_) {
       modal.setLoading(false);
@@ -604,7 +619,9 @@ export class TarjetasModule extends BaseModule {
           <div class="detail-item">
             <span class="detail-label">Imputación</span>
             <span class="detail-value">${row.imputado
-              ? `<span class="badge ${row.cuenta_imputada_nombre === 'Propios' ? 'badge-tc' : 'badge-recur'}">${row.cuenta_imputada_nombre}</span>`
+              ? (row.es_incidencia_externa
+                  ? `<span class="badge badge-recur">🏛️ ${App.Utils.escapeHtml(row.cuenta_imputada_nombre || 'Externa')}</span>`
+                  : '<span class="badge badge-tc">Personal</span>')
               : '<span class="badge badge-neutro">Sin Imputar</span>'}</span>
           </div>
           <div class="detail-item">
@@ -642,7 +659,13 @@ export class TarjetasModule extends BaseModule {
     const badges = [];
     if (row.tipo_consumo === 'CUOTAS')     badges.push(`<span class="badge badge-recur">Cuota ${row.cuota_actual}/${row.cuota_total}</span>`);
     else if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
-    if (row.imputado) badges.push('<span class="badge badge-tc">Imputado</span>');
+    if (row.imputado) {
+      if (row.es_incidencia_externa) {
+        badges.push(`<span class="badge badge-recur">🏛️ ${App.Utils.escapeHtml(row.cuenta_imputada_nombre || 'Externa')}</span>`);
+      } else {
+        badges.push('<span class="badge badge-tc">Personal</span>');
+      }
+    }
     return `${App.Utils.escapeHtml(row.descripcion)} ${badges.join(' ')}`;
   }
 

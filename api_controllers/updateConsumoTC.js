@@ -15,37 +15,79 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const request = Array.isArray(req.body) ? req.body[0] : req.body;
+    let request = null;
+    if (req.body && Array.isArray(req.body.args)) {
+      if (req.body.args[1] && typeof req.body.args[1] === 'object' && req.body.args[1].data) {
+        request = req.body.args[1];
+        if (req.body.args[2]) request.scope = req.body.args[2];
+      } else {
+        request = req.body.args[0];
+      }
+    } else if (Array.isArray(req.body)) {
+      request = req.body[0];
+    } else {
+      request = req.body;
+    }
     
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const { original, data, scope } = request;
+    const { original = {}, data = {}, scope = 'SINGLE' } = request || {};
+    const origId = original.consumoId || original.id_consumo_tc || original.id_consumo_tarjeta;
+    const recurGrp = original.recurGroupId || original.recur_group_id;
     
     // 1. Delete original (scoped to user_id)
-    if (scope === 'SINGLE') {
-      await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', original.consumoId).eq('user_id', userId);
-      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', original.consumoId).eq('user_id', userId);
-    } else if (scope === 'SERIES') {
+    if (scope === 'SINGLE' && origId) {
+      await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', origId).eq('user_id', userId);
+      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
+    } else if (scope === 'SERIES' && recurGrp) {
+      const origFecha = original.fecha?.value || original.fecha || '2000-01-01';
       const { data: tcs } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
-        .eq('recur_group_id', original.recurGroupId)
+        .eq('recur_group_id', recurGrp)
         .eq('user_id', userId)
-        .gte('fecha', original.fecha);
+        .gte('fecha', origFecha);
         
       if (tcs && tcs.length > 0) {
         const ids = tcs.map(r => r.id_consumo_tarjeta);
         await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids).eq('user_id', userId);
         await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids).eq('user_id', userId);
       }
+    } else if (origId) {
+      await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', origId).eq('user_id', userId);
+      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
     }
     
-    // 2. Create new
-    if (scope === 'SINGLE') data.tipo = 'SIMPLE';
+    // 2. Resolve card account and due date
     const consumo = data;
+    let cardAccountId = null;
+    let cardVto = null;
+    if (consumo.idTarjeta) {
+      const { data: tc } = await supabase
+        .from('tarjetas')
+        .select('id_tarjeta, id_cuenta_principal, fecha_vencimiento_actual')
+        .eq('id_tarjeta', consumo.idTarjeta)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (tc) {
+        cardAccountId = tc.id_cuenta_principal;
+        cardVto = tc.fecha_vencimiento_actual;
+      }
+    }
+
+    const { data: allUserCuentas } = await supabase
+      .from('cuentas_principales')
+      .select('id_cuenta_principal, nombre')
+      .eq('user_id', userId);
+    const cuentaNombreMap = {};
+    (allUserCuentas || []).forEach(c => { cuentaNombreMap[c.id_cuenta_principal] = c.nombre; });
+
+    // 3. Create new records
+    if (scope === 'SINGLE') data.tipo = 'SIMPLE';
     const tcRows = [];
     const movRows = [];
     const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
     const tipo = consumo.tipoConsumo || consumo.tipo;
+    const targetAccountId = consumo.idCuentaImputar;
 
     if (tipo === 'SIMPLE' || tipo === 'COMUN') {
       const idConsumo = crypto.randomUUID();
@@ -59,10 +101,10 @@ export default async function handler(req, res) {
         descripcion: consumo.descripcion,
         importe: consumo.importe
       });
-      if (consumo.imputar) {
+      if (consumo.imputar && targetAccountId) {
         movRows.push({
           id_movimiento: crypto.randomUUID(),
-          id_cuenta_principal: consumo.idCuentaImputar,
+          id_cuenta_principal: targetAccountId,
           user_id: userId,
           fecha: fechaISO,
           id_categoria: consumo.idCategoria,
@@ -72,9 +114,26 @@ export default async function handler(req, res) {
           medio_pago: 'Tarjeta de Crédito',
           id_consumo_tarjeta_origen: idConsumo
         });
+
+        if (cardAccountId && targetAccountId !== cardAccountId) {
+          const fechaReintegro = cardVto || fechaISO;
+          const targetAccName = cuentaNombreMap[targetAccountId] || 'Externa';
+          movRows.push({
+            id_movimiento: crypto.randomUUID(),
+            id_cuenta_principal: cardAccountId,
+            user_id: userId,
+            fecha: fechaReintegro,
+            id_categoria: 'CAT_REINTEGRO_TC',
+            tipo_mov: 'INGRESO',
+            descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
+            importe: consumo.importe,
+            medio_pago: 'Tarjeta de Crédito',
+            id_consumo_tarjeta_origen: idConsumo
+          });
+        }
       }
     } else if (tipo === 'CUOTAS') {
-      const installmentGroupId = 'INSTL_' + crypto.randomUUID();
+      const installmentGroupId = (scope === 'SERIES' && recurGrp) ? recurGrp : ('INSTL_' + crypto.randomUUID());
       const cuotasARegistrar = (consumo.cuotaTotal - consumo.cuotaActual) + 1;
       for (let i = 0; i < cuotasARegistrar; i++) {
         const idConsumo = crypto.randomUUID();
@@ -92,11 +151,11 @@ export default async function handler(req, res) {
           cuota_total: consumo.cuotaTotal,
           recur_group_id: installmentGroupId
         });
-        if (consumo.imputar) {
+        if (consumo.imputar && targetAccountId) {
           const descImputacion = consumo.descripcion + ' (Cuota ' + cuotaNumActual + '/' + consumo.cuotaTotal + ')';
           movRows.push({
             id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: consumo.idCuentaImputar,
+            id_cuenta_principal: targetAccountId,
             user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
@@ -107,11 +166,29 @@ export default async function handler(req, res) {
             recur_group_id: installmentGroupId,
             id_consumo_tarjeta_origen: idConsumo
           });
+
+          if (cardAccountId && targetAccountId !== cardAccountId) {
+            const targetAccName = cuentaNombreMap[targetAccountId] || 'Externa';
+            movRows.push({
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: cardAccountId,
+              user_id: userId,
+              fecha: fechaISO,
+              id_categoria: 'CAT_REINTEGRO_TC',
+              tipo_mov: 'INGRESO',
+              descripcion: `Reintegro TC: ${consumo.descripcion} (${cuotaNumActual}/${consumo.cuotaTotal}) (${targetAccName})`,
+              importe: consumo.importe,
+              medio_pago: 'Tarjeta de Crédito',
+              recur_group_id: installmentGroupId,
+              id_consumo_tarjeta_origen: idConsumo
+            });
+          }
         }
       }
     } else if (tipo === 'RECURRENTE') {
-      const recurGroupId = 'REC_TC_' + crypto.randomUUID();
-      for (let i = 0; i < consumo.periodos; i++) {
+      const recurGroupId = (scope === 'SERIES' && recurGrp) ? recurGrp : ('REC_TC_' + crypto.randomUUID());
+      const numPeriodos = consumo.periodos || 12;
+      for (let i = 0; i < numPeriodos; i++) {
         const idConsumo = crypto.randomUUID();
         const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
         tcRows.push({
@@ -124,10 +201,10 @@ export default async function handler(req, res) {
           importe: consumo.importe,
           recur_group_id: recurGroupId
         });
-        if (consumo.imputar) {
+        if (consumo.imputar && targetAccountId) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: consumo.idCuentaImputar,
+            id_cuenta_principal: targetAccountId,
             user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
@@ -138,6 +215,23 @@ export default async function handler(req, res) {
             recur_group_id: recurGroupId,
             id_consumo_tarjeta_origen: idConsumo
           });
+
+          if (cardAccountId && targetAccountId !== cardAccountId) {
+            const targetAccName = cuentaNombreMap[targetAccountId] || 'Externa';
+            movRows.push({
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: cardAccountId,
+              user_id: userId,
+              fecha: fechaISO,
+              id_categoria: 'CAT_REINTEGRO_TC',
+              tipo_mov: 'INGRESO',
+              descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
+              importe: consumo.importe,
+              medio_pago: 'Tarjeta de Crédito',
+              recur_group_id: recurGroupId,
+              id_consumo_tarjeta_origen: idConsumo
+            });
+          }
         }
       }
     }
