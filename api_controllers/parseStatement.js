@@ -222,6 +222,13 @@ export default async function handler(req, res) {
       .gte('fecha', sixMonthsAgoStr);
     if (dbConsErr) throw dbConsErr;
 
+    // Fetch past movements to remember imputed principal account per consumption / recur_group
+    const { data: dbMovs } = await supabase
+      .from('movimientos')
+      .select('id_consumo_tarjeta_origen, id_cuenta_principal, recur_group_id')
+      .eq('user_id', userId)
+      .not('id_cuenta_principal', 'is', null);
+
     let extractedData = null;
 
     // Try direct XLSX parsing first for instant speed and 100% precision
@@ -323,40 +330,170 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       return variosCat.id_categoria;
     }
 
-    // 6. Deterministic comparison against dbConsumos
+    // 6. Helper for recurring detection
+    function isRecurringCandidate(desc, consumosHist) {
+      const d = (desc || '').toLowerCase();
+      if (d.includes('netflix') || d.includes('spotify') || d.includes('youtube') || d.includes('google *') ||
+          d.includes('claro') || d.includes('personal') || d.includes('movistar') || d.includes('flow') ||
+          d.includes('telecom') || d.includes('litoral gas') || d.includes('epe') || d.includes('edenor') ||
+          d.includes('edesur') || d.includes('aysa') || d.includes('aguas') || d.includes('adt') ||
+          d.includes('segunda') || d.includes('hbo') || d.includes('max') || d.includes('disney') ||
+          d.includes('prime video') || d.includes('amazon') || d.includes('adobe') || d.includes('gym') ||
+          d.includes('club') || d.includes('colegio') || d.includes('osde') || d.includes('swiss medical')) {
+        return true;
+      }
+      const norm = d.replace(/[^a-z0-9]/g, '');
+      if (norm.length >= 4) {
+        const pastOccurrences = (consumosHist || []).filter(db => {
+          const dbNorm = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return (dbNorm.includes(norm) || norm.includes(dbNorm)) && (!db.cuota_total || db.cuota_total <= 1);
+        });
+        if (pastOccurrences.length >= 1) return true;
+      }
+      return false;
+    }
+
+    // 7. Deterministic comparison against dbConsumos
     const cardConsumos = (dbConsumos || []).filter(c => c.id_tarjeta === matchedCard.id_tarjeta);
     const exactMatches = [];
     const similarDiff = [];
     const newConsumptions = [];
+    const matchedDbIds = new Set();
+
+    const stCierre = extractedData.statement_info?.fecha_cierre;
+    const stVto = extractedData.statement_info?.fecha_vencimiento;
+
+    // Helper to find past imputed account
+    function findImputedAccount(recurGroupId, consumoId) {
+      if (!dbMovs) return null;
+      if (recurGroupId) {
+        const m = dbMovs.find(mov => mov.recur_group_id === recurGroupId);
+        if (m) return m.id_cuenta_principal;
+      }
+      if (consumoId) {
+        const m = dbMovs.find(mov => mov.id_consumo_tarjeta_origen === consumoId);
+        if (m) return m.id_cuenta_principal;
+      }
+      return null;
+    }
 
     (extractedData.transactions || []).forEach(tx => {
       tx.id_categoria = inferCategory(tx.descripcion);
+      const isCuotas = tx.cuota_total && Number(tx.cuota_total) > 1;
+      const isRecur = !isCuotas && isRecurringCandidate(tx.descripcion, cardConsumos);
+
+      if (isCuotas) {
+        tx.tipo_consumo = 'CUOTAS';
+      } else if (isRecur) {
+        tx.tipo_consumo = 'RECURRENTE';
+        tx.sugerencia_ia = 'Sugerido: Recurrente (gasto mensual detectado)';
+      } else {
+        tx.tipo_consumo = 'SIMPLE';
+      }
+
       const normTx = (tx.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
       const match = cardConsumos.find(db => {
+        if (matchedDbIds.has(db.id_consumo_tarjeta)) return false;
         const sameImp = Math.abs(Number(db.importe) - Number(tx.importe)) < 0.05;
         const sameDate = db.fecha === tx.fecha;
         const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const sameDesc = normDb.length >= 4 && normTx.length >= 4 && (normDb === normTx || normDb.startsWith(normTx) || normTx.startsWith(normDb));
-        return sameImp && sameDate && sameDesc;
+        
+        // Exact match
+        if (sameImp && (sameDate || isRecur) && sameDesc) return true;
+
+        // Recurrent service match with price adjustment
+        if (isRecur && sameDesc) {
+          const dbMes = (db.fecha || '').substring(0, 7);
+          const txMes = (tx.fecha || stVto || '').substring(0, 7);
+          if (dbMes === txMes || (db.recur_group_id && db.recur_group_id.startsWith('REC_TC_'))) {
+            return true;
+          }
+        }
+        return false;
       });
 
       if (match) {
+        matchedDbIds.add(match.id_consumo_tarjeta);
+        if (match.recur_group_id) tx.recur_group_id = match.recur_group_id;
+        tx.id_cuenta_imputar = findImputedAccount(match.recur_group_id, match.id_consumo_tarjeta);
+
         const dbCuotaAct = match.cuota_actual || 1;
         const dbCuotaTot = match.cuota_total || 1;
         const txCuotaAct = tx.cuota_actual || 1;
         const txCuotaTot = tx.cuota_total || 1;
+        const sameImp = Math.abs(Number(match.importe) - Number(tx.importe)) < 0.05;
 
-        if (dbCuotaAct !== txCuotaAct || dbCuotaTot !== txCuotaTot) {
+        if (dbCuotaAct !== txCuotaAct || dbCuotaTot !== txCuotaTot || !sameImp) {
           similarDiff.push({
             db_record: match,
             statement_record: tx
           });
         } else {
-          exactMatches.push(tx);
+          exactMatches.push({ ...tx, dbRecord: match });
         }
       } else {
+        // Look for past recurring group or installments to preserve group and account imputation
+        if (isRecur && !tx.recur_group_id) {
+          const pastRec = cardConsumos.find(db => {
+            if (!db.recur_group_id) return false;
+            const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return normDb.length >= 4 && normTx.length >= 4 && (normDb.includes(normTx) || normTx.includes(normDb));
+          });
+          if (pastRec) {
+            tx.recur_group_id = pastRec.recur_group_id;
+            tx.id_cuenta_imputar = findImputedAccount(pastRec.recur_group_id, pastRec.id_consumo_tarjeta);
+          }
+        } else if (isCuotas && !tx.recur_group_id) {
+          const pastCuota = cardConsumos.find(db => {
+            if (!db.recur_group_id) return false;
+            const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return db.cuota_total === tx.cuota_total && normDb.length >= 4 && normTx.length >= 4 && (normDb.includes(normTx) || normTx.includes(normDb));
+          });
+          if (pastCuota) {
+            tx.recur_group_id = pastCuota.recur_group_id;
+            tx.id_cuenta_imputar = findImputedAccount(pastCuota.recur_group_id, pastCuota.id_consumo_tarjeta);
+          }
+        }
         newConsumptions.push(tx);
+      }
+    });
+
+    // 8. Identificar consumos recurrentes ausentes y consumos no correspondientes en la BD
+    const recurrentesAusentes = [];
+    const unmatchedDbConsumptions = [];
+
+    const stCierre = extractedData.statement_info?.fecha_cierre;
+    const stVto = extractedData.statement_info?.fecha_vencimiento;
+    const stMes = (stVto || stCierre || '').substring(0, 7);
+
+    cardConsumos.forEach(db => {
+      if (matchedDbIds.has(db.id_consumo_tarjeta)) return;
+
+      const isRecurrenteGroup = db.recur_group_id && db.recur_group_id.startsWith('REC_TC_');
+      const dbMes = (db.fecha || '').substring(0, 7);
+
+      if (isRecurrenteGroup) {
+        // Si no vino en este extracto, sugerir al usuario la posibilidad de darlo de baja
+        recurrentesAusentes.push({
+          id_consumo_tarjeta: db.id_consumo_tarjeta,
+          recur_group_id: db.recur_group_id,
+          descripcion: db.descripcion,
+          importe: db.importe,
+          moneda: db.moneda || 'ARS',
+          fecha: db.fecha,
+          sugerencia_ia: 'No figuró en el resumen de este mes. ¿Deseas dar de baja la recurrencia?'
+        });
+      } else if (stMes && dbMes === stMes && (!db.cuota_total || db.cuota_total <= 1)) {
+        // Consumo simple que estaba registrado para este mes pero no vino en el resumen bancario
+        unmatchedDbConsumptions.push({
+          id_consumo_tarjeta: db.id_consumo_tarjeta,
+          descripcion: db.descripcion,
+          importe: db.importe,
+          moneda: db.moneda || 'ARS',
+          fecha: db.fecha
+        });
       }
     });
 
@@ -365,7 +502,9 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       statement_info: extractedData.statement_info || {},
       exact_matches: exactMatches,
       similar_different: similarDiff,
-      new_consumptions: newConsumptions
+      new_consumptions: newConsumptions,
+      recurrentes_ausentes: recurrentesAusentes,
+      unmatched_db_consumptions: unmatchedDbConsumptions
     };
 
     return res.status(200).json({ success: true, payload });

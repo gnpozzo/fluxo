@@ -52,13 +52,79 @@ export default async function handler(req, res) {
       const targetCardId = consumo.idTarjeta;
       const targetAccountId = consumo.idCuentaImputar || consumo.idCuenta;
 
+      // 1. Eliminar consumos que no correspondan según la conciliación
+      if (Array.isArray(consumo.consumosAEliminar) && consumo.consumosAEliminar.length > 0) {
+        await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', consumo.consumosAEliminar).eq('user_id', userId);
+        await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', consumo.consumosAEliminar).eq('user_id', userId);
+      }
+
+      // 2. Dar de baja recurrencias ausentes si el usuario así lo decidió
+      if (Array.isArray(consumo.bajasRecurrencias) && consumo.bajasRecurrencias.length > 0) {
+        const cutoffDate = (consumo.statementInfo?.fecha_cierre || new Date().toISOString().split('T')[0]);
+        const { data: tcFuture } = await supabase.from('consumos_tc')
+          .select('id_consumo_tarjeta')
+          .in('recur_group_id', consumo.bajasRecurrencias)
+          .gte('fecha', cutoffDate)
+          .eq('user_id', userId);
+        const idsToDel = (tcFuture || []).map(t => t.id_consumo_tarjeta);
+        if (idsToDel.length > 0) {
+          await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', idsToDel).eq('user_id', userId);
+          await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', idsToDel).eq('user_id', userId);
+        }
+      }
+
+      // 3. Procesar consumos del resumen y proyectar cuotas y recurrencias
+      const stVto = consumo.statementInfo?.fecha_vencimiento;
+      const stCierre = consumo.statementInfo?.fecha_cierre;
+
       for (const item of consumo.consumos) {
         const idConsumo = crypto.randomUUID();
         const monedaItem = item.moneda || 'ARS';
         const fechaISO = (item.fecha ? String(item.fecha).substring(0, 10) : new Date().toISOString().split('T')[0]);
         const cuotaTot = Number(item.cuotaTotal || item.cuota_total || 1);
         const cuotaAct = Number(item.cuotaActual || item.cuota_actual || 1);
+        const tipoConsumo = item.tipoConsumo || (cuotaTot > 1 ? 'CUOTAS' : 'SIMPLE');
+        const rowAccountId = item.idCuentaImputar || targetAccountId;
 
+        let recurGroupId = item.recur_group_id || null;
+        if (tipoConsumo === 'CUOTAS' && cuotaTot > 1 && !recurGroupId) {
+          recurGroupId = 'INSTL_' + crypto.randomUUID();
+        } else if (tipoConsumo === 'RECURRENTE' && !recurGroupId) {
+          recurGroupId = 'REC_TC_' + crypto.randomUUID();
+        }
+
+        // Si ya existía un registro previo proyectado de esta misma cuota en la base, evitar duplicado
+        if (tipoConsumo === 'CUOTAS' && cuotaTot > 1) {
+          const { data: existingCuota } = await supabase.from('consumos_tc')
+            .select('id_consumo_tarjeta')
+            .eq('id_tarjeta', targetCardId)
+            .eq('descripcion', item.descripcion)
+            .eq('cuota_actual', cuotaAct)
+            .eq('cuota_total', cuotaTot)
+            .eq('user_id', userId);
+          if (existingCuota && existingCuota.length > 0) {
+            const exIds = existingCuota.map(e => e.id_consumo_tarjeta);
+            await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', exIds).eq('user_id', userId);
+            await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', exIds).eq('user_id', userId);
+          }
+        }
+
+        // Si ya existían registros de este recurGroupId con fecha >= fechaISO, eliminamos para actualizar con los nuevos importes
+        if (tipoConsumo === 'RECURRENTE' && recurGroupId) {
+          const { data: existingRecur } = await supabase.from('consumos_tc')
+            .select('id_consumo_tarjeta')
+            .eq('id_tarjeta', targetCardId)
+            .eq('recur_group_id', recurGroupId)
+            .gte('fecha', fechaISO)
+            .eq('user_id', userId);
+          if (existingRecur && existingRecur.length > 0) {
+            const exIds = existingRecur.map(e => e.id_consumo_tarjeta);
+            await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', exIds).eq('user_id', userId);
+            await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', exIds).eq('user_id', userId);
+          }
+        }
+
+        // Consumo del período auditado
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: targetCardId,
@@ -70,13 +136,13 @@ export default async function handler(req, res) {
           moneda: monedaItem,
           cuota_actual: cuotaTot > 1 ? cuotaAct : null,
           cuota_total: cuotaTot > 1 ? cuotaTot : null,
-          recur_group_id: cuotaTot > 1 ? (item.recur_group_id || ('INSTL_' + crypto.randomUUID())) : null
+          recur_group_id: recurGroupId
         });
 
-        if (consumo.imputar && targetAccountId) {
+        if (consumo.imputar && rowAccountId) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: targetAccountId,
+            id_cuenta_principal: rowAccountId,
             user_id: userId,
             fecha: fechaISO,
             id_categoria: item.idCategoria || item.id_categoria || null,
@@ -85,8 +151,94 @@ export default async function handler(req, res) {
             importe: Number(item.importe || 0),
             moneda: monedaItem,
             medio_pago: 'Tarjeta de Crédito',
-            id_consumo_tarjeta_origen: idConsumo
+            id_consumo_tarjeta_origen: idConsumo,
+            recur_group_id: recurGroupId
           });
+        }
+
+        // Base para proyecciones futuras (vencimiento del resumen o fecha de compra)
+        const baseDate = stVto ? new Date(stVto + 'T12:00:00Z') : new Date(fechaISO + 'T12:00:00Z');
+
+        // A) Proyección a futuro de cuotas restantes (X+1 ... N)
+        if (tipoConsumo === 'CUOTAS' && cuotaTot > cuotaAct) {
+          const restantes = cuotaTot - cuotaAct;
+          for (let i = 1; i <= restantes; i++) {
+            const cuotaFutura = cuotaAct + i;
+            const fechaFutura = addMonthsSafe(baseDate, i).toISOString().split('T')[0];
+            const idFuturo = crypto.randomUUID();
+
+            tcRows.push({
+              id_consumo_tarjeta: idFuturo,
+              id_tarjeta: targetCardId,
+              id_categoria: item.idCategoria || item.id_categoria || null,
+              user_id: userId,
+              fecha: fechaFutura,
+              descripcion: item.descripcion,
+              importe: Number(item.importe || 0),
+              moneda: monedaItem,
+              cuota_actual: cuotaFutura,
+              cuota_total: cuotaTot,
+              recur_group_id: recurGroupId
+            });
+
+            // Imputación persistente hacia la cuenta destino
+            if (consumo.imputar && rowAccountId) {
+              movRows.push({
+                id_movimiento: crypto.randomUUID(),
+                id_cuenta_principal: rowAccountId,
+                user_id: userId,
+                fecha: fechaFutura,
+                id_categoria: item.idCategoria || item.id_categoria || null,
+                tipo_mov: 'EGRESO',
+                descripcion: `${item.descripcion} (${cuotaFutura}/${cuotaTot})`,
+                importe: Number(item.importe || 0),
+                moneda: monedaItem,
+                medio_pago: 'Tarjeta de Crédito',
+                id_consumo_tarjeta_origen: idFuturo,
+                recur_group_id: recurGroupId
+              });
+            }
+          }
+        }
+
+        // B) Proyección de consumos recurrentes (próximos 11 meses con el importe actualizado)
+        if (tipoConsumo === 'RECURRENTE') {
+          for (let i = 1; i <= 11; i++) {
+            const fechaFutura = addMonthsSafe(baseDate, i).toISOString().split('T')[0];
+            const idFuturo = crypto.randomUUID();
+
+            tcRows.push({
+              id_consumo_tarjeta: idFuturo,
+              id_tarjeta: targetCardId,
+              id_categoria: item.idCategoria || item.id_categoria || null,
+              user_id: userId,
+              fecha: fechaFutura,
+              descripcion: item.descripcion,
+              importe: Number(item.importe || 0),
+              moneda: monedaItem,
+              cuota_actual: null,
+              cuota_total: null,
+              recur_group_id: recurGroupId
+            });
+
+            // Imputación persistente hacia la cuenta destino
+            if (consumo.imputar && rowAccountId) {
+              movRows.push({
+                id_movimiento: crypto.randomUUID(),
+                id_cuenta_principal: rowAccountId,
+                user_id: userId,
+                fecha: fechaFutura,
+                id_categoria: item.idCategoria || item.id_categoria || null,
+                tipo_mov: 'EGRESO',
+                descripcion: item.descripcion,
+                importe: Number(item.importe || 0),
+                moneda: monedaItem,
+                medio_pago: 'Tarjeta de Crédito',
+                id_consumo_tarjeta_origen: idFuturo,
+                recur_group_id: recurGroupId
+              });
+            }
+          }
         }
       }
 
@@ -189,7 +341,7 @@ export default async function handler(req, res) {
       for (let i = 0; i < cuotasARegistrar; i++) {
         const idConsumo = crypto.randomUUID();
         const cuotaNumActual = consumo.cuotaActual + i;
-        const fechaISO = addMonthsSafe(fechaBase, cuotaNumActual - 1).toISOString().split('T')[0];
+        const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
         
         tcRows.push({
           id_consumo_tarjeta: idConsumo,

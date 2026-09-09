@@ -6,6 +6,17 @@
               Usuarios CC.
    ============================================================ */
 
+const CUENTA_ICON_SVGS = {
+  home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  briefcase: '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>',
+  piggy: '<circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>',
+  building: '<rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22v-4h6v4"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z"/>',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'
+};
+
 // --- SECCIÓN 0: CLASE AdminModule ---
 
 export class AdminModule extends BaseModule {
@@ -135,9 +146,18 @@ export class AdminModule extends BaseModule {
               <th>Nombre</th><th>Moneda</th><th>Estado</th><th></th>
             </tr></thead>
             <tbody>
-              ${cuentas.map(c => `
+              ${cuentas.map(c => {
+                const iconSvg = CUENTA_ICON_SVGS[c.icono] || CUENTA_ICON_SVGS.home;
+                return `
                 <tr>
-                  <td>${App.Utils.escapeHtml(c.nombre)}</td>
+                  <td>
+                    <div style="display:inline-flex;align-items:center;gap:10px;">
+                      <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--primary-tint);color:var(--primary);flex-shrink:0">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
+                      </span>
+                      <strong>${App.Utils.escapeHtml(c.nombre)}</strong>
+                    </div>
+                  </td>
                   <td>${App.Utils.escapeHtml(c.moneda_principal || c.moneda || 'ARS')}</td>
                   <td>${c.activa
                     ? '<span class="badge tipo-ingreso">Activa</span>'
@@ -150,7 +170,8 @@ export class AdminModule extends BaseModule {
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>
-                </tr>`).join('')}
+                </tr>`;
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -364,24 +385,26 @@ export class AdminModule extends BaseModule {
               <option value="USD" ${data?.moneda_principal === 'USD' ? 'selected':''}>USD</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Ícono</label>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="form-group full-width">
+            <label style="font-weight:600;margin-bottom:8px;display:block">Ícono representativo</label>
+            <div id="adm-icon-picker-grid" style="display:flex;gap:10px;flex-wrap:wrap">
               ${[
-                {v:'home', svg:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'},
-                {v:'briefcase', svg:'<rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'},
-                {v:'wallet', svg:'<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>'},
-                {v:'piggy', svg:'<circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>'},
-                {v:'building', svg:'<rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><line x1="8" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="12" y2="6"/><line x1="16" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10"/><line x1="12" y1="10" x2="12" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/>'},
-                {v:'user', svg:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'},
-                {v:'globe', svg:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z"/>'},
-                {v:'star', svg:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'}
-              ].map(ic => `
-                <label style="cursor:pointer;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;border:2px solid ${data?.icono === ic.v ? 'var(--primary)' : 'var(--borde)'};background:${data?.icono === ic.v ? 'var(--primary-tint)' : 'var(--fondo)'};transition:all .15s" title="${ic.v}">
-                  <input type="radio" name="icono" value="${ic.v}" ${(data?.icono === ic.v || (!data?.icono && ic.v === 'home')) ? 'checked' : ''} style="display:none">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic.svg}</svg>
-                </label>
-              `).join('')}
+                {v:'home', label:'Hogar', svg: CUENTA_ICON_SVGS.home},
+                {v:'briefcase', label:'Trabajo', svg: CUENTA_ICON_SVGS.briefcase},
+                {v:'wallet', label:'Billetera', svg: CUENTA_ICON_SVGS.wallet},
+                {v:'piggy', label:'Ahorro', svg: CUENTA_ICON_SVGS.piggy},
+                {v:'building', label:'Empresa', svg: CUENTA_ICON_SVGS.building},
+                {v:'user', label:'Personal', svg: CUENTA_ICON_SVGS.user},
+                {v:'globe', label:'Global', svg: CUENTA_ICON_SVGS.globe},
+                {v:'star', label:'Favorito', svg: CUENTA_ICON_SVGS.star}
+              ].map(ic => {
+                const isSelected = (data?.icono === ic.v || (!data?.icono && ic.v === 'home'));
+                return `
+                <label class="adm-icon-choice ${isSelected ? 'selected' : ''}" data-icon="${ic.v}" style="cursor:pointer;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;border:2px solid ${isSelected ? 'var(--primary)' : 'var(--borde)'};background:${isSelected ? 'var(--primary-tint)' : 'var(--fondo)'};color:${isSelected ? 'var(--primary)' : 'var(--texto)'};transition:all .18s;box-shadow:${isSelected ? '0 0 0 2px var(--primary-tint), 0 2px 8px rgba(0,0,0,0.1)' : 'none'}" title="${ic.label}">
+                  <input type="radio" name="icono" value="${ic.v}" ${isSelected ? 'checked' : ''} style="position:absolute;opacity:0;pointer-events:none">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic.svg}</svg>
+                </label>`;
+              }).join('')}
             </div>
           </div>
           <div class="form-group full-width" style="margin-top: 10px;">
@@ -416,9 +439,11 @@ export class AdminModule extends BaseModule {
       onConfirm   : async (modal) => {
         const form = modal.getForm();
         const idCuentaPrincipal = form.querySelector('[name="id_cuenta_principal"]').value;
+        const selectedIcon = form.querySelector('[name="icono"]:checked')?.value || 'home';
         const d = {
           nombre: form.querySelector('[name="nombre"]').value.trim(),
           moneda_principal: form.querySelector('[name="moneda_principal"]').value,
+          icono: selectedIcon,
           activa: form.querySelector('[name="activa"]').checked,
           modulo_tarjetas_activo: form.querySelector('[name="modulo_tarjetas_activo"]').checked,
           modulo_cc_activo: form.querySelector('[name="modulo_cc_activo"]').checked,
@@ -441,6 +466,30 @@ export class AdminModule extends BaseModule {
         } catch (err) { modal.setLoading(false); App.Toast.error(err.message); }
       }
     });
+
+    // Bind interactive icon picker click events
+    const pickerWrap = document.getElementById('adm-icon-picker-grid');
+    if (pickerWrap) {
+      pickerWrap.querySelectorAll('.adm-icon-choice').forEach(lbl => {
+        lbl.addEventListener('click', (e) => {
+          e.preventDefault();
+          pickerWrap.querySelectorAll('.adm-icon-choice').forEach(l => {
+            l.classList.remove('selected');
+            l.style.borderColor = 'var(--borde)';
+            l.style.background = 'var(--fondo)';
+            l.style.color = 'var(--texto)';
+            l.style.boxShadow = 'none';
+          });
+          lbl.classList.add('selected');
+          lbl.style.borderColor = 'var(--primary)';
+          lbl.style.background = 'var(--primary-tint)';
+          lbl.style.color = 'var(--primary)';
+          lbl.style.boxShadow = '0 0 0 2px var(--primary-tint), 0 2px 8px rgba(0,0,0,0.1)';
+          const rad = lbl.querySelector('input[name="icono"]');
+          if (rad) rad.checked = true;
+        });
+      });
+    }
   }
 
   async _editTarjeta(id) {

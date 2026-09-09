@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
     let [cuentasRes, categoriasRes, tarjetasRes, usuariosCcRes, subcuentasRes] = await Promise.all([
       supabase.from('cuentas_principales')
-        .select('id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_cc_activo,modulo_ahorro_activo,modulo_inversiones_activo')
+        .select('id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_cc_activo,modulo_ahorro_activo,modulo_inversiones_activo,icono')
         .eq('user_id', userId)
         .eq('activa', true)
         .order('es_predeterminada', { ascending: false })

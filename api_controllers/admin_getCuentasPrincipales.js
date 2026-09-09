@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
     const { data, error } = await supabase
       .from('cuentas_principales')
-      .select('id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_ahorro_activo,modulo_cc_activo,modulo_inversiones_activo')
+      .select('id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_ahorro_activo,modulo_cc_activo,modulo_inversiones_activo,icono')
       .eq('user_id', userId)
       .order('fecha_creacion', { ascending: false });
     if (error) throw error;

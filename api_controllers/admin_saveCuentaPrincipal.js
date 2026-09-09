@@ -27,7 +27,8 @@ export default async function handler(req, res) {
       modulo_tarjetas_activo: payload.modulo_tarjetas_activo !== undefined ? payload.modulo_tarjetas_activo : false,
       modulo_ahorro_activo: payload.modulo_ahorro_activo !== undefined ? payload.modulo_ahorro_activo : false,
       modulo_cc_activo: payload.modulo_cc_activo !== undefined ? payload.modulo_cc_activo : false,
-      modulo_inversiones_activo: payload.modulo_inversiones_activo !== undefined ? payload.modulo_inversiones_activo : false
+      modulo_inversiones_activo: payload.modulo_inversiones_activo !== undefined ? payload.modulo_inversiones_activo : false,
+      icono: payload.icono || 'home'
     };
 
     if (payload.es_predeterminada !== undefined) {

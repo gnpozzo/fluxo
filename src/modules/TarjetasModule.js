@@ -932,11 +932,58 @@ export class TarjetasModule extends BaseModule {
                     <th style="padding:10px; width:80px; text-align:center">Estado</th>
                     <th style="padding:10px">Descripción</th>
                     <th style="padding:10px; width:120px">Categoría</th>
-                    <th style="padding:10px; width:100px">Plan / Tipo</th>
+                    <th style="padding:10px; width:120px">Imputar en</th>
+                    <th style="padding:10px; width:110px">Plan / Tipo</th>
                     <th style="padding:10px; text-align:right">Importe</th>
                   </tr>
                 </thead>
                 <tbody id="tc-import-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="tc-import-recurrentes-ausentes-section" class="hidden" style="border:1px solid rgba(245, 158, 11, 0.3); background:rgba(245, 158, 11, 0.05); border-radius:8px; padding:12px">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px">
+              <span style="font-size:1.1rem">⚠️</span>
+              <strong style="color:var(--texto-1); font-size:0.9rem">Servicios recurrentes no detectados en este resumen</strong>
+            </div>
+            <p style="font-size:0.8rem; color:var(--texto-3); margin:0 0 10px 0">
+              La IA detectó que estos consumos habituales no figuran en este resumen. Marca la casilla si deseas cancelar el servicio y dar de baja sus proyecciones futuras (la decisión final siempre es tuya):
+            </p>
+            <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-1)">
+              <table class="table" style="width:100%; border-collapse:collapse; font-size:0.8rem">
+                <thead>
+                  <tr style="background:var(--bg-2); border-bottom:1px solid var(--border-color); text-align:left">
+                    <th style="padding:6px 10px; width:40px; text-align:center">Baja</th>
+                    <th style="padding:6px 10px">Descripción</th>
+                    <th style="padding:6px 10px; text-align:right">Último Importe</th>
+                    <th style="padding:6px 10px">Sugerencia IA</th>
+                  </tr>
+                </thead>
+                <tbody id="tc-import-recur-ausentes-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="tc-import-unmatched-section" class="hidden" style="border:1px solid rgba(59, 130, 246, 0.3); background:rgba(59, 130, 246, 0.05); border-radius:8px; padding:12px">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px">
+              <span style="font-size:1.1rem">ℹ️</span>
+              <strong style="color:var(--texto-1); font-size:0.9rem">Consumos agendados previamente no encontrados en el resumen</strong>
+            </div>
+            <p style="font-size:0.8rem; color:var(--texto-3); margin:0 0 10px 0">
+              Consumos registrados para este período que no figuran en el extracto oficial. Desmárcalos si deseas conservarlos, o déjalos marcados para depurarlos del período:
+            </p>
+            <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-1)">
+              <table class="table" style="width:100%; border-collapse:collapse; font-size:0.8rem">
+                <thead>
+                  <tr style="background:var(--bg-2); border-bottom:1px solid var(--border-color); text-align:left">
+                    <th style="padding:6px 10px; width:40px; text-align:center">Eliminar</th>
+                    <th style="padding:6px 10px">Fecha</th>
+                    <th style="padding:6px 10px">Descripción</th>
+                    <th style="padding:6px 10px; text-align:right">Importe</th>
+                  </tr>
+                </thead>
+                <tbody id="tc-import-unmatched-body"></tbody>
               </table>
             </div>
           </div>
@@ -1096,11 +1143,31 @@ export class TarjetasModule extends BaseModule {
       const isMatch = tx.type === 'MATCH';
       const isDiff = tx.type === 'DIFF';
       const isChecked = !isMatch;
+      const tipo = tx.tipo_consumo || (isCuotas ? 'CUOTAS' : 'SIMPLE');
 
       const typeSelect = `
         <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-type-${tx.id}">
-          <option value="SIMPLE" ${!isCuotas ? 'selected' : ''}>Simple</option>
-          <option value="CUOTAS" ${isCuotas ? 'selected' : ''}>Cuotas</option>
+          <option value="SIMPLE" ${tipo === 'SIMPLE' ? 'selected' : ''}>Simple</option>
+          <option value="CUOTAS" ${tipo === 'CUOTAS' ? 'selected' : ''}>Cuotas</option>
+          <option value="RECURRENTE" ${tipo === 'RECURRENTE' ? 'selected' : ''}>Recurrente</option>
+        </select>
+      `;
+
+      const sugerenciaHtml = tx.sugerencia_ia ? `
+        <div style="font-size:0.7rem; color:var(--primario, #6366f1); margin-top:2px; display:flex; align-items:center; gap:3px" title="${App.Utils.escapeHtml(tx.sugerencia_ia)}">
+          <span>✨</span>
+          <span>${App.Utils.escapeHtml(tx.sugerencia_ia)}</span>
+        </div>
+      ` : '';
+
+      const defaultAccountId = tx.id_cuenta_imputar || App.Store.cuenta;
+      const accSelectHtml = `
+        <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-acc-${tx.id}">
+          ${this.#cuentas.map(c => `
+            <option value="${c.id_cuenta_principal}" ${c.id_cuenta_principal === defaultAccountId ? 'selected' : ''}>
+              ${App.Utils.escapeHtml(c.nombre)}
+            </option>
+          `).join('')}
         </select>
       `;
 
@@ -1144,9 +1211,13 @@ export class TarjetasModule extends BaseModule {
             </select>
           </td>
           <td style="padding:10px">
+            ${accSelectHtml}
+          </td>
+          <td style="padding:10px">
             <div style="display:flex; flex-direction:column; gap:4px">
               ${typeSelect}
-              <div id="tx-cuotas-div-${tx.id}" style="display:${isCuotas ? 'flex' : 'none'}; gap:4px; align-items:center">
+              ${sugerenciaHtml}
+              <div id="tx-cuotas-div-${tx.id}" style="display:${isCuotas ? 'flex' : 'none'}; gap:4px; align-items:center; margin-top:2px">
                 <input class="input" type="number" style="padding:4px; font-size:0.8rem; margin:0; width:45px" id="tx-cuota-act-${tx.id}" value="${tx.cuota_actual || 1}" min="1">
                 <span style="font-size:0.75rem">/</span>
                 <input class="input" type="number" style="padding:4px; font-size:0.8rem; margin:0; width:45px" id="tx-cuota-tot-${tx.id}" value="${tx.cuota_total || 12}" min="2">
@@ -1165,6 +1236,60 @@ export class TarjetasModule extends BaseModule {
         if (div) div.style.display = (typeSel.value === 'CUOTAS') ? 'flex' : 'none';
       });
     });
+
+    // Renderizar servicios recurrentes no detectados en este resumen
+    const recurAusentesSec = document.getElementById('tc-import-recurrentes-ausentes-section');
+    const recurAusentesBody = document.getElementById('tc-import-recur-ausentes-body');
+    if (recurAusentesSec && recurAusentesBody) {
+      const ausentes = payload.recurrentes_ausentes || [];
+      if (ausentes.length > 0) {
+        recurAusentesSec.classList.remove('hidden');
+        recurAusentesBody.innerHTML = ausentes.map(r => `
+          <tr style="border-bottom:1px solid var(--border-color)">
+            <td style="padding:6px 10px; text-align:center">
+              <input type="checkbox" class="tx-baja-recur-row" data-group-id="${r.recur_group_id}">
+            </td>
+            <td style="padding:6px 10px">
+              <strong>${App.Utils.escapeHtml(r.descripcion)}</strong>
+            </td>
+            <td style="padding:6px 10px; text-align:right; font-weight:500" class="negativo">
+              ${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) : App.Utils.formatearMoneda(r.importe)}
+            </td>
+            <td style="padding:6px 10px; color:#F59E0B; font-size:0.75rem">
+              ✨ ${App.Utils.escapeHtml(r.sugerencia_ia || 'Sugerencia: Dar de baja')}
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        recurAusentesSec.classList.add('hidden');
+        recurAusentesBody.innerHTML = '';
+      }
+    }
+
+    // Renderizar consumos agendados previamente no encontrados en el extracto
+    const unmatchedSec = document.getElementById('tc-import-unmatched-section');
+    const unmatchedBody = document.getElementById('tc-import-unmatched-body');
+    if (unmatchedSec && unmatchedBody) {
+      const unms = payload.unmatched_db_consumptions || [];
+      if (unms.length > 0) {
+        unmatchedSec.classList.remove('hidden');
+        unmatchedBody.innerHTML = unms.map(u => `
+          <tr style="border-bottom:1px solid var(--border-color)">
+            <td style="padding:6px 10px; text-align:center">
+              <input type="checkbox" class="tx-unmatched-del-row" data-id="${u.id_consumo_tarjeta}" checked>
+            </td>
+            <td style="padding:6px 10px; white-space:nowrap">${App.Utils.formatearFecha(u.fecha)}</td>
+            <td style="padding:6px 10px">${App.Utils.escapeHtml(u.descripcion)}</td>
+            <td style="padding:6px 10px; text-align:right; font-weight:500" class="negativo">
+              ${u.moneda === 'USD' ? 'USD ' + Number(u.importe || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) : App.Utils.formatearMoneda(u.importe)}
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        unmatchedSec.classList.add('hidden');
+        unmatchedBody.innerHTML = '';
+      }
+    }
 
     const selectAllChk = document.getElementById('tc-import-select-all');
     if (selectAllChk) {
@@ -1205,26 +1330,26 @@ export class TarjetasModule extends BaseModule {
     modal.setLoading(true);
 
     try {
-      // 1. Eliminar consumos marcados como DIFF para ser reemplazados
+      // 1. Recolectar consumos a eliminar (modificaciones previas + desmarques no correspondientes)
+      const consumosAEliminar = [];
       for (const chk of checkedRowChks) {
         const txId = chk.dataset.id;
         const originalTx = this.#txListImportar.find(t => t.id === txId);
-        if (originalTx?.type === 'DIFF' && originalTx.dbRecord) {
-          const { dbRecord } = originalTx;
-          try {
-            await App.API.call(this._deleteEndpoint, [
-              dbRecord.id_consumo_tarjeta,
-              dbRecord.recur_group_id ? 'SERIES' : 'SINGLE',
-              dbRecord.recur_group_id || null,
-              dbRecord.fecha || null
-            ]);
-          } catch (delErr) {
-            console.warn('Failed to delete old diff record', delErr);
-          }
+        if (originalTx?.type === 'DIFF' && originalTx.dbRecord?.id_consumo_tarjeta) {
+          consumosAEliminar.push(originalTx.dbRecord.id_consumo_tarjeta);
         }
       }
+      document.querySelectorAll('.tx-unmatched-del-row:checked').forEach(chk => {
+        if (chk.dataset.id) consumosAEliminar.push(chk.dataset.id);
+      });
 
-      // 2. Construir batch con todos los consumos seleccionados
+      // 2. Recolectar bajas de recurrencias confirmadas por el usuario
+      const bajasRecurrencias = [];
+      document.querySelectorAll('.tx-baja-recur-row:checked').forEach(chk => {
+        if (chk.dataset.groupId) bajasRecurrencias.push(chk.dataset.groupId);
+      });
+
+      // 3. Construir batch con todos los consumos seleccionados
       const batchConsumos = [];
       for (const chk of checkedRowChks) {
         const txId = chk.dataset.id;
@@ -1233,6 +1358,7 @@ export class TarjetasModule extends BaseModule {
 
         const desc = document.getElementById(`tx-desc-${txId}`).value;
         const cat = document.getElementById(`tx-cat-${txId}`).value;
+        const rowAcc = document.getElementById(`tx-acc-${txId}`)?.value || targetAccount;
         const type = document.getElementById(`tx-type-${txId}`).value;
         const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`).value || 1);
         const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`).value || 1);
@@ -1240,6 +1366,7 @@ export class TarjetasModule extends BaseModule {
         batchConsumos.push({
           descripcion: desc,
           idCategoria: cat,
+          idCuentaImputar: rowAcc,
           importe: Number(originalTx.importe || 0),
           moneda: originalTx.moneda || 'ARS',
           fecha: originalTx.fecha,
@@ -1250,7 +1377,7 @@ export class TarjetasModule extends BaseModule {
         });
       }
 
-      // 3. Ejecutar guardado atómico en una sola llamada batch
+      // 4. Ejecutar guardado atómico en una sola llamada batch
       const batchPayload = {
         batch: true,
         idCuenta: App.Store.cuenta,
@@ -1258,7 +1385,9 @@ export class TarjetasModule extends BaseModule {
         idCuentaImputar: targetAccount,
         imputar: true,
         statementInfo: this.#lastStatementPayload?.statement_info || null,
-        consumos: batchConsumos
+        consumos: batchConsumos,
+        consumosAEliminar: consumosAEliminar,
+        bajasRecurrencias: bajasRecurrencias
       };
 
       await App.API.call(this._createEndpoint, batchPayload);
