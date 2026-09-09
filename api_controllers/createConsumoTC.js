@@ -123,6 +123,21 @@ export default async function handler(req, res) {
             await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', exIds).eq('user_id', userId);
             await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', exIds).eq('user_id', userId);
           }
+
+          // Si es la última cuota (ej: 6/6), asegurarse de eliminar cualquier proyección futura residual de esta serie
+          if (cuotaAct >= cuotaTot && recurGroupId) {
+            const { data: trailingCuotas } = await supabase.from('consumos_tc')
+              .select('id_consumo_tarjeta')
+              .eq('id_tarjeta', targetCardId)
+              .eq('recur_group_id', recurGroupId)
+              .gt('fecha', fechaISO)
+              .eq('user_id', userId);
+            if (trailingCuotas && trailingCuotas.length > 0) {
+              const trIds = trailingCuotas.map(e => e.id_consumo_tarjeta);
+              await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', trIds).eq('user_id', userId);
+              await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', trIds).eq('user_id', userId);
+            }
+          }
         }
 
         // Si ya existían registros de este recurGroupId con fecha >= fechaISO, eliminamos para actualizar con los nuevos importes
