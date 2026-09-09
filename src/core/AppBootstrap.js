@@ -152,6 +152,7 @@ export class BaseModule {
     if(App.Events) {
       App.Events.on('store:cuenta-changed', recargar);
       App.Events.on('store:mes-changed',    recargar);
+      App.Events.on('store:moneda-changed', recargar);
       App.Events.on('data:changed',         recargar);
     }
   }

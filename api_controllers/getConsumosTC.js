@@ -29,63 +29,87 @@ export default async function handler(req, res) {
     let consumos = [];
     let error = null;
 
-    // Try RPC first
-    const rpcRes = await supabase.rpc('get_consumos_tc_list', {
-      p_id_cuenta: cuenta,
-      p_fecha_inicio: fechaInicio,
-      p_fecha_fin: fechaFin
+    // 1. First get all cards for this account
+    const { data: tarjetas, error: tErr } = await supabase
+      .from('tarjetas')
+      .select('id_tarjeta, nombre, fecha_cierre_actual, fecha_vencimiento_actual, total_resumen_ars, total_resumen_usd')
+      .eq('id_cuenta_principal', cuenta)
+      .eq('user_id', userId);
+    if (tErr) throw tErr;
+
+    const tarjetaMap = {};
+    const tarjetaIds = (tarjetas || []).map(t => {
+      tarjetaMap[t.id_tarjeta] = t.nombre;
+      return t.id_tarjeta;
     });
 
-    if (!rpcRes.error) {
-      consumos = rpcRes.data || [];
-      
-      // Map id_tarjeta based on tarjeta_nombre because the RPC doesn't return it
-      const { data: tarjetas } = await supabase
-        .from('tarjetas')
-        .select('id_tarjeta, nombre')
-        .eq('id_cuenta_principal', cuenta)
-        .eq('user_id', userId);
-        
-      if (tarjetas && tarjetas.length > 0) {
-        const tarjetaMap = {};
-        tarjetas.forEach(t => {
-          tarjetaMap[t.nombre.toLowerCase()] = t.id_tarjeta;
+    const consumosMap = new Map();
+
+    // Try RPC first for date range
+    try {
+      const rpcRes = await supabase.rpc('get_consumos_tc_list', {
+        p_id_cuenta: cuenta,
+        p_fecha_inicio: fechaInicio,
+        p_fecha_fin: fechaFin
+      });
+      if (!rpcRes.error && Array.isArray(rpcRes.data)) {
+        rpcRes.data.forEach(c => {
+          if (c.id_consumo_tarjeta) consumosMap.set(c.id_consumo_tarjeta, c);
         });
-        consumos.forEach(c => {
-          if (c.tarjeta_nombre) {
-            c.id_tarjeta = tarjetaMap[c.tarjeta_nombre.toLowerCase()] || null;
+      }
+    } catch (e) {
+      console.warn('[getConsumosTC] RPC notice:', e.message);
+    }
+
+    // Direct fallback for date range if RPC returned nothing
+    if (tarjetaIds.length > 0 && consumosMap.size === 0) {
+      let query = supabase.from('consumos_tc').select('*, categorias (nombre)').in('id_tarjeta', tarjetaIds).eq('user_id', userId);
+      if (fechaInicio) query = query.gte('fecha', fechaInicio);
+      if (fechaFin) query = query.lte('fecha', fechaFin);
+      const { data: dFallback } = await query;
+      (dFallback || []).forEach(c => {
+        consumosMap.set(c.id_consumo_tarjeta, {
+          ...c,
+          tarjeta_nombre: tarjetaMap[c.id_tarjeta] || '—',
+          categoria_nombre: c.categorias?.nombre || 'General'
+        });
+      });
+    }
+
+    // Include statement consumptions for any card whose vencimiento or cierre falls in [fechaInicio, fechaFin]
+    for (const tc of (tarjetas || [])) {
+      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual >= fechaInicio && tc.fecha_vencimiento_actual <= fechaFin) ||
+                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual >= fechaInicio && tc.fecha_cierre_actual <= fechaFin);
+      if (isDueInMonth) {
+        let qStmt = supabase.from('consumos_tc')
+          .select('*, categorias (nombre)')
+          .eq('id_tarjeta', tc.id_tarjeta)
+          .eq('user_id', userId);
+        if (tc.fecha_cierre_actual) {
+          qStmt = qStmt.lte('fecha', tc.fecha_cierre_actual);
+        }
+        const { data: stmtData } = await qStmt;
+        (stmtData || []).forEach(c => {
+          if (!consumosMap.has(c.id_consumo_tarjeta)) {
+            consumosMap.set(c.id_consumo_tarjeta, {
+              ...c,
+              tarjeta_nombre: tc.nombre,
+              categoria_nombre: c.categorias?.nombre || 'General'
+            });
           }
         });
       }
-    } else {
-       // Fallback: get tarjetas for this account, then get their consumos
-       const { data: tarjetas, error: tErr1 } = await supabase
-         .from('tarjetas')
-         .select('id_tarjeta, nombre')
-         .eq('id_cuenta_principal', cuenta)
-         .eq('user_id', userId);
-       if (tErr1) throw tErr1;
-       
-       const tarjetaMap = {};
-       const tarjetaIds = (tarjetas || []).map(t => {
-         tarjetaMap[t.id_tarjeta] = t.nombre;
-         return t.id_tarjeta;
-       });
-       
-       if (tarjetaIds.length > 0) {
-         let query = supabase.from('consumos_tc').select('*, categorias (nombre)').in('id_tarjeta', tarjetaIds).eq('user_id', userId);
-         if (fechaInicio) query = query.gte('fecha', fechaInicio);
-         if (fechaFin) query = query.lte('fecha', fechaFin);
-         const { data, error: tErr2 } = await query;
-         if (tErr2) throw tErr2;
-         
-         consumos = (data || []).map(c => ({
-           ...c,
-           tarjeta_nombre: tarjetaMap[c.id_tarjeta] || '—',
-           categoria_nombre: c.categorias?.nombre || 'General'
-         }));
-       }
     }
+
+    consumos = Array.from(consumosMap.values());
+
+    // Map id_tarjeta based on tarjeta_nombre if missing
+    consumos.forEach(c => {
+      if (!c.id_tarjeta && c.tarjeta_nombre) {
+        const found = (tarjetas || []).find(t => t.nombre.toLowerCase() === c.tarjeta_nombre.toLowerCase());
+        if (found) c.id_tarjeta = found.id_tarjeta;
+      }
+    });
 
     // Map the imputado and cuenta_imputada_nombre fields to align with layout expectations.
     // Query movements related to these card consumptions to verify if they are imputed.
@@ -129,6 +153,7 @@ export default async function handler(req, res) {
     let incidenciaFamiliar = 0;
 
     (consumos || []).forEach(c => {
+      if (c.moneda === 'USD') return;
       const imp = Number(c.importe || 0);
       saldoTotal += imp;
       

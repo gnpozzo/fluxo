@@ -15,6 +15,7 @@ export class AppStore {
     usuario       : null,
     globalCurrency: 'ARS',
     exchangeRate  : 1,
+    dolarOficial  : 1535,
     version       : '6.0.0'
   };
 
@@ -31,6 +32,7 @@ export class AppStore {
   get usuario()  { return this.#state.usuario ? { ...this.#state.usuario } : null; }
   get globalCurrency() { return this.#state.globalCurrency; }
   get exchangeRate() { return this.#state.exchangeRate; }
+  get dolarOficial() { return this.#state.dolarOficial || 1535; }
 
   getSnapshot() {
     return {
@@ -41,7 +43,8 @@ export class AppStore {
       version : this.#state.version,
       usuario : this.#state.usuario ? { ...this.#state.usuario } : null,
       globalCurrency: this.#state.globalCurrency,
-      exchangeRate: this.#state.exchangeRate
+      exchangeRate: this.#state.exchangeRate,
+      dolarOficial: this.#state.dolarOficial
     };
   }
 
@@ -64,6 +67,11 @@ export class AppStore {
   setExchangeRate(rate) {
     if (!rate || isNaN(rate)) return;
     this.#state.exchangeRate = Number(rate);
+  }
+
+  setDolarOficial(rate) {
+    if (!rate || isNaN(rate)) return;
+    this.#state.dolarOficial = Number(rate);
   }
 
   setMes(nuevoMes) {

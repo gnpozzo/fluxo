@@ -117,6 +117,7 @@ export class TarjetasModule extends BaseModule {
     // Recalculate KPIs from filtered data (don't trust backend if RPC leaks cross-account)
     let saldoTotal = 0, incidenciaPersonal = 0, incidenciaFamiliar = 0;
     filteredConsumos.forEach(c => {
+      if (c.moneda === 'USD') return;
       const imp = Number(c.importe || 0);
       saldoTotal += imp;
       if (c.imputado && c.cuenta_imputada_nombre !== 'Propios') {
@@ -126,16 +127,19 @@ export class TarjetasModule extends BaseModule {
       }
     });
 
-    // Fallback: Si no hay consumos puntuales cargados para este mes, verificar si hay un resumen con vencimiento o cierre en este mes
-    if (saldoTotal === 0) {
-      this.#tarjetas.forEach(tc => {
-        const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
-                             (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
-        if (isDueInMonth) {
-          saldoTotal += Number(tc.total_resumen_ars || 0);
-          incidenciaPersonal += Number(tc.total_resumen_ars || 0);
-        }
-      });
+    // Si hay tarjetas con total_resumen_ars cargado para este mes, usar el total oficial del resumen
+    let totalResumenArs = 0;
+    this.#tarjetas.forEach(tc => {
+      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+      if (isDueInMonth && Number(tc.total_resumen_ars || 0) > 0) {
+        totalResumenArs += Number(tc.total_resumen_ars);
+      }
+    });
+
+    if (totalResumenArs > 0) {
+      saldoTotal = totalResumenArs;
+      incidenciaPersonal = totalResumenArs - incidenciaFamiliar;
     }
 
     this.#kpiTotal?.setValue(saldoTotal);
@@ -670,10 +674,10 @@ export class TarjetasModule extends BaseModule {
     const getBrandLogoHtml = (brandName) => {
       const name = (brandName || '').toUpperCase();
       if (name.includes('VISA')) {
-        return `<svg viewBox="0 0 48 16" width="36" height="12" fill="#ffffff" style="opacity:0.95; display:block;"><path d="M18.2 1.2L15.3 15h-2.8L9.7 4.1C9.2 3.6 8.7 3.3 8 3.2L5 3v-.4h4.6c.6 0 1.1.4 1.2 1L12 11.2l3.5-10h2.7zm9.6 9.4c0-2.5-3.5-2.6-3.5-3.7 0-.3.3-.7 1-.8.3 0 1.3-.1 2.4.4l.4-2.5C27.4 3.7 26.3 3.4 25 3.4c-2.8 0-4.8 1.5-4.8 3.6 0 2.8 3.9 3 3.9 4.5 0 .5-.5.9-1.2.9-1.6 0-2.7-.7-2.7-.7l-.4 2.6c.7.3 2.1.6 3.5.6 3 0 5.2-1.5 5.2-3.7zM38.8 15h2.4L43.3 1.2h-2.4L38.8 15zm-9.3-13.8L27.2 15h2.6l1.6-4.4h6.3l.6 4.4h2.3L37.2 1.2H29.5zm2.3 7.2l2-5.5 1.1 5.5H31.8zM4.6 1.2L.2 11.9v.2c.4 1.1 1.5 1.7 2.6 1.7H11L12.3 8 7.6 1.2H4.6z" /></svg>`;
+        return `<span style="font-family:'Inter', sans-serif; font-weight:900; font-style:italic; font-size:1.15rem; letter-spacing:1.5px; color:#ffffff; line-height:1; text-shadow:0 1px 2px rgba(0,0,0,0.3);">VISA</span>`;
       }
       if (name.includes('AMEX') || name.includes('AMERICAN')) {
-        return `<div style="font-family:'Inter', sans-serif;font-weight:900;font-style:italic;font-size:0.75rem;letter-spacing:0.5px;color:#0070d2;background:#ffffff;padding:2px 4px;border-radius:2px;line-height:1;display:inline-block;box-shadow: 0 1px 3px rgba(0,0,0,0.2);">AMEX</div>`;
+        return `<div style="font-family:'Inter', sans-serif;font-weight:900;font-style:italic;font-size:0.75rem;letter-spacing:0.5px;color:#0070d2;background:#ffffff;padding:2px 5px;border-radius:2px;line-height:1;display:inline-block;box-shadow: 0 1px 3px rgba(0,0,0,0.2);">AMEX</div>`;
       }
       return `<svg viewBox="0 0 32 20" width="28" height="18" style="display:block;"><circle cx="10" cy="10" r="10" fill="#EB001B"/><circle cx="22" cy="10" r="10" fill="#F79E1B" opacity="0.85"/></svg>`;
     };
@@ -701,19 +705,16 @@ export class TarjetasModule extends BaseModule {
 
     // "Todas" / Consolidado premium card
     const isAllActive = !this.#selectedTcId;
-    let totalConsolArs = this.#allConsumos.filter(c => c.moneda !== 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
-    let totalConsolUsd = this.#allConsumos.filter(c => c.moneda === 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
-
-    if (totalConsolArs === 0 && totalConsolUsd === 0) {
-      this.#tarjetas.forEach(tc => {
-        const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
-                             (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
-        if (isDueInMonth) {
-          totalConsolArs += Number(tc.total_resumen_ars || 0);
-          totalConsolUsd += Number(tc.total_resumen_usd || 0);
-        }
-      });
-    }
+    let totalConsolArs = 0;
+    let totalConsolUsd = 0;
+    this.#tarjetas.forEach(tc => {
+      const subArs = subtotalsArs[tc.id_tarjeta] || 0;
+      const subUsd = subtotalsUsd[tc.id_tarjeta] || 0;
+      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+      totalConsolArs += (isDueInMonth && Number(tc.total_resumen_ars || 0) > 0) ? Number(tc.total_resumen_ars) : subArs;
+      totalConsolUsd += (isDueInMonth && Number(tc.total_resumen_usd || 0) > 0) ? Number(tc.total_resumen_usd) : subUsd;
+    });
 
     const consolUsdHtml = totalConsolUsd > 0
       ? `<span style="display:block; font-size:0.78rem; font-weight:600; opacity:0.9; margin-top:2px;">+ USD ${totalConsolUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`
@@ -755,8 +756,8 @@ export class TarjetasModule extends BaseModule {
       const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
                            (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
 
-      const displayArs = (subArs > 0) ? subArs : (isDueInMonth ? Number(tc.total_resumen_ars || 0) : 0);
-      const displayUsd = (subUsd > 0) ? subUsd : (isDueInMonth ? Number(tc.total_resumen_usd || 0) : 0);
+      const displayArs = (isDueInMonth && Number(tc.total_resumen_ars || 0) > 0) ? Number(tc.total_resumen_ars) : (subArs > 0 ? subArs : 0);
+      const displayUsd = (isDueInMonth && Number(tc.total_resumen_usd || 0) > 0) ? Number(tc.total_resumen_usd) : (subUsd > 0 ? subUsd : 0);
       
       const cardIssuer = ((tc.banco || tc.nombre || '').split(' ')[0] || 'BANCO').toUpperCase();
       const brandLogo = getBrandLogoHtml(tc.red || tc.marca || tc.nombre);
@@ -792,7 +793,7 @@ export class TarjetasModule extends BaseModule {
         
         <div class="tc-card-row tc-card-top">
           <span class="tc-card-issuer-name">${App.Utils.escapeHtml(cardIssuer)}</span>
-          ${brandLogo}
+          <div style="width:28px; height:18px;"></div>
         </div>
         
         <div class="tc-card-row tc-card-middle">

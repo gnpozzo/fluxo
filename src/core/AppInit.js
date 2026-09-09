@@ -151,8 +151,9 @@ class AppInit {
       const [initialData, pDolar] = await Promise.all([initialDataPromise, pDolarPromise]);
 
       // Si tenemos cotización, la guardamos en el state
-      if (pDolar && pDolar.success && pDolar.bolsa) {
-        App.Store.setExchangeRate(pDolar.bolsa.venta);
+      if (pDolar && pDolar.success) {
+        if (pDolar.bolsa) App.Store.setExchangeRate(pDolar.bolsa.venta);
+        if (pDolar.oficial) App.Store.setDolarOficial(pDolar.oficial.venta);
       }
 
       const defaultCuentas = [
