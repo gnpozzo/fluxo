@@ -1,8 +1,34 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import crypto from 'crypto';
 
+function parseDateSafe(val) {
+  if (!val) return new Date();
+  if (val instanceof Date) return isNaN(val.getTime()) ? new Date() : val;
+  const s = String(val).trim();
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) {
+    const day = dmy[1].padStart(2, '0');
+    const month = dmy[2].padStart(2, '0');
+    const year = dmy[3];
+    return new Date(`${year}-${month}-${day}T12:00:00Z`);
+  }
+  const ymd = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymd) {
+    const year = ymd[1];
+    const month = ymd[2].padStart(2, '0');
+    const day = ymd[3].padStart(2, '0');
+    return new Date(`${year}-${month}-${day}T12:00:00Z`);
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function toIsoDateStr(val) {
+  return parseDateSafe(val).toISOString().split('T')[0];
+}
+
 function addMonthsSafe(date, months) {
-  const d = new Date(date);
+  const d = parseDateSafe(date);
   const day = d.getUTCDate();
   d.setUTCMonth(d.getUTCMonth() + months);
   if (d.getUTCDate() !== day) {
@@ -41,7 +67,7 @@ export default async function handler(req, res) {
       await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', origId).eq('user_id', userId);
       await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
     } else if (scope === 'SERIES' && recurGrp) {
-      const origFecha = original.fecha?.value || original.fecha || '2000-01-01';
+      const origFecha = toIsoDateStr(original.fecha?.value || original.fecha || '2000-01-01');
       const { data: tcs } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
         .eq('recur_group_id', recurGrp)
         .eq('user_id', userId)
@@ -85,13 +111,14 @@ export default async function handler(req, res) {
     if (scope === 'SINGLE') data.tipo = 'SIMPLE';
     const tcRows = [];
     const movRows = [];
-    const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
+    const cleanImporte = Number(String(consumo.importe || 0).replace(',', '.'));
+    const fechaBase = parseDateSafe(consumo.fecha);
+    const fechaISO = toIsoDateStr(fechaBase);
     const tipo = consumo.tipoConsumo || consumo.tipo;
     const targetAccountId = consumo.idCuentaImputar;
 
     if (tipo === 'SIMPLE' || tipo === 'COMUN') {
       const idConsumo = crypto.randomUUID();
-      const fechaISO = fechaBase.toISOString().split('T')[0];
       tcRows.push({
         id_consumo_tarjeta: idConsumo,
         id_tarjeta: consumo.idTarjeta,
@@ -99,7 +126,7 @@ export default async function handler(req, res) {
         user_id: userId,
         fecha: fechaISO,
         descripcion: consumo.descripcion,
-        importe: consumo.importe
+        importe: cleanImporte
       });
       if (consumo.imputar && targetAccountId) {
         movRows.push({
@@ -110,13 +137,13 @@ export default async function handler(req, res) {
           id_categoria: consumo.idCategoria,
           tipo_mov: 'EGRESO',
           descripcion: consumo.descripcion,
-          importe: consumo.importe,
+          importe: cleanImporte,
           medio_pago: 'Tarjeta de Crédito',
           id_consumo_tarjeta_origen: idConsumo
         });
 
         if (cardAccountId && targetAccountId !== cardAccountId) {
-          const fechaReintegro = cardVto || fechaISO;
+          const fechaReintegro = toIsoDateStr(cardVto || fechaISO);
           const targetAccName = cuentaNombreMap[targetAccountId] || 'Externa';
           movRows.push({
             id_movimiento: crypto.randomUUID(),
@@ -126,7 +153,7 @@ export default async function handler(req, res) {
             id_categoria: 'CAT_REINTEGRO_TC',
             tipo_mov: 'INGRESO',
             descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
-            importe: consumo.importe,
+            importe: cleanImporte,
             medio_pago: 'Tarjeta de Crédito',
             id_consumo_tarjeta_origen: idConsumo
           });
@@ -138,15 +165,15 @@ export default async function handler(req, res) {
       for (let i = 0; i < cuotasARegistrar; i++) {
         const idConsumo = crypto.randomUUID();
         const cuotaNumActual = consumo.cuotaActual + i;
-        const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
+        const fechaCuota = toIsoDateStr(addMonthsSafe(fechaBase, i));
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
           id_categoria: consumo.idCategoria,
           user_id: userId,
-          fecha: fechaISO,
+          fecha: fechaCuota,
           descripcion: consumo.descripcion,
-          importe: consumo.importe,
+          importe: cleanImporte,
           cuota_actual: cuotaNumActual,
           cuota_total: consumo.cuotaTotal,
           recur_group_id: installmentGroupId
@@ -157,11 +184,11 @@ export default async function handler(req, res) {
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: targetAccountId,
             user_id: userId,
-            fecha: fechaISO,
+            fecha: fechaCuota,
             id_categoria: consumo.idCategoria,
             tipo_mov: 'EGRESO',
             descripcion: descImputacion,
-            importe: consumo.importe,
+            importe: cleanImporte,
             medio_pago: 'Tarjeta de Crédito',
             recur_group_id: installmentGroupId,
             id_consumo_tarjeta_origen: idConsumo
@@ -173,11 +200,11 @@ export default async function handler(req, res) {
               id_movimiento: crypto.randomUUID(),
               id_cuenta_principal: cardAccountId,
               user_id: userId,
-              fecha: fechaISO,
+              fecha: fechaCuota,
               id_categoria: 'CAT_REINTEGRO_TC',
               tipo_mov: 'INGRESO',
               descripcion: `Reintegro TC: ${consumo.descripcion} (${cuotaNumActual}/${consumo.cuotaTotal}) (${targetAccName})`,
-              importe: consumo.importe,
+              importe: cleanImporte,
               medio_pago: 'Tarjeta de Crédito',
               recur_group_id: installmentGroupId,
               id_consumo_tarjeta_origen: idConsumo
@@ -190,15 +217,15 @@ export default async function handler(req, res) {
       const numPeriodos = consumo.periodos || 12;
       for (let i = 0; i < numPeriodos; i++) {
         const idConsumo = crypto.randomUUID();
-        const fechaISO = addMonthsSafe(fechaBase, i).toISOString().split('T')[0];
+        const fechaRec = toIsoDateStr(addMonthsSafe(fechaBase, i));
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
           id_categoria: consumo.idCategoria,
           user_id: userId,
-          fecha: fechaISO,
+          fecha: fechaRec,
           descripcion: consumo.descripcion,
-          importe: consumo.importe,
+          importe: cleanImporte,
           recur_group_id: recurGroupId
         });
         if (consumo.imputar && targetAccountId) {
@@ -206,11 +233,11 @@ export default async function handler(req, res) {
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: targetAccountId,
             user_id: userId,
-            fecha: fechaISO,
+            fecha: fechaRec,
             id_categoria: consumo.idCategoria,
             tipo_mov: 'EGRESO',
             descripcion: consumo.descripcion,
-            importe: consumo.importe,
+            importe: cleanImporte,
             medio_pago: 'Tarjeta de Crédito',
             recur_group_id: recurGroupId,
             id_consumo_tarjeta_origen: idConsumo
@@ -222,11 +249,11 @@ export default async function handler(req, res) {
               id_movimiento: crypto.randomUUID(),
               id_cuenta_principal: cardAccountId,
               user_id: userId,
-              fecha: fechaISO,
+              fecha: fechaRec,
               id_categoria: 'CAT_REINTEGRO_TC',
               tipo_mov: 'INGRESO',
               descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
-              importe: consumo.importe,
+              importe: cleanImporte,
               medio_pago: 'Tarjeta de Crédito',
               recur_group_id: recurGroupId,
               id_consumo_tarjeta_origen: idConsumo

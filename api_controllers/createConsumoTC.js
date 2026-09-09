@@ -2,8 +2,34 @@ import { getSupabaseClient } from '../api_lib/supabase.js';
 import { verifyCuentaOwnership } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
+function parseDateSafe(val) {
+  if (!val) return new Date();
+  if (val instanceof Date) return isNaN(val.getTime()) ? new Date() : val;
+  const s = String(val).trim();
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) {
+    const day = dmy[1].padStart(2, '0');
+    const month = dmy[2].padStart(2, '0');
+    const year = dmy[3];
+    return new Date(`${year}-${month}-${day}T12:00:00Z`);
+  }
+  const ymd = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymd) {
+    const year = ymd[1];
+    const month = ymd[2].padStart(2, '0');
+    const day = ymd[3].padStart(2, '0');
+    return new Date(`${year}-${month}-${day}T12:00:00Z`);
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function toIsoDateStr(val) {
+  return parseDateSafe(val).toISOString().split('T')[0];
+}
+
 function addMonthsSafe(date, months) {
-  const d = new Date(date);
+  const d = parseDateSafe(date);
   const day = d.getUTCDate();
   d.setUTCMonth(d.getUTCMonth() + months);
   if (d.getUTCDate() !== day) {

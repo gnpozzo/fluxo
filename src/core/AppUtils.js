@@ -101,6 +101,24 @@ App.Utils = (() => {
   }
 
   /**
+   * Convierte cualquier formato de fecha a YYYY-MM-DD para inputs HTML o APIs
+   * @param {string|Date} fecha
+   */
+  function toInputDate(fecha) {
+    if (!fecha) return new Date().toISOString().split('T')[0];
+    if (typeof fecha === 'string') {
+      const s = fecha.trim();
+      const mIso = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      if (mIso) return `${mIso[1]}-${mIso[2].padStart(2, '0')}-${mIso[3].padStart(2, '0')}`;
+      const mDmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (mDmy) return `${mDmy[3]}-${mDmy[2].padStart(2, '0')}-${mDmy[1].padStart(2, '0')}`;
+    }
+    const d = new Date(fecha);
+    if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0];
+    return d.toISOString().split('T')[0];
+  }
+
+  /**
    * Formatea una fecha ISO a formato mes/año (ej: "Mar 2025").
    * @param {string} fecha  formato YYYY-MM-DD o YYYY-MM
    */
@@ -276,6 +294,7 @@ App.Utils = (() => {
     formatearPorcentaje,
     formatearFecha,
     formatearMes,
+    toInputDate,
     classeVariacion,
     // DOM
     escapeHtml,

@@ -320,9 +320,7 @@ export class TarjetasModule extends BaseModule {
         ${App.Utils.escapeHtml(c.nombre)}
       </option>`).join('');
 
-    const rawFecha = data
-      ? (data.fecha?.value || data.fecha || '').substring(0, 10)
-      : new Date().toISOString().substring(0, 10);
+    const rawFecha = App.Utils.toInputDate(data?.fecha?.value || data?.fecha);
 
     const tipoConsumo = data?.tipo_consumo || 'COMUN';
 
@@ -457,7 +455,8 @@ export class TarjetasModule extends BaseModule {
     const d  = {};
     fd.forEach((v, k) => { d[k] = v; });
 
-    if (!d.fecha || !d.id_tarjeta || !d.id_categoria || !d.descripcion || !d.importe || Number(d.importe) <= 0) {
+    const cleanImporte = Number(String(d.importe || '').replace(',', '.'));
+    if (!d.fecha || !d.id_tarjeta || !d.id_categoria || !d.descripcion || isNaN(cleanImporte) || cleanImporte <= 0) {
       App.Toast.warning('Completá todos los campos obligatorios.');
       return;
     }
@@ -465,10 +464,10 @@ export class TarjetasModule extends BaseModule {
     const payload = {
       idCuenta    : App.Store.cuenta,
       idTarjeta   : d.id_tarjeta,
-      fecha       : d.fecha,
+      fecha       : App.Utils.toInputDate(d.fecha),
       idCategoria : d.id_categoria,
       descripcion : d.descripcion,
-      importe     : Number(d.importe),
+      importe     : cleanImporte,
       tipoConsumo : d.tipo_consumo || 'COMUN',
       cuotaActual : Number(d.cuota_actual || 1),
       cuotaTotal  : Number(d.cuota_total  || 1),
@@ -484,10 +483,10 @@ export class TarjetasModule extends BaseModule {
           const ccPayload = {
             idCuenta: App.Store.cuenta,
             idCategoria: d.id_categoria,
-            fecha: d.fecha,
+            fecha: App.Utils.toInputDate(d.fecha),
             tipo: d.tipo_consumo || 'COMUN',
             descripcion: d.descripcion + ' (Tarjeta)',
-            importe: Number(d.importe),
+            importe: cleanImporte,
             pagador: 'YO',
             porcentajeImputado: Number(d.compartir_porcentaje || 50),
             cuotaActual: Number(d.cuota_actual || 1),
@@ -506,7 +505,7 @@ export class TarjetasModule extends BaseModule {
           original: {
             consumoId   : this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta,
             recurGroupId: this.#editData.recur_group_id || null,
-            fecha       : this.#editData.fecha?.value || this.#editData.fecha
+            fecha       : App.Utils.toInputDate(this.#editData.fecha?.value || this.#editData.fecha)
           },
           scope: reqScope
         };
