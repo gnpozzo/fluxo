@@ -174,7 +174,17 @@ export default async function handler(req, res) {
 
   try {
     const supabase = getSupabaseClient(req);
-    const body = Array.isArray(req.body) ? req.body[0] : req.body;
+    let body = req.body;
+    if (Array.isArray(body)) {
+      body = body[0];
+    } else if (body && Array.isArray(body.args)) {
+      body = body.args[0];
+    } else if (typeof body === 'string') {
+      try {
+        const parsed = JSON.parse(body);
+        body = Array.isArray(parsed) ? parsed[0] : (parsed.args ? parsed.args[0] : parsed);
+      } catch (e) {}
+    }
     const { fileBase64, mimeType } = body || {};
 
     const userId = req.user?.id;
@@ -230,7 +240,7 @@ export default async function handler(req, res) {
       const systemInstruction = `
 Eres un asistente de procesamiento de resúmenes de tarjeta de crédito para Fluxo.
 Extrae todas las compras, consumos, impuestos y percepciones del documento (ignora pagos como "SU PAGO EN PESOS").
-Determina los metadatos del resumen y la tarjeta.
+Determina los metadatos del resumen y la tarjeta (incluyendo próximo cierre y próximo vencimiento si están presentes en el resumen).
 
 Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de código markdown:
 {
@@ -240,6 +250,8 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
   "statement_info": {
     "fecha_cierre": "YYYY-MM-DD",
     "fecha_vencimiento": "YYYY-MM-DD",
+    "proximo_cierre": "YYYY-MM-DD o null",
+    "proximo_vencimiento": "YYYY-MM-DD o null",
     "total_ars": número,
     "total_usd": número
   },
@@ -323,9 +335,10 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 
       const match = cardConsumos.find(db => {
         const sameImp = Math.abs(Number(db.importe) - Number(tx.importe)) < 0.05;
+        const sameDate = db.fecha === tx.fecha;
         const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const sameDesc = normDb.includes(normTx.slice(0, 8)) || normTx.includes(normDb.slice(0, 8));
-        return sameImp && sameDesc;
+        const sameDesc = normDb.length >= 4 && normTx.length >= 4 && (normDb === normTx || normDb.startsWith(normTx) || normTx.startsWith(normDb));
+        return sameImp && sameDate && sameDesc;
       });
 
       if (match) {

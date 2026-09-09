@@ -630,6 +630,13 @@ export class DashboardModule extends BaseModule {
 
   async #loadTarjetas(cuenta, fechaInicio, fechaFin) {
     try {
+      if (!window._appTarjetas || window._appTarjetas.length === 0) {
+        try {
+          const initData = await App.API.call('api_getInitialData');
+          if (initData?.tarjetas) window._appTarjetas = initData.tarjetas;
+        } catch (e) {}
+      }
+
       const resp = await App.API.swr(
         'api_getConsumosTC',
         [cuenta, fechaInicio, fechaFin],
@@ -653,6 +660,7 @@ export class DashboardModule extends BaseModule {
     // Aggregate consumos by tarjeta — ONLY for tarjetas belonging to THIS account
     const consumosByTc = {};
     let totalGlobal = 0;
+    let totalGlobalUsd = 0;
     (data.consumos || []).forEach(c => {
       if (!c.id_tarjeta && c.tarjeta_nombre) {
         const found = tarjetas.find(t => t.nombre.toLowerCase() === c.tarjeta_nombre.toLowerCase());
@@ -660,17 +668,41 @@ export class DashboardModule extends BaseModule {
       }
       const tid = c.id_tarjeta;
       if (!validTcIds.has(tid)) return; // Skip consumos from other accounts' tarjetas
-      if (!consumosByTc[tid]) consumosByTc[tid] = { total: 0, count: 0, items: [] };
-      consumosByTc[tid].total += Number(c.importe || 0);
+      if (!consumosByTc[tid]) consumosByTc[tid] = { total: 0, totalUsd: 0, count: 0, items: [] };
+      if (c.moneda === 'USD') {
+        consumosByTc[tid].totalUsd += Number(c.importe || 0);
+        totalGlobalUsd += Number(c.importe || 0);
+      } else {
+        consumosByTc[tid].total += Number(c.importe || 0);
+        totalGlobal += Number(c.importe || 0);
+      }
       consumosByTc[tid].count++;
       consumosByTc[tid].items.push(c);
-      totalGlobal += Number(c.importe || 0);
     });
     this._tcConsumos = consumosByTc;
 
+    // Si no hay consumos puntuales cargados para este mes, verificar si hay un resumen con vencimiento o cierre en este mes
+    if (totalGlobal === 0 && totalGlobalUsd === 0) {
+      tarjetas.forEach(t => {
+        const stMesVto = t.fecha_vencimiento_actual?.substring(0, 7);
+        const stMesCierre = t.fecha_cierre_actual?.substring(0, 7);
+        const currMes = App.Store.mes;
+        if (stMesVto === currMes || stMesCierre === currMes) {
+          totalGlobal += Number(t.total_resumen_ars || 0);
+          totalGlobalUsd += Number(t.total_resumen_usd || 0);
+        }
+      });
+    }
+
     // KPI total
     const totalEl = document.getElementById('dash-tc-total');
-    if (totalEl) totalEl.textContent = App.Utils.formatearMoneda(totalGlobal);
+    if (totalEl) {
+      let tText = App.Utils.formatearMoneda(totalGlobal);
+      if (totalGlobalUsd > 0) {
+        tText += ` (+ USD ${totalGlobalUsd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+      }
+      totalEl.textContent = tText;
+    }
 
     // Enable arrows if > 1 tarjeta
     const prevBtn = document.getElementById('dash-tc-prev');
@@ -744,7 +776,20 @@ export class DashboardModule extends BaseModule {
     const brandLogoHtml = getBrandLogoHtml(tc.red || rawMarca);
 
     const cardData = this._tcConsumos?.[tc.id_tarjeta];
-    const subtotal = cardData?.total || 0;
+    let subtotal = cardData?.total || 0;
+    let subtotalUsd = cardData?.totalUsd || 0;
+
+    const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                         (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+
+    if (subtotal === 0 && subtotalUsd === 0 && isDueInMonth) {
+      subtotal = Number(tc.total_resumen_ars || 0);
+      subtotalUsd = Number(tc.total_resumen_usd || 0);
+    }
+
+    const usdBadge = subtotalUsd > 0
+      ? `<span style="display:block; font-size:0.75rem; font-weight:600; opacity:0.9; margin-top:2px;">+ USD ${subtotalUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`
+      : '';
 
     const cardHtml = `
       <div class="tc-card-pill" style="background:${gradient}; cursor:default; margin: 0 auto; user-select: none;">
@@ -764,6 +809,7 @@ export class DashboardModule extends BaseModule {
           <div class="tc-card-bottom-left">
             <span class="tc-card-number">**** ${last4}</span>
             <span class="tc-card-amount">${App.Utils.formatearMoneda(subtotal)}</span>
+            ${usdBadge}
           </div>
           <div class="tc-card-bottom-right">
             ${brandLogoHtml}
@@ -780,7 +826,15 @@ export class DashboardModule extends BaseModule {
     // Show per-card subtotal
     const subtotalEl = document.getElementById('dash-tc-subtotal');
     if (subtotalEl) {
-      subtotalEl.textContent = `Subtotal: ${App.Utils.formatearMoneda(subtotal)}`;
+      let txt = `Subtotal: ${App.Utils.formatearMoneda(subtotal)}`;
+      if (subtotalUsd > 0) {
+        txt += ` (+ USD ${subtotalUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+      }
+      if (tc.fecha_vencimiento_actual) {
+        const vtoFormatted = tc.fecha_vencimiento_actual.split('-').reverse().join('/');
+        txt += ` • Vence ${vtoFormatted}`;
+      }
+      subtotalEl.textContent = txt;
     }
   }
 

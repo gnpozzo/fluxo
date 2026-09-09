@@ -16,7 +16,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const consumo = Array.isArray(req.body) ? req.body[0] : req.body;
+    let consumo = req.body;
+    if (Array.isArray(consumo)) {
+      consumo = consumo[0];
+    } else if (consumo && Array.isArray(consumo.args)) {
+      consumo = consumo.args[0];
+    } else if (typeof consumo === 'string') {
+      try {
+        const parsed = JSON.parse(consumo);
+        consumo = Array.isArray(parsed) ? parsed[0] : (parsed.args ? parsed.args[0] : parsed);
+      } catch (e) {}
+    }
+    consumo = consumo || {};
     
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
@@ -35,42 +46,144 @@ export default async function handler(req, res) {
 
     const tcRows = [];
     const movRows = [];
-    const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
-    const moneda = consumo.moneda || 'ARS';
 
-    if (consumo.tipoConsumo === 'COMUN' || consumo.tipoConsumo === 'SIMPLE') {
-      const idConsumo = crypto.randomUUID();
-      const fechaISO = fechaBase.toISOString().split('T')[0];
-      
-      tcRows.push({
-        id_consumo_tarjeta: idConsumo,
-        id_tarjeta: consumo.idTarjeta,
-        id_categoria: consumo.idCategoria,
-        user_id: userId,
-        fecha: fechaISO,
-        descripcion: consumo.descripcion,
-        importe: consumo.importe,
-        moneda: moneda
-      });
+    // --- MODO BATCH (Importación completa de resumen en una sola llamada) ---
+    if (consumo.batch && Array.isArray(consumo.consumos)) {
+      const targetCardId = consumo.idTarjeta;
+      const targetAccountId = consumo.idCuentaImputar || consumo.idCuenta;
 
-      if (consumo.imputar) {
-        movRows.push({
-          id_movimiento: crypto.randomUUID(),
-          id_cuenta_principal: consumo.idCuentaImputar,
+      for (const item of consumo.consumos) {
+        const idConsumo = crypto.randomUUID();
+        const monedaItem = item.moneda || 'ARS';
+        const fechaISO = (item.fecha ? String(item.fecha).substring(0, 10) : new Date().toISOString().split('T')[0]);
+        const cuotaTot = Number(item.cuotaTotal || item.cuota_total || 1);
+        const cuotaAct = Number(item.cuotaActual || item.cuota_actual || 1);
+
+        tcRows.push({
+          id_consumo_tarjeta: idConsumo,
+          id_tarjeta: targetCardId,
+          id_categoria: item.idCategoria || item.id_categoria || null,
           user_id: userId,
           fecha: fechaISO,
-          id_categoria: consumo.idCategoria,
-          tipo_mov: 'EGRESO',
-          descripcion: consumo.descripcion,
-          importe: consumo.importe,
-          moneda: moneda,
-          medio_pago: 'Tarjeta de Crédito',
-          id_consumo_tarjeta_origen: idConsumo
+          descripcion: item.descripcion,
+          importe: Number(item.importe || 0),
+          moneda: monedaItem,
+          cuota_actual: cuotaTot > 1 ? cuotaAct : null,
+          cuota_total: cuotaTot > 1 ? cuotaTot : null,
+          recur_group_id: cuotaTot > 1 ? (item.recur_group_id || ('INSTL_' + crypto.randomUUID())) : null
         });
+
+        if (consumo.imputar && targetAccountId) {
+          movRows.push({
+            id_movimiento: crypto.randomUUID(),
+            id_cuenta_principal: targetAccountId,
+            user_id: userId,
+            fecha: fechaISO,
+            id_categoria: item.idCategoria || item.id_categoria || null,
+            tipo_mov: 'EGRESO',
+            descripcion: item.descripcion + (cuotaTot > 1 ? ` (${cuotaAct}/${cuotaTot})` : ''),
+            importe: Number(item.importe || 0),
+            moneda: monedaItem,
+            medio_pago: 'Tarjeta de Crédito',
+            id_consumo_tarjeta_origen: idConsumo
+          });
+        }
       }
 
-    } else if (consumo.tipoConsumo === 'CUOTAS') {
-      const installmentGroupId = 'INSTL_' + crypto.randomUUID();
+      // Si viene metadata del resumen, actualizamos la tarjeta y creamos recordatorios automáticos
+      if (consumo.statementInfo && targetCardId) {
+        const st = consumo.statementInfo;
+        const updateFields = {};
+        if (st.fecha_cierre) updateFields.fecha_cierre_actual = st.fecha_cierre;
+        if (st.fecha_vencimiento) updateFields.fecha_vencimiento_actual = st.fecha_vencimiento;
+        if (st.proximo_cierre) updateFields.proximo_cierre = st.proximo_cierre;
+        if (st.proximo_vencimiento) updateFields.proximo_vencimiento = st.proximo_vencimiento;
+        if (st.total_ars != null) updateFields.total_resumen_ars = Number(st.total_ars);
+        if (st.total_usd != null) updateFields.total_resumen_usd = Number(st.total_usd);
+
+        if (Object.keys(updateFields).length > 0) {
+          await supabase.from('tarjetas').update(updateFields).eq('id_tarjeta', targetCardId).eq('user_id', userId);
+        }
+
+        // Generar recordatorios automáticos de cierre y vencimiento
+        if (st.fecha_vencimiento) {
+          const vDate = new Date(st.fecha_vencimiento + 'T12:00:00Z');
+          const reminderVto = new Date(vDate);
+          reminderVto.setDate(reminderVto.getDate() - 3); // 3 días antes
+          const remVtoStr = reminderVto.toISOString().split('T')[0];
+
+          const saldoArsStr = st.total_ars ? `$ ${Number(st.total_ars).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '$ 0,00';
+          const saldoUsdStr = st.total_usd ? ` y U$S ${Number(st.total_usd).toFixed(2)}` : '';
+          const msgVto = `Tu resumen de tarjeta vence el ${st.fecha_vencimiento.split('-').reverse().join('/')}. Saldo a pagar: ${saldoArsStr}${saldoUsdStr}`;
+
+          await supabase.from('recordatorios').insert([{
+            id_recordatorio: crypto.randomUUID(),
+            id_cuenta_principal: targetAccountId,
+            user_id: userId,
+            mensaje: msgVto,
+            fecha_proxima: remVtoStr,
+            frecuencia: 'MENSUAL',
+            canales: 'app,telegram',
+            activa: true
+          }]);
+        }
+
+        if (st.proximo_cierre) {
+          const cDate = new Date(st.proximo_cierre + 'T12:00:00Z');
+          cDate.setDate(cDate.getDate() - 2); // 2 días antes del cierre
+          const remCierreStr = cDate.toISOString().split('T')[0];
+          const msgCierre = `Aviso de cierre: Tu tarjeta cierra su ciclo el ${st.proximo_cierre.split('-').reverse().join('/')}`;
+
+          await supabase.from('recordatorios').insert([{
+            id_recordatorio: crypto.randomUUID(),
+            id_cuenta_principal: targetAccountId,
+            user_id: userId,
+            mensaje: msgCierre,
+            fecha_proxima: remCierreStr,
+            frecuencia: 'MENSUAL',
+            canales: 'app,telegram',
+            activa: true
+          }]);
+        }
+      }
+
+    } else {
+      // --- MODO INDIVIDUAL ---
+      const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
+      const moneda = consumo.moneda || 'ARS';
+
+      if (consumo.tipoConsumo === 'COMUN' || consumo.tipoConsumo === 'SIMPLE') {
+        const idConsumo = crypto.randomUUID();
+        const fechaISO = fechaBase.toISOString().split('T')[0];
+        
+        tcRows.push({
+          id_consumo_tarjeta: idConsumo,
+          id_tarjeta: consumo.idTarjeta,
+          id_categoria: consumo.idCategoria,
+          user_id: userId,
+          fecha: fechaISO,
+          descripcion: consumo.descripcion,
+          importe: consumo.importe,
+          moneda: moneda
+        });
+
+        if (consumo.imputar) {
+          movRows.push({
+            id_movimiento: crypto.randomUUID(),
+            id_cuenta_principal: consumo.idCuentaImputar,
+            user_id: userId,
+            fecha: fechaISO,
+            id_categoria: consumo.idCategoria,
+            tipo_mov: 'EGRESO',
+            descripcion: consumo.descripcion,
+            importe: consumo.importe,
+            moneda: moneda,
+            medio_pago: 'Tarjeta de Crédito',
+            id_consumo_tarjeta_origen: idConsumo
+          });
+        }
+      } else if (consumo.tipoConsumo === 'CUOTAS') {
+        const installmentGroupId = 'INSTL_' + crypto.randomUUID();
       const cuotasARegistrar = (consumo.cuotaTotal - consumo.cuotaActual) + 1;
       
       for (let i = 0; i < cuotasARegistrar; i++) {
@@ -148,6 +261,7 @@ export default async function handler(req, res) {
         }
       }
     }
+  }
 
     if (tcRows.length > 0) {
       const { error: tcError } = await supabase.from('consumos_tc').insert(tcRows);

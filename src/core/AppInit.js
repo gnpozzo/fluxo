@@ -136,7 +136,7 @@ class AppInit {
 
     try {
       // Carga inicial: datos maestros y cotización Dólar (con fallback resiliente)
-      const initialDataPromise = App.API.cached('api_getInitialData', [], 24 * 60 * 60 * 1000)
+      const initialDataPromise = App.API.cached('api_getInitialData', [], 30_000)
         .catch(err => {
           App.warn('AppInit', 'getInitialData failed:', err.message);
           return null;

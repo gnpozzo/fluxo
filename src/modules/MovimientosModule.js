@@ -161,7 +161,7 @@ export class MovimientosModule extends BaseModule {
           { key: 'descripcion',     label: 'Descripción', searchable: true,
             render: (r) => this.#renderDescripcion(r) },
           { key: 'importe',         label: 'Importe',    sortable: true, align: 'right',
-            render: (r) => `<span class="${r.tipo_mov === 'EGRESO' ? 'negativo' : 'positivo'}">${App.Utils.formatearMoneda(r.importe)}</span>` }
+            render: (r) => `<span class="${r.tipo_mov === 'EGRESO' ? 'negativo' : 'positivo'}">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>` }
         ],
         emptyMsg  : 'No hay movimientos para este período.',
         searchable: false,
@@ -718,7 +718,7 @@ export class MovimientosModule extends BaseModule {
         <div class="detail-grid">
           <div class="detail-item">
             <span class="detail-label">Importe</span>
-            <span class="detail-value detail-amount ${colorClass}">${App.Utils.formatearMoneda(row.importe)}</span>
+            <span class="detail-value detail-amount ${colorClass}">${row.moneda === 'USD' ? 'USD ' + Number(row.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(row.importe)}</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">Tipo</span>

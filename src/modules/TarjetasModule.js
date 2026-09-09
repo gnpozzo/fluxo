@@ -29,6 +29,7 @@ export class TarjetasModule extends BaseModule {
   #allConsumos = [];
   #selectedTcId = null;
   #txListImportar = [];
+  #lastStatementPayload = null;
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -42,9 +43,19 @@ export class TarjetasModule extends BaseModule {
   }
 
   async cargar() {
-    if (App.Store.isModuloLoaded(this.moduleId)) return;
-    const { cuenta, mes } = App.Store;
+    const cuenta = App.Store.cuenta;
+    const mes = App.Store.mes;
     if (!cuenta || !mes) return;
+
+    if (!window._appTarjetas || window._appTarjetas.length === 0) {
+      try {
+        const initData = await App.API.call('api_getInitialData');
+        if (initData?.tarjetas) window._appTarjetas = initData.tarjetas;
+        if (initData?.categorias) window._appCategorias = initData.categorias;
+      } catch (e) {
+        console.warn('Fallback getInitialData failed in TarjetasModule', e);
+      }
+    }
 
     const { fechaInicio, fechaFin } = this.#calcFechas(mes);
     this.#mostrarKpiSkeletons();
@@ -114,6 +125,18 @@ export class TarjetasModule extends BaseModule {
         incidenciaPersonal += imp;
       }
     });
+
+    // Fallback: Si no hay consumos puntuales cargados para este mes, verificar si hay un resumen con vencimiento o cierre en este mes
+    if (saldoTotal === 0) {
+      this.#tarjetas.forEach(tc => {
+        const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                             (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+        if (isDueInMonth) {
+          saldoTotal += Number(tc.total_resumen_ars || 0);
+          incidenciaPersonal += Number(tc.total_resumen_ars || 0);
+        }
+      });
+    }
 
     this.#kpiTotal?.setValue(saldoTotal);
     this.#kpiImputado?.setValue(incidenciaPersonal, { invertido: incidenciaPersonal < 0 });
@@ -678,8 +701,19 @@ export class TarjetasModule extends BaseModule {
 
     // "Todas" / Consolidado premium card
     const isAllActive = !this.#selectedTcId;
-    const totalConsolArs = this.#allConsumos.filter(c => c.moneda !== 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
-    const totalConsolUsd = this.#allConsumos.filter(c => c.moneda === 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
+    let totalConsolArs = this.#allConsumos.filter(c => c.moneda !== 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
+    let totalConsolUsd = this.#allConsumos.filter(c => c.moneda === 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
+
+    if (totalConsolArs === 0 && totalConsolUsd === 0) {
+      this.#tarjetas.forEach(tc => {
+        const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                             (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+        if (isDueInMonth) {
+          totalConsolArs += Number(tc.total_resumen_ars || 0);
+          totalConsolUsd += Number(tc.total_resumen_usd || 0);
+        }
+      });
+    }
 
     const consolUsdHtml = totalConsolUsd > 0
       ? `<span style="display:block; font-size:0.78rem; font-weight:600; opacity:0.9; margin-top:2px;">+ USD ${totalConsolUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`
@@ -717,12 +751,18 @@ export class TarjetasModule extends BaseModule {
       const last4 = tc.ultimos_4_digitos || tc.ultimos_4 || '••••';
       const subArs = subtotalsArs[tc.id_tarjeta] || 0;
       const subUsd = subtotalsUsd[tc.id_tarjeta] || 0;
+
+      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+
+      const displayArs = (subArs > 0) ? subArs : (isDueInMonth ? Number(tc.total_resumen_ars || 0) : 0);
+      const displayUsd = (subUsd > 0) ? subUsd : (isDueInMonth ? Number(tc.total_resumen_usd || 0) : 0);
       
       const cardIssuer = ((tc.banco || tc.nombre || '').split(' ')[0] || 'BANCO').toUpperCase();
       const brandLogo = getBrandLogoHtml(tc.red || tc.marca || tc.nombre);
       
-      const usdHtml = subUsd > 0
-        ? `<span style="display:block; font-size:0.78rem; font-weight:600; opacity:0.9; margin-top:2px;">+ USD ${subUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`
+      const usdHtml = displayUsd > 0
+        ? `<span style="display:block; font-size:0.78rem; font-weight:600; opacity:0.9; margin-top:2px;">+ USD ${displayUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`
         : '';
       
       let gradient;
@@ -763,7 +803,7 @@ export class TarjetasModule extends BaseModule {
         <div class="tc-card-row tc-card-bottom">
           <div class="tc-card-bottom-left">
             <span class="tc-card-number">**** ${last4}</span>
-            <span class="tc-card-amount">${App.Utils.formatearMoneda(subArs)}</span>
+            <span class="tc-card-amount">${App.Utils.formatearMoneda(displayArs)}</span>
             ${usdHtml}
           </div>
           <div class="tc-card-bottom-right">
@@ -979,6 +1019,7 @@ export class TarjetasModule extends BaseModule {
   }
 
   #showImportResults(payload) {
+    this.#lastStatementPayload = payload;
     document.getElementById('tc-import-step-parsing').classList.add('hidden');
     document.getElementById('tc-import-step-results').classList.remove('hidden');
 
@@ -1078,6 +1119,10 @@ export class TarjetasModule extends BaseModule {
         diffDescHtml = `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Ya existe en la base de datos — desmarcado para no duplicar)</small>`;
       }
 
+      const importeFmt = tx.moneda === 'USD'
+        ? `USD ${Number(tx.importe || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : App.Utils.formatearMoneda(tx.importe);
+
       return `
         <tr style="border-bottom:1px solid var(--border-color); ${isMatch ? 'opacity:0.75;' : ''}">
           <td style="padding:10px; text-align:center">
@@ -1107,7 +1152,7 @@ export class TarjetasModule extends BaseModule {
               </div>
             </div>
           </td>
-          <td style="padding:10px; text-align:right; font-weight:500" class="negativo">${App.Utils.formatearMoneda(tx.importe)}</td>
+          <td style="padding:10px; text-align:right; font-weight:500" class="negativo">${importeFmt}</td>
         </tr>
       `;
     }).join('');
@@ -1157,21 +1202,13 @@ export class TarjetasModule extends BaseModule {
     }
 
     modal.setLoading(true);
-    let importedCount = 0;
 
     try {
+      // 1. Eliminar consumos marcados como DIFF para ser reemplazados
       for (const chk of checkedRowChks) {
         const txId = chk.dataset.id;
         const originalTx = this.#txListImportar.find(t => t.id === txId);
-        if (!originalTx) continue;
-
-        const desc = document.getElementById(`tx-desc-${txId}`).value;
-        const cat = document.getElementById(`tx-cat-${txId}`).value;
-        const type = document.getElementById(`tx-type-${txId}`).value;
-        const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`).value || 1);
-        const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`).value || 1);
-
-        if (originalTx.type === 'DIFF' && originalTx.dbRecord) {
+        if (originalTx?.type === 'DIFF' && originalTx.dbRecord) {
           const { dbRecord } = originalTx;
           try {
             await App.API.call(this._deleteEndpoint, [
@@ -1184,30 +1221,52 @@ export class TarjetasModule extends BaseModule {
             console.warn('Failed to delete old diff record', delErr);
           }
         }
+      }
 
-        const payloadData = {
-          idCuenta: App.Store.cuenta,
-          idTarjeta: targetCard,
-          fecha: originalTx.fecha,
-          idCategoria: cat,
+      // 2. Construir batch con todos los consumos seleccionados
+      const batchConsumos = [];
+      for (const chk of checkedRowChks) {
+        const txId = chk.dataset.id;
+        const originalTx = this.#txListImportar.find(t => t.id === txId);
+        if (!originalTx) continue;
+
+        const desc = document.getElementById(`tx-desc-${txId}`).value;
+        const cat = document.getElementById(`tx-cat-${txId}`).value;
+        const type = document.getElementById(`tx-type-${txId}`).value;
+        const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`).value || 1);
+        const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`).value || 1);
+
+        batchConsumos.push({
           descripcion: desc,
-          importe: originalTx.importe,
+          idCategoria: cat,
+          importe: Number(originalTx.importe || 0),
+          moneda: originalTx.moneda || 'ARS',
+          fecha: originalTx.fecha,
           tipoConsumo: type,
           cuotaActual: cuotaAct,
           cuotaTotal: cuotaTot,
-          imputar: true,
-          idCuentaImputar: targetAccount
-        };
-
-        await App.API.call(this._createEndpoint, payloadData);
-        importedCount++;
+          recur_group_id: originalTx.recur_group_id || null
+        });
       }
 
+      // 3. Ejecutar guardado atómico en una sola llamada batch
+      const batchPayload = {
+        batch: true,
+        idCuenta: App.Store.cuenta,
+        idTarjeta: targetCard,
+        idCuentaImputar: targetAccount,
+        imputar: true,
+        statementInfo: this.#lastStatementPayload?.statement_info || null,
+        consumos: batchConsumos
+      };
+
+      await App.API.call(this._createEndpoint, batchPayload);
+
       // Check which month the imported transactions belong to
-      const sampleTx = checkedRowChks[0] ? this.#txListImportar.find(t => t.id === checkedRowChks[0].dataset.id) : null;
+      const sampleTx = batchConsumos[0];
       const txMonth = sampleTx?.fecha ? sampleTx.fecha.substring(0, 7) : null;
 
-      let msg = `¡Importación finalizada con éxito! Se cargaron ${importedCount} consumos.`;
+      let msg = `¡Importación finalizada con éxito! Se cargaron ${batchConsumos.length} consumos.`;
       if (txMonth && txMonth !== App.Store.mes) {
         const [y, m] = txMonth.split('-');
         const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
