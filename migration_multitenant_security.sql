@@ -57,6 +57,10 @@ ALTER TABLE public.categorias
 ALTER TABLE public.bot_sessions 
   ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 
+-- Recordatorios
+ALTER TABLE public.recordatorios 
+  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
 -- ------------------------------------------------------------------------------
 -- 2. LIMPIEZA TOTAL DE MOVIMIENTOS Y DATOS HISTÓRICOS (TABLA RASA)
 -- ------------------------------------------------------------------------------
@@ -72,7 +76,8 @@ CASCADE;
 -- Limpieza de sesiones anteriores de bot
 DELETE FROM public.bot_sessions;
 
--- Limpieza de entidades previas huérfanas o heredadas (tarjetas, subcuentas, cuentas anteriores)
+-- Limpieza de entidades previas huérfanas o heredadas (tarjetas, subcuentas, recordatorios, cuentas anteriores)
+DELETE FROM public.recordatorios;
 DELETE FROM public.tarjetas;
 DELETE FROM public.ahorro_subcuentas;
 DELETE FROM public.cta_corriente_usuarios;
@@ -101,7 +106,7 @@ BEGIN
         modulo_ahorro_activo,
         modulo_inversiones_activo
       ) VALUES (
-        v_cuenta_id,
+        v_cuenta_id::text,
         'Personal',
         'ARS',
         true,
@@ -122,9 +127,9 @@ BEGIN
         user_id
       ) VALUES (
         gen_random_uuid(),
-        COALESCE(u.raw_user_meta_data->>'full_name', 'Yo (Principal)'),
+        COALESCE(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name', 'Gastón Pozzo'),
         true,
-        v_cuenta_id,
+        v_cuenta_id::text,
         u.id
       ) ON CONFLICT DO NOTHING;
 
@@ -133,10 +138,11 @@ BEGIN
         id_subcuenta,
         id_cuenta_principal,
         nombre,
+        moneda,
         user_id
       ) VALUES 
-        (gen_random_uuid(), v_cuenta_id, 'Fondo de Emergencia', u.id),
-        (gen_random_uuid(), v_cuenta_id, 'Ahorro General', u.id)
+        (gen_random_uuid(), v_cuenta_id::text, 'Fondo de Emergencia', 'ARS', u.id),
+        (gen_random_uuid(), v_cuenta_id::text, 'Ahorro General', 'ARS', u.id)
       ON CONFLICT DO NOTHING;
     END IF;
   END LOOP;
@@ -243,6 +249,15 @@ CREATE POLICY "Users can manage own categories"
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+-- Recordatorios
+ALTER TABLE public.recordatorios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable ALL for authenticated users" ON public.recordatorios;
+DROP POLICY IF EXISTS "Users can only access their own recordatorios" ON public.recordatorios;
+CREATE POLICY "Users can only access their own recordatorios"
+  ON public.recordatorios FOR ALL
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
 -- Cotizaciones (Solo lectura para autenticados)
 ALTER TABLE public.cotizaciones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable ALL for authenticated users" ON public.cotizaciones;
@@ -269,6 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_inversiones_user_id ON public.inversiones_movimie
 CREATE INDEX IF NOT EXISTS idx_cc_consumos_user_id ON public.cc_consumos(user_id);
 CREATE INDEX IF NOT EXISTS idx_cta_corriente_usuarios_user_id ON public.cta_corriente_usuarios(user_id);
 CREATE INDEX IF NOT EXISTS idx_categorias_user_id ON public.categorias(user_id);
+CREATE INDEX IF NOT EXISTS idx_recordatorios_user_id ON public.recordatorios(user_id);
 
 -- ------------------------------------------------------------------------------
 -- 5. TRIGGER DE APROVISIONAMIENTO AUTOMÁTICO PARA NUEVOS USUARIOS
@@ -293,7 +309,7 @@ BEGIN
     modulo_ahorro_activo,
     modulo_inversiones_activo
   ) VALUES (
-    v_cuenta_id,
+    v_cuenta_id::text,
     'Personal',
     'ARS',
     true,
@@ -314,9 +330,9 @@ BEGIN
     user_id
   ) VALUES (
     gen_random_uuid(),
-    COALESCE(new.raw_user_meta_data->>'full_name', 'Yo (Principal)'),
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', 'Gastón Pozzo'),
     true,
-    v_cuenta_id,
+    v_cuenta_id::text,
     new.id
   ) ON CONFLICT DO NOTHING;
 
@@ -325,10 +341,11 @@ BEGIN
     id_subcuenta,
     id_cuenta_principal,
     nombre,
+    moneda,
     user_id
   ) VALUES 
-    (gen_random_uuid(), v_cuenta_id, 'Fondo de Emergencia', new.id),
-    (gen_random_uuid(), v_cuenta_id, 'Ahorro General', new.id)
+    (gen_random_uuid(), v_cuenta_id::text, 'Fondo de Emergencia', 'ARS', new.id),
+    (gen_random_uuid(), v_cuenta_id::text, 'Ahorro General', 'ARS', new.id)
   ON CONFLICT DO NOTHING;
 
   RETURN NEW;
