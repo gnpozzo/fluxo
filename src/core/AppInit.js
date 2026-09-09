@@ -135,26 +135,26 @@ class AppInit {
     this.#initModulos();
 
     try {
-      // Carga inicial: datos maestros y cotización Dólar (con fallback resiliente)
+      // Carga inicial de datos maestros inmediata
       const initialDataPromise = App.API.cached('api_getInitialData', [], 30_000)
         .catch(err => {
           App.warn('AppInit', 'getInitialData failed:', err.message);
           return null;
         });
 
-      const pDolarPromise = App.API.cached('api_getDolarCotizaciones', [], 10 * 60_000)
+      // Cotizaciones Dólar en segundo plano (no bloquea la visualización inicial de saldos)
+      App.API.cached('api_getDolarCotizaciones', [], 10 * 60_000)
+        .then(pDolar => {
+          if (pDolar && pDolar.success) {
+            if (pDolar.bolsa) App.Store.setExchangeRate(pDolar.bolsa.venta);
+            if (pDolar.oficial) App.Store.setDolarOficial(pDolar.oficial.venta);
+          }
+        })
         .catch(err => {
           App.warn('AppInit', 'getDolarCotizaciones notice:', err.message);
-          return { success: true, bolsa: { compra: 1520, venta: 1545 } };
         });
 
-      const [initialData, pDolar] = await Promise.all([initialDataPromise, pDolarPromise]);
-
-      // Si tenemos cotización, la guardamos en el state
-      if (pDolar && pDolar.success) {
-        if (pDolar.bolsa) App.Store.setExchangeRate(pDolar.bolsa.venta);
-        if (pDolar.oficial) App.Store.setDolarOficial(pDolar.oficial.venta);
-      }
+      const initialData = await initialDataPromise;
 
       const defaultCuentas = [
         { id_cuenta_principal: 'Principal', nombre: 'Principal', es_predeterminada: true, activa: true, modulo_tarjetas_activo: true, modulo_cc_activo: true, modulo_ahorro_activo: true, modulo_inversiones_activo: true }

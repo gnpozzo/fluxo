@@ -109,6 +109,10 @@ export class AppStore {
     return this.#state.modulosLoaded.has(moduloId);
   }
 
+  invalidateAll() {
+    this.#state.modulosLoaded.clear();
+  }
+
   #invalidarTodosModulos() {
     this.#state.modulosLoaded.clear();
   }

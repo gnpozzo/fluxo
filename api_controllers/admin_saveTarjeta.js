@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   try {
     const supabase = getSupabaseClient(req);
     // AppAPI.js wrappea los argumentos en { args: [...] } si se usa call()
-    const payload = Array.isArray(req.body) ? req.body[0] : req.body;
+    const payload = req.body?.args ? req.body.args[0] : (Array.isArray(req.body) ? req.body[0] : req.body);
     
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });

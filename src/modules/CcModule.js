@@ -79,7 +79,7 @@ export class CCModule extends BaseModule {
     const { kpis, consumos } = data;
 
     // Categorías y usuarios desde globales (cargados en boot o refrescados en cargar)
-    if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
+    this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : this.#categorias;
     this.#usuarios = window._appUsuariosCC || [];
 
     this.#kpiYo?.setValue(kpis.gastoYo);

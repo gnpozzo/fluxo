@@ -83,7 +83,7 @@ export class MovimientosModule extends BaseModule {
     const { kpis, movimientos } = data;
 
     // Categorías y cuentas desde el estado global
-    if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
+    this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : this.#categorias;
     if (!this.#cuentas.length)    this.#cuentas    = App.Store.cuentas     || [];
 
     // KPIs

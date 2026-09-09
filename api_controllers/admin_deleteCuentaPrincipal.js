@@ -7,7 +7,8 @@ export default async function handler(req, res) {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const id = Array.isArray(req.body) ? req.body[0] : req.body;
+    const payload = req.body?.args ? req.body.args[0] : (Array.isArray(req.body) ? req.body[0] : req.body);
+    const id = (typeof payload === 'object' && payload !== null) ? (payload.id || payload.id_cuenta_principal) : payload;
     
     if (!id) throw new Error('ID requerido');
 

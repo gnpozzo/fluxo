@@ -232,34 +232,69 @@ export class AdminModule extends BaseModule {
       const response = await App.API.cached('api_admin_getCategorias', [], 2 * 60_000);
       const cats = response?.data || [];
       content.innerHTML = `
-        <div class="section-header">
+        <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
           <h2 style="margin:0">Categorías</h2>
           <button id="adm-btn-nueva-cat" class="btn btn-primary">
             ${App.Icons.get('add', 'icon-sm')} Nueva
           </button>
         </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <div style="flex:1;min-width:200px;position:relative;">
+            <input type="text" id="adm-cat-search" class="input" placeholder="Buscar categoría..." style="width:100%;padding-left:34px;">
+            <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--texto-3);pointer-events:none;" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <select id="adm-cat-filter-tipo" class="input select" style="width:auto;min-width:150px;">
+            <option value="ALL">Todos los tipos</option>
+            <option value="EGRESO">Egresos</option>
+            <option value="INGRESO">Ingresos</option>
+          </select>
+        </div>
         <div class="table-card">
           <table class="table">
             <thead><tr><th>Nombre</th><th>Tipo</th><th>Activa</th><th></th></tr></thead>
-            <tbody>
-              ${cats.map(c => `
-                <tr>
-                  <td>${App.Utils.escapeHtml(c.nombre)}</td>
-                  <td><span class="tipo-mov tipo-${c.tipo_mov?.toLowerCase()}">${App.Utils.escapeHtml(c.tipo_mov)}</span></td>
-                  <td>${c.activa ? '✓' : '—'}</td>
-                  <td class="text-right">
-                    <button class="btn-accion" onclick="App.Modules.admin._editCategoria('${c.id_categoria}')" title="Editar">
-                      ${App.Icons.get('edit', 'icon-sm')}
-                    </button>
-                    <button class="btn-accion btn-danger" onclick="App.Modules.admin._deleteCategoria('${c.id_categoria}')" title="Eliminar">
-                      ${App.Icons.get('delete', 'icon-sm')}
-                    </button>
-                  </td>
-                </tr>`).join('')}
-            </tbody>
+            <tbody id="adm-cat-tbody"></tbody>
           </table>
         </div>
       `;
+
+      const renderTable = (items) => {
+        const tbody = document.getElementById('adm-cat-tbody');
+        if (!tbody) return;
+        if (!items.length) {
+          tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--texto-3);padding:24px;">No se encontraron categorías</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = items.map(c => `
+          <tr>
+            <td><strong>${App.Utils.escapeHtml(c.nombre)}</strong></td>
+            <td><span class="tipo-mov tipo-${c.tipo_mov?.toLowerCase()}">${App.Utils.escapeHtml(c.tipo_mov)}</span></td>
+            <td>${c.activa ? '✓' : '—'}</td>
+            <td class="text-right">
+              <button class="btn-accion" onclick="App.Modules.admin._editCategoria('${c.id_categoria}')" title="Editar">
+                ${App.Icons.get('edit', 'icon-sm')}
+              </button>
+              <button class="btn-accion btn-danger" onclick="App.Modules.admin._deleteCategoria('${c.id_categoria}')" title="Eliminar">
+                ${App.Icons.get('delete', 'icon-sm')}
+              </button>
+            </td>
+          </tr>`).join('');
+      };
+
+      const doFilter = () => {
+        const query = (document.getElementById('adm-cat-search')?.value || '').toLowerCase().trim();
+        const tipo = document.getElementById('adm-cat-filter-tipo')?.value || 'ALL';
+        const filtered = cats.filter(c => {
+          const matchTipo = tipo === 'ALL' || c.tipo_mov === tipo;
+          const matchQuery = !query || (c.nombre || '').toLowerCase().includes(query);
+          return matchTipo && matchQuery;
+        });
+        renderTable(filtered);
+      };
+
+      renderTable(cats);
+
+      document.getElementById('adm-cat-search')?.addEventListener('input', doFilter);
+      document.getElementById('adm-cat-filter-tipo')?.addEventListener('change', doFilter);
       document.getElementById('adm-btn-nueva-cat')
         ?.addEventListener('click', () => this._editCategoria(null));
     } catch (err) {
@@ -595,6 +630,13 @@ export class AdminModule extends BaseModule {
         try {
           await App.API.call('api_admin_saveTarjeta', d);
           App.API.invalidatePattern('api_admin_getTarjetas');
+          App.API.invalidatePattern('api_getInitialData');
+          try {
+            const initData = await App.API.call('api_getInitialData');
+            if (initData?.tarjetas) window._appTarjetas = initData.tarjetas;
+          } catch(e) {}
+          App.Store.invalidateAll();
+          App.Events.emit('data:changed');
           App.Toast.success('Tarjeta guardada.');
           modal.close();
           this.#renderTarjetas();
@@ -644,6 +686,13 @@ export class AdminModule extends BaseModule {
         try {
           await App.API.call('api_admin_saveCategoria', d);
           App.API.invalidatePattern('api_admin_getCategorias');
+          App.API.invalidatePattern('api_getInitialData');
+          try {
+            const initData = await App.API.call('api_getInitialData');
+            if (initData?.categorias) window._appCategorias = initData.categorias;
+          } catch(e) {}
+          App.Store.invalidateAll();
+          App.Events.emit('data:changed');
           App.Toast.success('Categoría guardada.');
           modal.close();
           this.#renderCategorias();
@@ -703,6 +752,13 @@ export class AdminModule extends BaseModule {
         try {
           await App.API.call('api_admin_saveAhorroSubcuenta', d);
           App.API.invalidatePattern('api_admin_getAhorroSubcuentas');
+          App.API.invalidatePattern('api_getInitialData');
+          try {
+            const initData = await App.API.call('api_getInitialData');
+            if (initData?.subcuentas) window._appSubcuentas = initData.subcuentas;
+          } catch(e) {}
+          App.Store.invalidateAll();
+          App.Events.emit('data:changed');
           App.Toast.success('Alcancía guardada.');
           modal.close();
           this.#renderAhorroSubs();
@@ -762,8 +818,8 @@ export class AdminModule extends BaseModule {
           await App.API.call('api_admin_saveCtaCorrienteUsuario', d);
           App.API.invalidatePattern('api_admin_getCtaCorrienteUsuarios');
           App.API.invalidatePattern('api_getInitialData');
-          App.Store.invalidateModulo('cc');
-          App.Store.invalidateModulo('movimientos');
+          App.Store.invalidateAll();
+          App.Events.emit('data:changed');
           App.Toast.success('Usuario guardado.');
           modal.close();
           this.#renderUsuariosCC();
@@ -779,6 +835,13 @@ export class AdminModule extends BaseModule {
     try {
       await App.API.call('api_admin_deleteCuentaPrincipal', id);
       App.API.invalidatePattern('api_admin_getCuentasPrincipales');
+      App.API.invalidatePattern('api_getInitialData');
+      try {
+        const initData = await App.API.call('api_getInitialData');
+        if (initData?.cuentas) App.Store.setCuentas(initData.cuentas);
+      } catch(e) {}
+      App.Store.invalidateAll();
+      App.Events.emit('data:changed');
       App.Toast.success('Cuenta eliminada.');
       this.#renderCuentas();
     } catch (e) { App.Toast.error(e.message); }
@@ -789,6 +852,13 @@ export class AdminModule extends BaseModule {
     try {
       await App.API.call('api_admin_deleteTarjeta', id);
       App.API.invalidatePattern('api_admin_getTarjetas');
+      App.API.invalidatePattern('api_getInitialData');
+      try {
+        const initData = await App.API.call('api_getInitialData');
+        if (initData?.tarjetas) window._appTarjetas = initData.tarjetas;
+      } catch(e) {}
+      App.Store.invalidateAll();
+      App.Events.emit('data:changed');
       App.Toast.success('Tarjeta eliminada.');
       this.#renderTarjetas();
     } catch (e) { App.Toast.error(e.message); }
@@ -799,6 +869,13 @@ export class AdminModule extends BaseModule {
     try {
       await App.API.call('api_admin_deleteCategoria', id);
       App.API.invalidatePattern('api_admin_getCategorias');
+      App.API.invalidatePattern('api_getInitialData');
+      try {
+        const initData = await App.API.call('api_getInitialData');
+        if (initData?.categorias) window._appCategorias = initData.categorias;
+      } catch(e) {}
+      App.Store.invalidateAll();
+      App.Events.emit('data:changed');
       App.Toast.success('Categoría eliminada.');
       this.#renderCategorias();
     } catch (e) { App.Toast.error(e.message); }
@@ -809,6 +886,13 @@ export class AdminModule extends BaseModule {
     try {
       await App.API.call('api_admin_deleteAhorroSubcuenta', id);
       App.API.invalidatePattern('api_admin_getAhorroSubcuentas');
+      App.API.invalidatePattern('api_getInitialData');
+      try {
+        const initData = await App.API.call('api_getInitialData');
+        if (initData?.subcuentas) window._appSubcuentas = initData.subcuentas;
+      } catch(e) {}
+      App.Store.invalidateAll();
+      App.Events.emit('data:changed');
       App.Toast.success('Alcancía eliminada.');
       this.#renderAhorroSubs();
     } catch (e) { App.Toast.error(e.message); }
@@ -819,9 +903,8 @@ export class AdminModule extends BaseModule {
     try {
       await App.API.call('api_admin_deleteCtaCorrienteUsuario', id);
       App.API.invalidatePattern('api_admin_getCtaCorrienteUsuarios');
-      App.API.invalidatePattern('api_getInitialData');
-      App.Store.invalidateModulo('cc');
-      App.Store.invalidateModulo('movimientos');
+      App.Store.invalidateAll();
+      App.Events.emit('data:changed');
       App.Toast.success('Usuario eliminado.');
       this.#renderUsuariosCC();
     } catch (e) { App.Toast.error(e.message); }

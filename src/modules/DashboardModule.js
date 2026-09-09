@@ -648,8 +648,6 @@ export class DashboardModule extends BaseModule {
     const allTarjetas = window._appTarjetas || [];
     // Only show tarjetas belonging to the current account
     const tarjetas = allTarjetas.filter(t => t.id_cuenta_principal === App.Store.cuenta);
-    this._tcList = tarjetas;
-    this._tcIndex = 0;
 
     // Build set of valid tarjeta IDs for this account
     const validTcIds = new Set(tarjetas.map(t => t.id_tarjeta));
@@ -678,18 +676,43 @@ export class DashboardModule extends BaseModule {
     });
     this._tcConsumos = consumosByTc;
 
-    // Si no hay consumos puntuales cargados para este mes, verificar si hay un resumen con vencimiento o cierre en este mes
-    if (totalGlobal === 0 && totalGlobalUsd === 0) {
-      tarjetas.forEach(t => {
-        const stMesVto = t.fecha_vencimiento_actual?.substring(0, 7);
-        const stMesCierre = t.fecha_cierre_actual?.substring(0, 7);
-        const currMes = App.Store.mes;
-        if (stMesVto === currMes || stMesCierre === currMes) {
-          totalGlobal += Number(t.total_resumen_ars || 0);
-          totalGlobalUsd += Number(t.total_resumen_usd || 0);
-        }
-      });
+    // Si hay tarjetas con total oficial de resumen para este mes, calcular totales consolidados considerando eso
+    let totalConsolArs = 0;
+    let totalConsolUsd = 0;
+    tarjetas.forEach(t => {
+      const isDueInMonth = (t.fecha_vencimiento_actual && t.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                           (t.fecha_cierre_actual && t.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+      const cardSub = consumosByTc[t.id_tarjeta];
+      const cardArs = (isDueInMonth && Number(t.total_resumen_ars || 0) > 0) ? Number(t.total_resumen_ars) : (cardSub?.total || 0);
+      const cardUsd = (isDueInMonth && Number(t.total_resumen_usd || 0) > 0) ? Number(t.total_resumen_usd) : (cardSub?.totalUsd || 0);
+      totalConsolArs += cardArs;
+      totalConsolUsd += cardUsd;
+    });
+
+    if (totalConsolArs > 0 || totalConsolUsd > 0) {
+      totalGlobal = totalConsolArs;
+      totalGlobalUsd = totalConsolUsd;
     }
+
+    // Consolidated card at index 0
+    const consolidadoCard = {
+      isConsolidado: true,
+      id_tarjeta: '__consolidado__',
+      nombre: 'Todas las tarjetas',
+      banco: 'CONSOLIDADO',
+      red: 'GLOBAL',
+      color: 'blue',
+      ultimos_4_digitos: 'ALL',
+      totalArs: totalGlobal,
+      totalUsd: totalGlobalUsd
+    };
+
+    if (tarjetas.length > 0) {
+      this._tcList = [consolidadoCard, ...tarjetas];
+    } else {
+      this._tcList = [];
+    }
+    this._tcIndex = 0;
 
     // KPI total
     const totalEl = document.getElementById('dash-tc-total');
@@ -701,14 +724,18 @@ export class DashboardModule extends BaseModule {
       totalEl.textContent = tText;
     }
 
-    // Enable arrows if > 1 tarjeta
+    // Enable arrows if > 1 tarjeta (meaning consolidado + at least 1 tarjeta, or 2+ cards)
     const prevBtn = document.getElementById('dash-tc-prev');
     const nextBtn = document.getElementById('dash-tc-next');
     const verBtn  = document.getElementById('dash-tc-ver-consumos');
-    if (tarjetas.length > 1) {
+    if (this._tcList.length > 1) {
+      prevBtn && (prevBtn.disabled = false);
       nextBtn && (nextBtn.disabled = false);
+    } else {
+      prevBtn && (prevBtn.disabled = true);
+      nextBtn && (nextBtn.disabled = true);
     }
-    if (tarjetas.length > 0) {
+    if (this._tcList.length > 0) {
       verBtn && (verBtn.disabled = false);
       this.#updateTcVisual();
     }
@@ -735,6 +762,76 @@ export class DashboardModule extends BaseModule {
   #updateTcVisual() {
     const tc = this._tcList?.[this._tcIndex];
     if (!tc) return;
+
+    const isArs = App.Store.globalCurrency !== 'USD';
+    const dolarOficial = App.Store.dolarOficial || 1535;
+
+    const cardChip = `<div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>`;
+    const contactlessWave = `<svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
+      <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
+      <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
+      <path d="M11 4a15 15 0 0 1 0 16" opacity="0.7"/>
+      <path d="M14 2a18 18 0 0 1 0 20"/>
+    </svg>`;
+
+    if (tc.isConsolidado) {
+      const subtotal = tc.totalArs || 0;
+      const subtotalUsd = tc.totalUsd || 0;
+
+      let totalCardDisplay;
+      if (isArs) {
+        const totalConsolidado = subtotal + (subtotalUsd * dolarOficial);
+        totalCardDisplay = App.Utils.formatearMoneda(totalConsolidado);
+      } else {
+        const totalUsdConsolidado = subtotalUsd + (dolarOficial > 0 ? (subtotal / dolarOficial) : 0);
+        totalCardDisplay = `USD ${totalUsdConsolidado.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+
+      const cardHtml = `
+        <div class="tc-card-pill" style="background:linear-gradient(135deg, #1D195D 0%, #0f0d36 100%); cursor:default; margin: 0 auto; user-select: none;">
+          <div class="tc-card-shimmer"></div>
+          
+          <div class="tc-card-row tc-card-top">
+            <span class="tc-card-issuer-name">CONSOLIDADO</span>
+            <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.05em;color:rgba(255,255,255,0.7);background:rgba(255,255,255,0.12);padding:2px 8px;border-radius:10px;">TODAS</span>
+          </div>
+          
+          <div class="tc-card-row tc-card-middle">
+            ${cardChip}
+            ${contactlessWave}
+          </div>
+
+          <div class="tc-card-row tc-card-bottom">
+            <div class="tc-card-bottom-left">
+              <span class="tc-card-number">**** ALL</span>
+              <span class="tc-card-amount">${totalCardDisplay}</span>
+            </div>
+            <div class="tc-card-bottom-right">
+              <span style="font-family:'Inter', sans-serif; font-weight:800; font-size:0.75rem; letter-spacing:1px; color:#ffffff; opacity:0.85;">GLOBAL</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const visualEl = document.getElementById('dash-tc-visual');
+      if (visualEl) visualEl.innerHTML = cardHtml;
+
+      const subtotalEl = document.getElementById('dash-tc-subtotal');
+      if (subtotalEl) {
+        let txt = '';
+        if (subtotalUsd > 0) {
+          txt = `Total: ${App.Utils.formatearMoneda(subtotal)} + USD ${subtotalUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+          if (isArs) {
+            txt += ` (Oficial: $${dolarOficial.toLocaleString('es-AR')})`;
+          }
+        } else {
+          txt = `Total acumulado: ${App.Utils.formatearMoneda(subtotal)}`;
+        }
+        subtotalEl.textContent = txt;
+      }
+      return;
+    }
+
     const rawMarca = tc.marca || (tc.nombre || '').split(' ')[0] || 'Visa';
     const cardIssuer = ((tc.marca || tc.nombre || '').split(' ')[0] + ' ' + (tc.banco || 'SANTANDER')).toUpperCase();
     const last4 = tc.ultimos_4_digitos || tc.ultimos_4 || '••••';
@@ -772,15 +869,6 @@ export class DashboardModule extends BaseModule {
 
     const brandLogoHtml = getBrandLogoHtml(tc.red || rawMarca);
 
-    const contactlessWave = `<svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
-      <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
-      <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
-      <path d="M11 4a15 15 0 0 1 0 16" opacity="0.7"/>
-      <path d="M14 2a18 18 0 0 1 0 20"/>
-    </svg>`;
-
-    const cardChip = `<div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>`;
-
     const cardData = this._tcConsumos?.[tc.id_tarjeta];
     let subtotal = cardData?.total || 0;
     let subtotalUsd = cardData?.totalUsd || 0;
@@ -795,10 +883,6 @@ export class DashboardModule extends BaseModule {
       subtotal = Number(tc.total_resumen_ars || 0);
       subtotalUsd = Number(tc.total_resumen_usd || 0);
     }
-
-    // Official Dollar Rate conversion if currency is ARS
-    const isArs = App.Store.globalCurrency !== 'USD';
-    const dolarOficial = App.Store.dolarOficial || 1535;
 
     let totalCardDisplay;
     if (isArs) {

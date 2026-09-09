@@ -99,7 +99,7 @@ export class TarjetasModule extends BaseModule {
     // IMPORTANT: Filter tarjetas by current cuenta principal
     const allTarjetas = window._appTarjetas || [];
     this.#tarjetas = allTarjetas.filter(t => t.id_cuenta_principal === App.Store.cuenta);
-    if (!this.#categorias.length) this.#categorias = window._appCategorias || [];
+    this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : this.#categorias;
     if (!this.#cuentas.length)    this.#cuentas    = App.Store.cuentas     || [];
 
     // Map id_tarjeta based on tarjeta_nombre if missing (e.g. from RPC responses)
@@ -314,7 +314,8 @@ export class TarjetasModule extends BaseModule {
         ${App.Utils.escapeHtml(t.nombre)}
       </option>`).join('');
 
-    const optsC = this.#categorias
+    const categoriesList = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : this.#categorias;
+    const optsC = categoriesList
       .filter(c => c.tipo_mov === 'EGRESO' && c.activa)
       .map(c => `<option value="${c.id_categoria}" ${data?.id_categoria === c.id_categoria ? 'selected' : ''}>
         ${App.Utils.escapeHtml(c.nombre)}
