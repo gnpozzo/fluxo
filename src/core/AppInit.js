@@ -24,6 +24,9 @@ class AppInit {
     'vista-inversiones' : 'inversiones'
   };
 
+  #modalNotificaciones = null;
+  #modalRecordatorio    = null;
+
   // --- SECCIÓN 1: ARRANQUE ---
 
   async boot() {
@@ -779,11 +782,30 @@ class AppInit {
     const cuenta = App.Store.cuenta;
     if (!cuenta) return;
 
-    const m = new App.Modal('modal-notifications');
+    if (!this.#modalNotificaciones) {
+      this.#modalNotificaciones = new App.Modal('modal-notifications');
+    }
+    const m = this.#modalNotificaciones;
+
+    const baseHtml = `
+      <div class="notif-center-nav">
+        <button class="notif-nav-btn active" id="notif-tab-reminders" data-notif-tab="reminders">
+          ${App.Icons?.get('clock', 'icon-sm') || '🔔'} Recordatorios Programados
+        </button>
+        <button class="notif-nav-btn" id="notif-tab-history" data-notif-tab="history">
+          ${App.Icons?.get('info', 'icon-sm') || '📋'} Historial de Alertas
+        </button>
+      </div>
+      <div id="notif-content-area" style="min-height:320px; max-height:480px; overflow-y:auto; padding-right:4px;">
+        <div style="padding:40px; text-align:center;"><div class="spinner"></div><p style="margin-top:12px;color:var(--texto-3);">Cargando recordatorios...</p></div>
+      </div>
+    `;
+
     m.open({
       titulo: 'Centro de Notificaciones',
       icono: 'info',
-      body: '<div style="padding:40px; text-align:center;"><div class="spinner"></div><p style="margin-top:12px;color:var(--texto-3);">Cargando historial...</p></div>',
+      body: baseHtml,
+      size: 'lg',
       confirmLabel: '',
       cancelLabel: 'Cerrar'
     });
@@ -793,6 +815,162 @@ class AppInit {
     const xb = m.el.querySelector('.modal-cancel');
     if (xb) { xb.classList.replace('btn-ghost', 'btn-outline'); xb.style.borderRadius = 'var(--r)'; }
 
+    // Bind tab clicks
+    const btnReminders = m.el.querySelector('#notif-tab-reminders');
+    const btnHistory = m.el.querySelector('#notif-tab-history');
+
+    const switchTab = (tab) => {
+      if (tab === 'reminders') {
+        btnReminders?.classList.add('active');
+        btnHistory?.classList.remove('active');
+        this.#cargarTabRecordatorios(m);
+      } else {
+        btnHistory?.classList.add('active');
+        btnReminders?.classList.remove('active');
+        this.#cargarTabHistorial(m);
+      }
+    };
+
+    btnReminders?.addEventListener('click', () => switchTab('reminders'));
+    btnHistory?.addEventListener('click', () => switchTab('history'));
+
+    // Start with reminders
+    this.#cargarTabRecordatorios(m);
+  }
+
+  async #cargarTabRecordatorios(m) {
+    const area = m.el.querySelector('#notif-content-area');
+    if (!area) return;
+    area.innerHTML = '<div style="padding:40px; text-align:center;"><div class="spinner"></div><p style="margin-top:12px;color:var(--texto-3);">Cargando recordatorios activos...</p></div>';
+
+    try {
+      const cuenta = App.Store.cuenta;
+      const res = await App.API.call('admin_getRecordatorios', cuenta);
+      const list = res?.data || [];
+
+      let listHtml = '';
+      if (list.length === 0) {
+        listHtml = `
+          <div style="text-align:center; padding:36px 16px; color:var(--texto-3); border:1px dashed var(--borde); border-radius:var(--r);">
+            <div style="font-size:2rem; margin-bottom:8px;">🔔</div>
+            <p style="margin:0 0 6px; font-weight:600; color:var(--texto-2);">No tenés recordatorios configurados</p>
+            <p style="font-size:0.8rem; margin:0 0 16px;">Podés programar alertas automáticas para fechas de vencimiento de resúmenes, cierres y pagos periódicos.</p>
+            <button class="btn btn-primary btn-sm" id="btn-nuevo-recordatorio-empty">
+              ${App.Icons?.get('add', 'icon-sm') || '+'} Crear mi primer recordatorio
+            </button>
+          </div>
+        `;
+      } else {
+        listHtml = list.map(r => {
+          const isActiva = r.activa !== false;
+          const fechaFormateada = r.fecha_proxima ? App.Utils.formatearFecha(r.fecha_proxima) : 'Fecha sin definir';
+          const freqLabel = r.frecuencia === 'MENSUAL' ? 'Mensual' : (r.frecuencia === 'UNICA' ? 'Única vez' : (r.frecuencia || 'Periódica'));
+
+          return `
+            <div class="reminder-card ${!isActiva ? 'inactive' : ''}" data-id="${r.id_recordatorio}">
+              <div class="reminder-card-content">
+                <p class="reminder-msg">${App.Utils.escapeHtml(r.mensaje)}</p>
+                <div class="reminder-meta">
+                  <span>📅 Próximo: <strong>${fechaFormateada}</strong></span>
+                  <span>🔄 ${App.Utils.escapeHtml(freqLabel)}</span>
+                  <span>📡 Canales: ${App.Utils.escapeHtml(r.canales || 'App')}</span>
+                </div>
+              </div>
+              <div class="reminder-actions">
+                <label class="toggle-switch" title="${isActiva ? 'Desactivar recordatorio' : 'Activar recordatorio'}">
+                  <input type="checkbox" class="reminder-toggle-check" data-id="${r.id_recordatorio}" ${isActiva ? 'checked' : ''}>
+                  <span class="toggle-slider"></span>
+                </label>
+                <button class="btn-icon reminder-btn-edit" data-id="${r.id_recordatorio}" title="Editar recordatorio">
+                  ${App.Icons?.get('edit', 'icon-sm') || '✏️'}
+                </button>
+                <button class="btn-icon reminder-btn-delete" data-id="${r.id_recordatorio}" title="Eliminar recordatorio" style="color:var(--rojo);">
+                  ${App.Icons?.get('delete', 'icon-sm') || '🗑️'}
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      area.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div>
+            <h4 style="margin:0; font-size:0.95rem; font-weight:700; color:var(--texto);">Recordatorios y Notificaciones Activas</h4>
+            <span style="font-size:0.75rem; color:var(--texto-3);">${list.length} configurados</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-nuevo-recordatorio">
+            ${App.Icons?.get('add', 'icon-sm') || '+'} Nuevo Recordatorio
+          </button>
+        </div>
+        <div class="reminders-list-container">
+          ${listHtml}
+        </div>
+      `;
+
+      // Bind actions
+      area.querySelector('#btn-nuevo-recordatorio')?.addEventListener('click', () => {
+        this.#abrirModalFormRecordatorio(null, m);
+      });
+      area.querySelector('#btn-nuevo-recordatorio-empty')?.addEventListener('click', () => {
+        this.#abrirModalFormRecordatorio(null, m);
+      });
+
+      // Toggle switch
+      area.querySelectorAll('.reminder-toggle-check').forEach(chk => {
+        chk.addEventListener('change', async (e) => {
+          const id = e.target.dataset.id;
+          const target = list.find(it => it.id_recordatorio === id);
+          if (!target) return;
+          const newStatus = e.target.checked;
+          try {
+            await App.API.call('admin_saveRecordatorio', { ...target, activa: newStatus });
+            App.Toast.success(newStatus ? 'Recordatorio activado' : 'Recordatorio pausado');
+            const card = area.querySelector(`.reminder-card[data-id="${id}"]`);
+            if (card) card.classList.toggle('inactive', !newStatus);
+          } catch (err) {
+            e.target.checked = !newStatus; // revert
+            App.Toast.error('Error al actualizar recordatorio: ' + err.message);
+          }
+        });
+      });
+
+      // Edit buttons
+      area.querySelectorAll('.reminder-btn-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id;
+          const target = list.find(it => it.id_recordatorio === id);
+          if (target) this.#abrirModalFormRecordatorio(target, m);
+        });
+      });
+
+      // Delete buttons
+      area.querySelectorAll('.reminder-btn-delete').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          if (!confirm('¿Seguro que deseas eliminar este recordatorio?')) return;
+          try {
+            await App.API.call('admin_deleteRecordatorio', { id_recordatorio: id });
+            App.Toast.success('Recordatorio eliminado');
+            this.#cargarTabRecordatorios(m);
+          } catch (err) {
+            App.Toast.error('Error al eliminar: ' + err.message);
+          }
+        });
+      });
+
+    } catch (err) {
+      console.error('Error cargando recordatorios:', err);
+      area.innerHTML = `<p class="negativo" style="text-align:center; padding:24px;">Error al cargar recordatorios: ${App.Utils.escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  async #cargarTabHistorial(m) {
+    const area = m.el.querySelector('#notif-content-area');
+    if (!area) return;
+    area.innerHTML = '<div style="padding:40px; text-align:center;"><div class="spinner"></div><p style="margin-top:12px;color:var(--texto-3);">Cargando historial de notificaciones...</p></div>';
+
+    const cuenta = App.Store.cuenta;
     const baseMonth = App.Store.mes || new Date().toISOString().substring(0, 7);
     const [y, mo] = baseMonth.split('-').map(Number);
     const months = [];
@@ -803,86 +981,170 @@ class AppInit {
       months.push(`${yyyy}-${mm}`);
     }
 
-    Promise.all(months.map(month => App.API.call('api_getNotificaciones', cuenta, month).catch(() => null)))
-      .then(responses => {
-        let allNotif = [];
-        responses.forEach(res => {
-          if (res && res.success && Array.isArray(res.data)) {
-            allNotif = allNotif.concat(res.data);
-          }
-        });
-
-        // Deduplicate
-        const seen = new Set();
-        allNotif = allNotif.filter(n => {
-          if (seen.has(n.id)) return false;
-          seen.add(n.id);
-          return true;
-        });
-
-        // Sort descending by date
-        allNotif.sort((a, b) => {
-          const dateA = a.fecha || '0000-00-00';
-          const dateB = b.fecha || '0000-00-00';
-          return dateB.localeCompare(dateA);
-        });
-
-        const readIds = this.#getReadNotificationIds();
-
-        let contentHtml = '';
-        if (allNotif.length === 0) {
-          contentHtml = '<div style="padding:24px; color:var(--texto-3); text-align:center;">No hay notificaciones registradas en los últimos 6 meses.</div>';
-        } else {
-          contentHtml = '<div style="display:flex; flex-direction:column; gap:12px; max-height:400px; overflow-y:auto; padding-right:4px;">' +
-            allNotif.map(n => {
-              const isRead = readIds.includes(n.id);
-              return `
-                <div class="notification-item ${isRead ? 'read-in-history' : ''}" style="border:1px solid var(--borde); border-radius:var(--r); padding:12px; background:var(--superficie); display:flex; gap:12px; align-items:center; cursor:pointer;" data-id="${n.id}">
-                  <div class="notification-icon-wrapper ${n.tipo === 'info' ? 'info' : 'ingreso'}">
-                    ${App.Icons?.get(n.icono, 'icon-md') || ''}
-                  </div>
-                  <div style="flex-grow:1">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                      <h4 style="margin:0; font-size:0.9rem; color:var(--texto); font-weight:700;">${App.Utils.escapeHtml(n.titulo)}</h4>
-                      <span style="font-size:0.75rem; color:var(--texto-3);">${App.Utils.formatearFecha(n.fecha)}</span>
-                    </div>
-                    <p style="margin:4px 0 0; font-size:0.8rem; color:var(--texto-2); line-height:1.3;">${App.Utils.escapeHtml(n.mensaje)}</p>
-                    <div style="margin-top:6px; font-weight:600; font-size:0.85rem; color:${n.tipo === 'info' ? 'var(--color-info)' : 'var(--color-success)'}">
-                      ${App.Utils.formatearMoneda(n.importe)}
-                    </div>
-                  </div>
-                  ${!isRead ? '<div class="notification-badge-unread"></div>' : ''}
-                </div>
-              `;
-            }).join('') +
-            '</div>';
-        }
-
-        const bodyEl = m.el.querySelector('.modal-body');
-        if (bodyEl) {
-          bodyEl.innerHTML = contentHtml;
-          bodyEl.querySelectorAll('.notification-item').forEach(item => {
-            item.addEventListener('click', () => {
-              const id = item.dataset.id;
-              const currentRead = this.#getReadNotificationIds();
-              if (!currentRead.includes(id)) {
-                this.#markNotificationAsRead(id);
-                App.Toast.success('Notificación marcada como leída');
-                this.#actualizarBadgeNotifications();
-                item.classList.add('read-in-history');
-                item.querySelector('.notification-badge-unread')?.remove();
-              }
-            });
-          });
-        }
-      })
-      .catch(err => {
-        console.error('Error loading notification history:', err);
-        const bodyEl = m.el.querySelector('.modal-body');
-        if (bodyEl) {
-          bodyEl.innerHTML = `<p class="negativo" style="text-align:center;">Error al cargar el historial: ${App.Utils.escapeHtml(err.message)}</p>`;
+    try {
+      const responses = await Promise.all(months.map(month => App.API.call('api_getNotificaciones', cuenta, month).catch(() => null)));
+      let allNotif = [];
+      responses.forEach(res => {
+        if (res && res.success && Array.isArray(res.data)) {
+          allNotif = allNotif.concat(res.data);
         }
       });
+
+      // Deduplicate
+      const seen = new Set();
+      allNotif = allNotif.filter(n => {
+        if (seen.has(n.id)) return false;
+        seen.add(n.id);
+        return true;
+      });
+
+      // Sort descending by date
+      allNotif.sort((a, b) => {
+        const dateA = a.fecha || '0000-00-00';
+        const dateB = b.fecha || '0000-00-00';
+        return dateB.localeCompare(dateA);
+      });
+
+      const readIds = this.#getReadNotificationIds();
+
+      let contentHtml = '';
+      if (allNotif.length === 0) {
+        contentHtml = '<div style="padding:24px; color:var(--texto-3); text-align:center;">No hay alertas ni avisos registrados en los últimos 6 meses.</div>';
+      } else {
+        contentHtml = '<div style="display:flex; flex-direction:column; gap:10px;">' +
+          allNotif.map(n => {
+            const isRead = readIds.includes(n.id);
+            return `
+              <div class="notification-item ${isRead ? 'read-in-history' : ''}" style="border:1px solid var(--borde); border-radius:var(--r); padding:12px; background:var(--superficie); display:flex; gap:12px; align-items:center; cursor:pointer;" data-id="${n.id}">
+                <div class="notification-icon-wrapper ${n.tipo === 'info' ? 'info' : 'ingreso'}">
+                  ${App.Icons?.get(n.icono, 'icon-md') || ''}
+                </div>
+                <div style="flex-grow:1">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h4 style="margin:0; font-size:0.9rem; color:var(--texto); font-weight:700;">${App.Utils.escapeHtml(n.titulo)}</h4>
+                    <span style="font-size:0.75rem; color:var(--texto-3);">${App.Utils.formatearFecha(n.fecha)}</span>
+                  </div>
+                  <p style="margin:4px 0 0; font-size:0.8rem; color:var(--texto-2); line-height:1.3;">${App.Utils.escapeHtml(n.mensaje)}</p>
+                  ${n.importe ? `
+                  <div style="margin-top:6px; font-weight:600; font-size:0.85rem; color:${n.tipo === 'info' ? 'var(--color-info)' : 'var(--color-success)'}">
+                    ${App.Utils.formatearMoneda(n.importe)}
+                  </div>` : ''}
+                </div>
+                ${!isRead ? '<div class="notification-badge-unread"></div>' : ''}
+              </div>
+            `;
+          }).join('') +
+          '</div>';
+      }
+
+      area.innerHTML = contentHtml;
+      area.querySelectorAll('.notification-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const id = item.dataset.id;
+          const currentRead = this.#getReadNotificationIds();
+          if (!currentRead.includes(id)) {
+            this.#markNotificationAsRead(id);
+            App.Toast.success('Notificación marcada como leída');
+            this.#actualizarBadgeNotifications();
+            item.classList.add('read-in-history');
+            item.querySelector('.notification-badge-unread')?.remove();
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Error loading notification history:', err);
+      area.innerHTML = `<p class="negativo" style="text-align:center;">Error al cargar el historial: ${App.Utils.escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  #abrirModalFormRecordatorio(recordatorio = null, parentModal = null) {
+    if (!this.#modalRecordatorio) {
+      this.#modalRecordatorio = new App.Modal('modal-edit-recordatorio');
+    }
+    const isEdit = !!recordatorio;
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + 3);
+    const dateVal = recordatorio?.fecha_proxima ? String(recordatorio.fecha_proxima).substring(0, 10) : defaultDate.toISOString().substring(0, 10);
+
+    const formHtml = `
+      <form id="form-recordatorio-edit" style="display:flex; flex-direction:column; gap:14px;">
+        <div class="form-group">
+          <label style="font-size:0.82rem; font-weight:600; color:var(--texto-2); margin-bottom:4px; display:block;">Mensaje del recordatorio *</label>
+          <textarea class="input" name="mensaje" rows="3" required placeholder="Ej: Vencimiento de tarjeta Visa o pago de servicio..." style="resize:vertical;">${App.Utils.escapeHtml(recordatorio?.mensaje || '')}</textarea>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label style="font-size:0.82rem; font-weight:600; color:var(--texto-2); margin-bottom:4px; display:block;">Próxima Fecha de Alerta *</label>
+            <input type="date" class="input" name="fecha_proxima" value="${dateVal}" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:0.82rem; font-weight:600; color:var(--texto-2); margin-bottom:4px; display:block;">Frecuencia</label>
+            <select class="input" name="frecuencia">
+              <option value="MENSUAL" ${recordatorio?.frecuencia === 'MENSUAL' ? 'selected' : ''}>Mensual</option>
+              <option value="UNICA" ${recordatorio?.frecuencia === 'UNICA' ? 'selected' : ''}>Una sola vez</option>
+              <option value="DIAS_HABILES" ${recordatorio?.frecuencia === 'DIAS_HABILES' ? 'selected' : ''}>Días Hábiles</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="font-size:0.82rem; font-weight:600; color:var(--texto-2); margin-bottom:4px; display:block;">Canal de Notificación</label>
+          <select class="input" name="canales">
+            <option value="app,telegram" ${(recordatorio?.canales || '').includes('telegram') ? 'selected' : ''}>App Fluxo + Bot de Telegram</option>
+            <option value="app" ${recordatorio?.canales === 'app' ? 'selected' : ''}>Solo App Fluxo</option>
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+          <input type="checkbox" id="chk-notif-activa" name="activa" ${recordatorio?.activa !== false ? 'checked' : ''} style="width:auto; cursor:pointer;">
+          <label for="chk-notif-activa" style="font-size:0.84rem; font-weight:600; cursor:pointer; color:var(--texto);">Recordatorio activo</label>
+        </div>
+      </form>
+    `;
+
+    this.#modalRecordatorio.open({
+      titulo: isEdit ? 'Editar Recordatorio' : 'Nuevo Recordatorio',
+      icono: 'clock',
+      body: formHtml,
+      confirmLabel: 'Guardar',
+      cancelLabel: 'Cancelar',
+      size: 'md',
+      onConfirm: async (subM) => {
+        const form = subM.el.querySelector('#form-recordatorio-edit');
+        if (!form) return;
+        const fd = new FormData(form);
+        const mensaje = fd.get('mensaje')?.trim();
+        const fecha_proxima = fd.get('fecha_proxima');
+        const frecuencia = fd.get('frecuencia');
+        const canales = fd.get('canales');
+        const activa = fd.get('activa') === 'on';
+
+        if (!mensaje || !fecha_proxima) {
+          App.Toast.warning('Por favor completá todos los campos requeridos');
+          return;
+        }
+
+        subM.setLoading(true);
+        try {
+          const payload = {
+            ...(recordatorio || {}),
+            id_cuenta_principal: App.Store.cuenta,
+            mensaje,
+            fecha_proxima,
+            frecuencia,
+            canales,
+            activa
+          };
+          await App.API.call('admin_saveRecordatorio', payload);
+          App.Toast.success(isEdit ? 'Recordatorio actualizado' : 'Recordatorio creado con éxito');
+          subM.close();
+          if (parentModal) {
+            this.#cargarTabRecordatorios(parentModal);
+          }
+        } catch (err) {
+          subM.setLoading(false);
+          App.Toast.error('Error al guardar recordatorio: ' + err.message);
+        }
+      }
+    });
   }
 
   #setupNotifications() {

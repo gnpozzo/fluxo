@@ -485,14 +485,14 @@ export class AdminModule extends BaseModule {
             <input class="input" type="number" name="ultimos_4_digitos" value="${App.Utils.escapeHtml(data?.ultimos_4_digitos || '')}">
           </div>
 
-          <div class="form-group half-width">
-            <label>Día Cierre <span class="required-mark">*</span></label>
-            <input class="input" type="number" name="dia_cierre_resumen" min="1" max="31" value="${data?.dia_cierre_resumen || ''}" required>
-          </div>
-
-          <div class="form-group half-width">
-            <label>Día Vencimiento <span class="required-mark">*</span></label>
-            <input class="input" type="number" name="dia_vencimiento_resumen" min="1" max="31" value="${data?.dia_vencimiento_resumen || ''}" required>
+          <div class="form-group full-width">
+            <label>Red / Emisor <span class="required-mark">*</span></label>
+            <select class="input select" name="red" required>
+              <option value="VISA" ${(data?.red === 'VISA' || (!data?.red && (data?.nombre || '').toUpperCase().includes('VISA'))) ? 'selected' : ''}>Visa</option>
+              <option value="MASTERCARD" ${(data?.red === 'MASTERCARD' || (!data?.red && (data?.nombre || '').toUpperCase().includes('MASTER'))) ? 'selected' : ''}>Mastercard</option>
+              <option value="AMEX" ${(data?.red === 'AMEX' || (!data?.red && ((data?.nombre || '').toUpperCase().includes('AMEX') || (data?.nombre || '').toUpperCase().includes('AMERICAN')))) ? 'selected' : ''}>American Express (Amex)</option>
+              <option value="OTRA" ${data?.red === 'OTRA' ? 'selected' : ''}>Otra red</option>
+            </select>
           </div>
 
           <div class="form-group full-width">

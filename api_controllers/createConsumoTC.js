@@ -36,6 +36,7 @@ export default async function handler(req, res) {
     const tcRows = [];
     const movRows = [];
     const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
+    const moneda = consumo.moneda || 'ARS';
 
     if (consumo.tipoConsumo === 'COMUN' || consumo.tipoConsumo === 'SIMPLE') {
       const idConsumo = crypto.randomUUID();
@@ -48,7 +49,8 @@ export default async function handler(req, res) {
         user_id: userId,
         fecha: fechaISO,
         descripcion: consumo.descripcion,
-        importe: consumo.importe
+        importe: consumo.importe,
+        moneda: moneda
       });
 
       if (consumo.imputar) {
@@ -61,6 +63,7 @@ export default async function handler(req, res) {
           tipo_mov: 'EGRESO',
           descripcion: consumo.descripcion,
           importe: consumo.importe,
+          moneda: moneda,
           medio_pago: 'Tarjeta de Crédito',
           id_consumo_tarjeta_origen: idConsumo
         });
@@ -83,6 +86,7 @@ export default async function handler(req, res) {
           fecha: fechaISO,
           descripcion: consumo.descripcion,
           importe: consumo.importe,
+          moneda: moneda,
           cuota_actual: cuotaNumActual,
           cuota_total: consumo.cuotaTotal,
           recur_group_id: installmentGroupId
@@ -99,6 +103,7 @@ export default async function handler(req, res) {
             tipo_mov: 'EGRESO',
             descripcion: descImputacion,
             importe: consumo.importe,
+            moneda: moneda,
             medio_pago: 'Tarjeta de Crédito',
             recur_group_id: installmentGroupId,
             id_consumo_tarjeta_origen: idConsumo
@@ -121,6 +126,7 @@ export default async function handler(req, res) {
           fecha: fechaISO,
           descripcion: consumo.descripcion,
           importe: consumo.importe,
+          moneda: moneda,
           recur_group_id: recurGroupId
         });
 
@@ -134,6 +140,7 @@ export default async function handler(req, res) {
             tipo_mov: 'EGRESO',
             descripcion: consumo.descripcion,
             importe: consumo.importe,
+            moneda: moneda,
             medio_pago: 'Tarjeta de Crédito',
             recur_group_id: recurGroupId,
             id_consumo_tarjeta_origen: idConsumo

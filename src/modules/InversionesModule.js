@@ -44,11 +44,11 @@ export class InversionesModule extends BaseModule {
     try {
       const [portfolioData, dolarData, marketData] = await Promise.all([
         App.API.cached('api_getPortfolio',        [cuenta]),
-        App.API.cached('api_getDolarCotizaciones', [],       10 * 60_000), // 10 min
-        App.API.cached('api_getMarketData',        [],       10 * 60_000)  // 10 min
+        App.API.cached('api_getDolarCotizaciones', [],       5 * 60_000), // 5 min
+        App.API.cached('api_getMarketData',        [],       2 * 60_000)  // 2 min
       ]);
       this.#cotizDolar = dolarData;
-      this._renderDolarInfo(dolarData);
+      this._renderTickerCarousel(marketData, dolarData);
       this._renderMarketData(marketData);
       this._render(portfolioData);
       App.Store.markModuloLoaded(this.moduleId);
@@ -60,29 +60,115 @@ export class InversionesModule extends BaseModule {
 
   // --- SECCIÓN 2: RENDER ---
 
-  _renderDolarInfo(dl) {
-    if (!dl || !dl.success) return;
+  _renderTickerCarousel(md, dl) {
     const infoDiv = document.getElementById('inv-dolar-info');
     if (!infoDiv) return;
+
+    let items = md?.tickerItems || [];
+    if (!items.length && dl?.success) {
+      items = [
+        { symbol: 'USD MEP', name: 'Dólar MEP', price: '$ ' + App.Utils.formatearMoneda(dl.bolsa?.venta || 0, false), pct_change: 0, badge: 'FX', tipo: 'dolar' },
+        { symbol: 'USD CCL', name: 'Dólar CCL', price: '$ ' + App.Utils.formatearMoneda(dl.contadoconliqui?.venta || 0, false), pct_change: 0, badge: 'FX', tipo: 'dolar' },
+        { symbol: 'USD BLUE', name: 'Dólar Blue', price: '$ ' + App.Utils.formatearMoneda(dl.blue?.venta || 0, false), pct_change: 0, badge: 'FX', tipo: 'dolar' },
+        { symbol: 'RIESGO PAÍS', name: 'Riesgo País', price: (dl.risk_country || '—') + ' pb', pct_change: 0, badge: 'ARG', tipo: 'riesgo' }
+      ];
+    }
+
+    if (!items.length) {
+      infoDiv.innerHTML = '';
+      return;
+    }
+
+    const cardsHtml = items.map(it => {
+      const pct = Number(it.pct_change || 0);
+      let varHtml = '';
+      if (it.tipo === 'dolar') {
+        varHtml = `<span class="ticker-badge" style="font-size:0.65rem">FX</span>`;
+      } else if (it.tipo === 'riesgo') {
+        varHtml = `<span class="ticker-badge" style="font-size:0.65rem; background:var(--amarillo-tint); color:var(--amarillo-text)">EMBI+</span>`;
+      } else {
+        const cls = pct > 0 ? 'positivo' : (pct < 0 ? 'negativo' : 'neutro');
+        const arrow = pct > 0 ? '▲' : (pct < 0 ? '▼' : '•');
+        const sign = pct > 0 ? '+' : '';
+        varHtml = `<span class="ticker-var ${cls}">${arrow} ${sign}${pct.toFixed(2)}%</span>`;
+      }
+
+      return `
+        <div class="ticker-card" title="${App.Utils.escapeHtml(it.name || it.symbol)}">
+          <div class="ticker-card-top">
+            <span class="ticker-card-symbol">${App.Utils.escapeHtml(it.symbol)}</span>
+            <span class="ticker-badge">${it.badge || 'MKT'}</span>
+          </div>
+          <div class="ticker-card-bottom">
+            <span class="ticker-card-price">${it.price}</span>
+            ${varHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+
     infoDiv.innerHTML = `
-      <div style="padding:8px 14px; border-radius:var(--r); background:var(--superficie); border:1px solid var(--borde); min-width:140px;">
-         <span style="color:var(--texto-3); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">Dólar MEP</span>
-         <strong style="display:block;color:var(--texto);font-size:1.1rem;margin-top:2px;">$${App.Utils.formatearMoneda(dl.bolsa?.venta || 0, false)}</strong>
-      </div>
-      <div style="padding:8px 14px; border-radius:var(--r); background:var(--superficie); border:1px solid var(--borde); min-width:140px;">
-         <span style="color:var(--texto-3); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">Dólar CCL</span>
-         <strong style="display:block;color:var(--texto);font-size:1.1rem;margin-top:2px;">$${App.Utils.formatearMoneda(dl.contadoconliqui?.venta || 0, false)}</strong>
-      </div>
-      <div style="padding:8px 14px; border-radius:var(--r); background:var(--superficie); border:1px solid var(--borde); min-width:140px;">
-         <span style="color:var(--texto-3); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">Dólar Blue</span>
-         <strong style="display:block;color:var(--texto);font-size:1.1rem;margin-top:2px;">$${App.Utils.formatearMoneda(dl.blue?.venta || 0, false)}</strong>
-      </div>
-      <div style="padding:8px 14px; border-radius:var(--r); background:var(--superficie); border:1px solid var(--borde); min-width:140px;">
-         <span style="color:var(--texto-3); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">Riesgo País</span>
-         <strong style="display:block;color:var(--texto);font-size:1.1rem;margin-top:2px;">${dl.risk_country || '—'} pb</strong>
+      <div class="broker-ticker-container" style="width:100%;">
+        <div class="broker-ticker-header">
+          <div class="broker-ticker-title">
+            <span class="broker-ticker-pulse"></span>
+            <span>Mercado Bursátil en Vivo</span>
+          </div>
+          <div class="broker-ticker-controls">
+            <button class="broker-ticker-btn" id="ticker-btn-left" title="Desplazar a la izquierda" aria-label="Desplazar izquierda">◀</button>
+            <button class="broker-ticker-btn" id="ticker-btn-pause" title="Pausar / Reanudar autoscroll" aria-label="Pausar autoscroll">⏸</button>
+            <button class="broker-ticker-btn" id="ticker-btn-right" title="Desplazar a la derecha" aria-label="Desplazar derecha">▶</button>
+          </div>
+        </div>
+        <div class="broker-ticker-track-wrapper" id="broker-ticker-wrapper">
+          <div class="broker-ticker-track" id="broker-ticker-track">
+            ${cardsHtml}
+          </div>
+        </div>
       </div>
     `;
+
+    // Bind controls and autoscroll
+    const wrapper = document.getElementById('broker-ticker-wrapper');
+    const btnLeft = document.getElementById('ticker-btn-left');
+    const btnRight = document.getElementById('ticker-btn-right');
+    const btnPause = document.getElementById('ticker-btn-pause');
+
+    if (wrapper) {
+      btnLeft?.addEventListener('click', () => { wrapper.scrollLeft -= 220; });
+      btnRight?.addEventListener('click', () => { wrapper.scrollLeft += 220; });
+
+      let isPaused = false;
+      const scrollStep = () => {
+        if (!isPaused && wrapper) {
+          wrapper.scrollLeft += 1;
+          if (wrapper.scrollLeft >= wrapper.scrollWidth - wrapper.clientWidth - 2) {
+            wrapper.scrollLeft = 0;
+          }
+        }
+      };
+
+      const timer = setInterval(scrollStep, 40);
+      wrapper.addEventListener('mouseenter', () => { isPaused = true; });
+      wrapper.addEventListener('mouseleave', () => { if (btnPause?.textContent !== '▶') isPaused = false; });
+
+      btnPause?.addEventListener('click', () => {
+        if (isPaused) {
+          isPaused = false;
+          btnPause.textContent = '⏸';
+        } else {
+          isPaused = true;
+          btnPause.textContent = '▶';
+        }
+      });
+    }
   }
+
+  _renderDolarInfo(dl) {
+    // Deprecated in favor of _renderTickerCarousel
+    this._renderTickerCarousel(null, dl);
+  }
+
 
   _renderMarketData(md) {
     if (!md || !md.success) return;

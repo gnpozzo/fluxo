@@ -45,25 +45,17 @@ export default async function handler(req, res) {
       console.warn('[getDolarCotizaciones] dolarapi error:', e.message);
     }
 
-    // 2. Fetch de rendimientos.co para Riesgo País y complementar cotizaciones
+    // 2. Fetch de argentinadatos.com para Riesgo País oficial
     try {
-      const respRd = await fetch('https://rendimientos.co/api/cotizaciones', { signal: AbortSignal.timeout(3500) });
+      const respRd = await fetch('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo', { signal: AbortSignal.timeout(3500) });
       if (respRd.ok) {
         const rd = await respRd.json();
-        if (rd?.riesgoPais?.value != null) {
-          cotizaciones.risk_country = rd.riesgoPais.value;
-        } else if (rd?.Risk_Country != null) {
-          cotizaciones.risk_country = rd.Risk_Country;
-        }
-        if (rd?.mep?.price && !cotizaciones.bolsa) {
-          cotizaciones.bolsa = { compra: rd.mep.price * 0.99, venta: rd.mep.price, tipo: 'bolsa' };
-        }
-        if (rd?.ccl?.price && !cotizaciones.contadoconliqui) {
-          cotizaciones.contadoconliqui = { compra: rd.ccl.price * 0.99, venta: rd.ccl.price, tipo: 'contadoconliqui' };
+        if (rd?.valor != null) {
+          cotizaciones.risk_country = rd.valor;
         }
       }
     } catch (e) {
-      console.warn('[getDolarCotizaciones] rendimientos error:', e.message);
+      console.warn('[getDolarCotizaciones] argentinadatos error:', e.message);
     }
 
     cotizaciones.lastUpdated = new Date().toISOString();

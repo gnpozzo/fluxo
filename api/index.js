@@ -43,6 +43,9 @@ import telegramWebhook from '../api_controllers/telegramWebhook.js';
 import sendReminders from '../api_controllers/sendReminders.js';
 import parseStatement from '../api_controllers/parseStatement.js';
 import aiAdvisor from '../api_controllers/aiAdvisor.js';
+import admin_getRecordatorios from '../api_controllers/admin_getRecordatorios.js';
+import admin_saveRecordatorio from '../api_controllers/admin_saveRecordatorio.js';
+import admin_deleteRecordatorio from '../api_controllers/admin_deleteRecordatorio.js';
 import { authenticateUser } from '../api_lib/auth.js';
 
 
@@ -102,6 +105,9 @@ export default async function handler(req, res) {
     case 'telegramWebhook': return await telegramWebhook(req, res);
     case 'sendReminders': return await sendReminders(req, res);
     case 'parseStatement': return await parseStatement(req, res);
+    case 'admin_getRecordatorios': return await admin_getRecordatorios(req, res);
+    case 'admin_saveRecordatorio': return await admin_saveRecordatorio(req, res);
+    case 'admin_deleteRecordatorio': return await admin_deleteRecordatorio(req, res);
     case 'aiAdvisor': return await aiAdvisor(req, res);
 
     default:

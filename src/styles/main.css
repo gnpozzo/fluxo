@@ -5001,4 +5001,326 @@ body {
   40% { transform: translateY(-6px); opacity: 1; }
 }
 
+/* ================================================================
+   17. BROKER TICKER / BURSÁTIL CAROUSEL
+   ================================================================ */
+.broker-ticker-container {
+  position: relative;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  margin-bottom: var(--space-4);
+  padding: 10px 14px;
+  box-shadow: var(--sombra-sm);
+  overflow: hidden;
+}
+
+.broker-ticker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.broker-ticker-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-3);
+}
+
+.broker-ticker-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--verde);
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.broker-ticker-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.broker-ticker-btn {
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  color: var(--texto-2);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.broker-ticker-btn:hover {
+  background: var(--superficie-hover);
+  color: var(--texto);
+  border-color: var(--borde-fuerte);
+}
+
+.broker-ticker-track-wrapper {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+  cursor: grab;
+}
+
+.broker-ticker-track-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.broker-ticker-track {
+  display: flex;
+  gap: 10px;
+  width: max-content;
+  align-items: stretch;
+}
+
+.ticker-card {
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-sm);
+  padding: 8px 14px;
+  min-width: 155px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.ticker-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: var(--sombra-sm);
+}
+
+.ticker-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.ticker-card-symbol {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--texto);
+  white-space: nowrap;
+}
+
+.ticker-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  background: var(--primary-tint);
+  color: var(--primary);
+}
+
+.ticker-card-bottom {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ticker-card-price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.ticker-var {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ticker-var.positivo {
+  background: var(--verde-tint);
+  color: var(--verde-text);
+}
+
+.ticker-var.negativo {
+  background: var(--rojo-tint);
+  color: var(--rojo-text);
+}
+
+.ticker-var.neutro {
+  background: var(--badge-n-bg);
+  color: var(--badge-n-text);
+}
+
+/* ================================================================
+   18. NOTIFICATION CENTER & RECORDATORIOS
+   ================================================================ */
+.notif-center-nav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--borde);
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+}
+
+.notif-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--r-full);
+  background: var(--fondo);
+  color: var(--texto-2);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.notif-nav-btn:hover {
+  border-color: var(--borde-fuerte);
+  color: var(--texto);
+}
+
+.notif-nav-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: var(--sombra-sm);
+}
+
+.reminder-card {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  transition: all 0.15s ease;
+  margin-bottom: 10px;
+}
+
+.reminder-card:hover {
+  border-color: var(--borde-fuerte);
+  box-shadow: var(--sombra-sm);
+}
+
+.reminder-card.inactive {
+  opacity: 0.6;
+  background: var(--fondo);
+}
+
+.reminder-card-content {
+  flex-grow: 1;
+}
+
+.reminder-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.reminder-msg {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--texto);
+  line-height: 1.35;
+  margin: 0 0 6px 0;
+}
+
+.reminder-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--texto-3);
+  flex-wrap: wrap;
+}
+
+.reminder-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Switch Toggle */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--borde-fuerte);
+  transition: .25s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .25s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+
+input:checked + .toggle-slider {
+  background-color: var(--verde);
+}
+
+input:focus + .toggle-slider {
+  box-shadow: 0 0 1px var(--verde);
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+
 

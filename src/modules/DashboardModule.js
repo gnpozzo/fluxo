@@ -442,7 +442,6 @@ export class DashboardModule extends BaseModule {
                     <div class="tc-card-shimmer"></div>
                     <div class="tc-card-row tc-card-top">
                       <span class="tc-card-issuer-name">SANTANDER</span>
-                      <svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" width="16" height="16"><path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z"/></svg>
                     </div>
                     <div class="tc-card-row tc-card-bottom">
                       <span class="tc-card-number">**** ••••</span>
@@ -474,7 +473,6 @@ export class DashboardModule extends BaseModule {
             <div class="bc-desc-box">
               <span class="bc-desc-text">Balance consolidado de deudas y créditos con convivientes.</span>
             </div>
-            <div class="bc-footer bc-footer-link" onclick="document.querySelector('[data-vista=vista-cc]')?.click()">Ver conciliación →</div>
           </div>
 
           <!-- 3. Chanchito (Ahorros) -->
@@ -495,7 +493,6 @@ export class DashboardModule extends BaseModule {
             <div class="bc-desc-box">
               <span class="bc-desc-text">Ahorro líquido separado en alcancías para metas programadas.</span>
             </div>
-            <div class="bc-footer bc-footer-link" onclick="document.querySelector('[data-vista=vista-ahorro]')?.click()">Ver alcancías →</div>
           </div>
 
           <!-- 4. Inversiones -->
@@ -516,7 +513,6 @@ export class DashboardModule extends BaseModule {
             <div class="bc-desc-box">
               <span class="bc-desc-text">Rendimiento en LECAPs, ONs en dólares y CEDEARs.</span>
             </div>
-            <div class="bc-footer bc-footer-link" onclick="document.querySelector('[data-vista=vista-inversiones]')?.click()">Ver portafolio →</div>
           </div>
 
         </div>
@@ -745,19 +741,7 @@ export class DashboardModule extends BaseModule {
       return `<svg viewBox="0 0 32 20" width="28" height="18" style="display:block;"><circle cx="10" cy="10" r="10" fill="#EB001B"/><circle cx="22" cy="10" r="10" fill="#F79E1B" opacity="0.85"/></svg>`;
     };
 
-    const flameLogo = `<svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" style="display:block;">
-      <path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z" />
-    </svg>`;
-
-    const contactlessWave = `<svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
-      <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
-      <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
-      <path d="M11 4a15 15 0 0 1 0 16" opacity="0.7"/>
-      <path d="M14 2a18 18 0 0 1 0 20"/>
-    </svg>`;
-
-    const cardChip = `<div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>`;
-    const brandLogoHtml = getBrandLogoHtml(rawMarca);
+    const brandLogoHtml = getBrandLogoHtml(tc.red || rawMarca);
 
     const cardData = this._tcConsumos?.[tc.id_tarjeta];
     const subtotal = cardData?.total || 0;
@@ -768,7 +752,7 @@ export class DashboardModule extends BaseModule {
         
         <div class="tc-card-row tc-card-top">
           <span class="tc-card-issuer-name">${App.Utils.escapeHtml(cardIssuer)}</span>
-          ${flameLogo}
+          ${brandLogoHtml}
         </div>
         
         <div class="tc-card-row tc-card-middle">

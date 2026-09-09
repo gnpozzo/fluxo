@@ -231,7 +231,7 @@ export class TarjetasModule extends BaseModule {
           { key: 'descripcion',     label: 'Descripción', searchable: true,
             render: (r) => this.#renderDescripcion(r) },
           { key: 'importe',         label: 'Importe',   sortable: true, align: 'right',
-            render: (r) => `<span class="negativo">${App.Utils.formatearMoneda(r.importe)}</span>` },
+            render: (r) => `<span class="negativo">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>` },
           { key: 'imputacion',      label: 'Imputación',
             render: (r) => r.imputado
               ? `<span class="badge ${r.cuenta_imputada_nombre === 'Propios' ? 'badge-tc' : 'badge-recur'}">${r.cuenta_imputada_nombre}</span>`
@@ -655,10 +655,6 @@ export class TarjetasModule extends BaseModule {
       return `<svg viewBox="0 0 32 20" width="28" height="18" style="display:block;"><circle cx="10" cy="10" r="10" fill="#EB001B"/><circle cx="22" cy="10" r="10" fill="#F79E1B" opacity="0.85"/></svg>`;
     };
 
-    const flameLogo = `<svg class="tc-card-issuer-logo" viewBox="0 0 32 32" fill="#ffffff" style="display:block;">
-      <path d="M16.1 2C16 2.1 12.1 7.2 12.1 11.4c0 3.3 2 5.8 4 7.6 1.8 1.6 3.1 3.5 3.1 6.1 0 4.1-3.3 7.4-7.4 7.4S4.4 29.1 4.4 25c0-4.1 2.2-7.5 4.9-9.8 1-1 2.1-2 2.1-3.6 0-2.4-1.9-4-1.9-4 0 0 .9.8 1.4 1.7 1.2 2.1.5 4.3-.6 5.6-2.1 2.4-3.4 5.2-3.4 8.7 0 5.4 4.4 9.8 9.8 9.8s9.8-4.4 9.8-9.8c0-5.4-3.5-9.3-6.5-12.7C18.5 8.7 16.1 2 16.1 2z" />
-    </svg>`;
-
     const contactlessWave = `<svg class="tc-card-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;">
       <path d="M5 8a9 9 0 0 1 0 8" opacity="0.3"/>
       <path d="M8 6a12 12 0 0 1 0 12" opacity="0.5"/>
@@ -668,16 +664,27 @@ export class TarjetasModule extends BaseModule {
 
     const cardChip = `<div class="tc-card-chip"><div class="tc-card-chip-inner"></div></div>`;
 
-    // Calculate subtotal per card
-    const subtotals = {};
+    // Calculate subtotal per card (bimonetario)
+    const subtotalsArs = {};
+    const subtotalsUsd = {};
     this.#allConsumos.forEach(c => {
       const tid = c.id_tarjeta;
-      subtotals[tid] = (subtotals[tid] || 0) + Number(c.importe || 0);
+      if (c.moneda === 'USD') {
+        subtotalsUsd[tid] = (subtotalsUsd[tid] || 0) + Number(c.importe || 0);
+      } else {
+        subtotalsArs[tid] = (subtotalsArs[tid] || 0) + Number(c.importe || 0);
+      }
     });
 
     // "Todas" / Consolidado premium card
     const isAllActive = !this.#selectedTcId;
-    const totalConsol = this.#allConsumos.reduce((s, c) => s + Number(c.importe || 0), 0);
+    const totalConsolArs = this.#allConsumos.filter(c => c.moneda !== 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
+    const totalConsolUsd = this.#allConsumos.filter(c => c.moneda === 'USD').reduce((s, c) => s + Number(c.importe || 0), 0);
+
+    const consolUsdHtml = totalConsolUsd > 0
+      ? `<span style="display:block; font-size:0.78rem; font-weight:600; opacity:0.9; margin-top:2px;">+ USD ${totalConsolUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`
+      : '';
+
     const allPill = `<button class="tc-card-pill ${isAllActive ? 'active' : ''}"
       data-tc-filter="all"
       style="background: linear-gradient(135deg, #1D195D 0%, #0f0d36 100%)">
@@ -685,7 +692,7 @@ export class TarjetasModule extends BaseModule {
       
       <div class="tc-card-row tc-card-top">
         <span class="tc-card-issuer-name">CONSOLIDADO</span>
-        ${flameLogo}
+        <div style="width:28px; height:18px;"></div>
       </div>
       
       <div class="tc-card-row tc-card-middle">
@@ -696,7 +703,8 @@ export class TarjetasModule extends BaseModule {
       <div class="tc-card-row tc-card-bottom">
         <div class="tc-card-bottom-left">
           <span class="tc-card-number">**** ALL</span>
-          <span class="tc-card-amount">${App.Utils.formatearMoneda(totalConsol)}</span>
+          <span class="tc-card-amount">${App.Utils.formatearMoneda(totalConsolArs)}</span>
+          ${consolUsdHtml}
         </div>
         <div class="tc-card-bottom-right">
           <div style="width:28px; height:18px;"></div>
@@ -707,9 +715,15 @@ export class TarjetasModule extends BaseModule {
     const pills = this.#tarjetas.map(tc => {
       const isActive = this.#selectedTcId === tc.id_tarjeta;
       const last4 = tc.ultimos_4_digitos || tc.ultimos_4 || '••••';
-      const sub = subtotals[tc.id_tarjeta] || 0;
+      const subArs = subtotalsArs[tc.id_tarjeta] || 0;
+      const subUsd = subtotalsUsd[tc.id_tarjeta] || 0;
       
-      const cardIssuer = ((tc.marca || tc.nombre || '').split(' ')[0] + ' ' + (tc.banco || 'SANTANDER')).toUpperCase();
+      const cardIssuer = ((tc.banco || tc.nombre || '').split(' ')[0] || 'BANCO').toUpperCase();
+      const brandLogo = getBrandLogoHtml(tc.red || tc.marca || tc.nombre);
+      
+      const usdHtml = subUsd > 0
+        ? `<span style="display:block; font-size:0.78rem; font-weight:600; opacity:0.9; margin-top:2px;">+ USD ${subUsd.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`
+        : '';
       
       let gradient;
       if (tc.color && tc.color.startsWith('#')) {
@@ -738,7 +752,7 @@ export class TarjetasModule extends BaseModule {
         
         <div class="tc-card-row tc-card-top">
           <span class="tc-card-issuer-name">${App.Utils.escapeHtml(cardIssuer)}</span>
-          ${flameLogo}
+          ${brandLogo}
         </div>
         
         <div class="tc-card-row tc-card-middle">
@@ -749,10 +763,11 @@ export class TarjetasModule extends BaseModule {
         <div class="tc-card-row tc-card-bottom">
           <div class="tc-card-bottom-left">
             <span class="tc-card-number">**** ${last4}</span>
-            <span class="tc-card-amount">${App.Utils.formatearMoneda(sub)}</span>
+            <span class="tc-card-amount">${App.Utils.formatearMoneda(subArs)}</span>
+            ${usdHtml}
           </div>
           <div class="tc-card-bottom-right">
-            ${getBrandLogoHtml(tc.marca || tc.nombre)}
+            ${brandLogo}
           </div>
         </div>
       </button>`;
