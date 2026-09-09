@@ -464,8 +464,6 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     const recurrentesAusentes = [];
     const unmatchedDbConsumptions = [];
 
-    const stCierre = extractedData.statement_info?.fecha_cierre;
-    const stVto = extractedData.statement_info?.fecha_vencimiento;
     const stMes = (stVto || stCierre || '').substring(0, 7);
 
     cardConsumos.forEach(db => {
