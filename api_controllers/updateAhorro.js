@@ -4,12 +4,31 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const request = Array.isArray(req.body) ? req.body[0] : req.body;
+    const bodyArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
+    let request = null;
+    let rawId = null;
+
+    if (bodyArgs) {
+      if (bodyArgs[1] && typeof bodyArgs[1] === 'object') {
+        request = bodyArgs[1];
+        rawId = typeof bodyArgs[0] === 'string' ? bodyArgs[0] : null;
+      } else if (bodyArgs[0] && typeof bodyArgs[0] === 'object') {
+        request = bodyArgs[0];
+      } else {
+        request = {};
+        rawId = typeof bodyArgs[0] === 'string' ? bodyArgs[0] : null;
+      }
+    } else if (req.body && typeof req.body === 'object') {
+      request = req.body;
+    } else {
+      request = {};
+    }
     
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const { id_ahorro, data } = request;
+    const id_ahorro = request.id_ahorro || request.original?.id || rawId;
+    const data = (request.data && Object.keys(request.data).length > 0) ? request.data : request;
     const { fecha, tipo_transfer, moneda, idSubcuenta, descripcion } = data;
     const importe = Number(data.importe);
     

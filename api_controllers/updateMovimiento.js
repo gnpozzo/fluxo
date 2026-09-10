@@ -16,13 +16,32 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const request = Array.isArray(req.body) ? req.body[0] : req.body;
+    const bodyArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
+    let request = null;
+    let rawScope = null;
+
+    if (bodyArgs) {
+      if (bodyArgs[1] && typeof bodyArgs[1] === 'object') {
+        request = bodyArgs[1];
+        rawScope = typeof bodyArgs[2] === 'string' ? bodyArgs[2] : null;
+      } else if (bodyArgs[0] && typeof bodyArgs[0] === 'object') {
+        request = bodyArgs[0];
+        rawScope = typeof bodyArgs[1] === 'string' ? bodyArgs[1] : null;
+      } else {
+        request = {};
+      }
+    } else if (req.body && typeof req.body === 'object') {
+      request = req.body;
+    } else {
+      request = {};
+    }
     
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const { original, data, scope } = request;
-    const mov = data;
+    const { original = {}, data = {} } = request || {};
+    const scope = request.scope || rawScope || 'SINGLE';
+    const mov = (data && Object.keys(data).length > 0) ? data : request;
 
     if (mov?.idCuenta) {
       const isOwner = await verifyCuentaOwnership(supabase, mov.idCuenta, userId);

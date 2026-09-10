@@ -41,26 +41,67 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
+    
+    // Normalizar body ya sea que venga como { args: [...] }, [...] o {...}
+    const bodyArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
     let request = null;
-    if (req.body && Array.isArray(req.body.args)) {
-      if (req.body.args[1] && typeof req.body.args[1] === 'object' && req.body.args[1].data) {
-        request = req.body.args[1];
-        if (req.body.args[2]) request.scope = req.body.args[2];
+    let rawId = null;
+    let rawScope = null;
+
+    if (bodyArgs) {
+      if (bodyArgs[1] && typeof bodyArgs[1] === 'object') {
+        request = bodyArgs[1];
+        rawId = typeof bodyArgs[0] === 'string' ? bodyArgs[0] : null;
+        rawScope = typeof bodyArgs[2] === 'string' ? bodyArgs[2] : null;
+      } else if (bodyArgs[0] && typeof bodyArgs[0] === 'object') {
+        request = bodyArgs[0];
+        rawScope = typeof bodyArgs[1] === 'string' ? bodyArgs[1] : null;
       } else {
-        request = req.body.args[0];
+        request = {};
+        rawId = typeof bodyArgs[0] === 'string' ? bodyArgs[0] : null;
       }
-    } else if (Array.isArray(req.body)) {
-      request = req.body[0];
-    } else {
+    } else if (req.body && typeof req.body === 'object') {
       request = req.body;
+    } else {
+      request = {};
     }
     
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const { original = {}, data = {}, scope = 'SINGLE' } = request || {};
-    const origId = original.consumoId || original.id_consumo_tc || original.id_consumo_tarjeta;
-    const recurGrp = original.recurGroupId || original.recur_group_id;
+    const { original = {}, data = {} } = request || {};
+    const scope = request.scope || rawScope || 'SINGLE';
+    const origId = original.consumoId || original.id_consumo_tc || original.id_consumo_tarjeta || rawId;
+    let recurGrp = original.recurGroupId || original.recur_group_id;
+
+    // Resolver datos del consumo (data puede ser un subobjeto o el request mismo)
+    const consumo = (data && Object.keys(data).length > 0) ? data : request;
+    
+    let targetTarjetaId = consumo.idTarjeta || consumo.id_tarjeta || original.id_tarjeta || original.idTarjeta;
+    let targetCategoriaId = consumo.idCategoria || consumo.id_categoria || original.id_categoria || original.idCategoria;
+
+    // Si faltan datos críticos o recurGrp, consultar el registro existente antes de borrar
+    if ((!targetTarjetaId || !recurGrp || !targetCategoriaId) && origId) {
+      const { data: existingTC } = await supabase
+        .from('consumos_tc')
+        .select('id_tarjeta, id_categoria, recur_group_id, fecha, descripcion, importe')
+        .eq('id_consumo_tarjeta', origId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existingTC) {
+        if (!targetTarjetaId) targetTarjetaId = existingTC.id_tarjeta;
+        if (!targetCategoriaId) targetCategoriaId = existingTC.id_categoria;
+        if (!recurGrp && existingTC.recur_group_id) recurGrp = existingTC.recur_group_id;
+        if (!consumo.fecha && existingTC.fecha) consumo.fecha = existingTC.fecha;
+        if (!consumo.descripcion && existingTC.descripcion) consumo.descripcion = existingTC.descripcion;
+        if (consumo.importe === undefined && existingTC.importe !== undefined) consumo.importe = existingTC.importe;
+      }
+    }
+
+    if (!targetTarjetaId) {
+      return res.status(400).json({ success: false, error: 'Tarjeta de crédito no especificada o no encontrada.' });
+    }
     
     // 1. Delete original (scoped to user_id)
     if (scope === 'SINGLE' && origId) {
@@ -68,7 +109,7 @@ export default async function handler(req, res) {
       const { error: delTcErr } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', origId).eq('user_id', userId);
       if (delTcErr) throw delTcErr;
     } else if (scope === 'SERIES' && recurGrp) {
-      const origFecha = toIsoDateStr(original.fecha?.value || original.fecha || '2000-01-01');
+      const origFecha = toIsoDateStr(original.fecha?.value || original.fecha || consumo.fecha || '2000-01-01');
       const { data: tcs, error: qErr } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
         .eq('recur_group_id', recurGrp)
         .eq('user_id', userId)
@@ -89,14 +130,13 @@ export default async function handler(req, res) {
     }
     
     // 2. Resolve card account and due date
-    const consumo = data;
     let cardAccountId = null;
     let cardVto = null;
-    if (consumo.idTarjeta) {
+    if (targetTarjetaId) {
       const { data: tc } = await supabase
         .from('tarjetas')
         .select('id_tarjeta, id_cuenta_principal, fecha_vencimiento_actual')
-        .eq('id_tarjeta', consumo.idTarjeta)
+        .eq('id_tarjeta', targetTarjetaId)
         .eq('user_id', userId)
         .maybeSingle();
       if (tc) {
@@ -129,14 +169,14 @@ export default async function handler(req, res) {
     const cleanImporte = Number(String(consumo.importe || 0).replace(',', '.'));
     const fechaBase = parseDateSafe(consumo.fecha);
     const fechaISO = toIsoDateStr(fechaBase);
-    const targetAccountId = consumo.idCuentaImputar;
+    const targetAccountId = consumo.idCuentaImputar || consumo.id_cuenta_imputar;
 
     if (tipo === 'SIMPLE' || tipo === 'COMUN') {
       const idConsumo = crypto.randomUUID();
       tcRows.push({
         id_consumo_tarjeta: idConsumo,
-        id_tarjeta: consumo.idTarjeta,
-        id_categoria: consumo.idCategoria,
+        id_tarjeta: targetTarjetaId,
+        id_categoria: targetCategoriaId,
         user_id: userId,
         fecha: fechaISO,
         descripcion: consumo.descripcion,
@@ -182,8 +222,8 @@ export default async function handler(req, res) {
         const fechaCuota = toIsoDateStr(addMonthsSafe(fechaBase, i));
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
-          id_tarjeta: consumo.idTarjeta,
-          id_categoria: consumo.idCategoria,
+          id_tarjeta: targetTarjetaId,
+          id_categoria: targetCategoriaId,
           user_id: userId,
           fecha: fechaCuota,
           descripcion: consumo.descripcion,
@@ -199,7 +239,7 @@ export default async function handler(req, res) {
             id_cuenta_principal: targetAccountId,
             user_id: userId,
             fecha: fechaCuota,
-            id_categoria: consumo.idCategoria,
+            id_categoria: targetCategoriaId,
             tipo_mov: 'EGRESO',
             descripcion: descImputacion,
             importe: cleanImporte,
@@ -234,8 +274,8 @@ export default async function handler(req, res) {
         const fechaRec = toIsoDateStr(addMonthsSafe(fechaBase, i));
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
-          id_tarjeta: consumo.idTarjeta,
-          id_categoria: consumo.idCategoria,
+          id_tarjeta: targetTarjetaId,
+          id_categoria: targetCategoriaId,
           user_id: userId,
           fecha: fechaRec,
           descripcion: consumo.descripcion,
@@ -248,7 +288,7 @@ export default async function handler(req, res) {
             id_cuenta_principal: targetAccountId,
             user_id: userId,
             fecha: fechaRec,
-            id_categoria: consumo.idCategoria,
+            id_categoria: targetCategoriaId,
             tipo_mov: 'EGRESO',
             descripcion: consumo.descripcion,
             importe: cleanImporte,
