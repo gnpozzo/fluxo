@@ -122,7 +122,8 @@ export default async function handler(req, res) {
       for (const item of consumo.consumos) {
         const idConsumo = crypto.randomUUID();
         const monedaItem = item.moneda || 'ARS';
-        const fechaISO = (item.fecha ? String(item.fecha).substring(0, 10) : new Date().toISOString().split('T')[0]);
+        // La fecha del consumo de tarjeta se imputa SIEMPRE al vencimiento del resumen (pago diferido)
+        const fechaISO = (stVto ? String(stVto).substring(0, 10) : (item.fecha ? String(item.fecha).substring(0, 10) : new Date().toISOString().split('T')[0]));
         const cuotaTot = Number(item.cuotaTotal || item.cuota_total || 1);
         const cuotaAct = Number(item.cuotaActual || item.cuota_actual || 1);
         const tipoConsumo = item.tipoConsumo || (cuotaTot > 1 ? 'CUOTAS' : 'SIMPLE');

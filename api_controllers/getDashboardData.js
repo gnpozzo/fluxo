@@ -55,23 +55,46 @@ export default async function handler(req, res) {
 
     if (movError) throw movError;
 
+    // Estado de pagos desde logs (persistencia sin requerir migración DDL estricta)
+    const { data: logRows } = await supabase
+      .from('logs')
+      .select('contexto')
+      .eq('funcion', 'ESTADO_PAGOS')
+      .eq('mensaje', userId)
+      .limit(1);
+    const pagosMap = logRows?.[0]?.contexto || {};
+
     // Cálculo de capa intermedia en Edge Node.js (Más veloz que hacer el match en Frontend)
-    let ingresos = 0, egresos = 0;
+    let ingresos = 0, egresos = 0, egresosSaldados = 0, egresosPendientes = 0;
     (movimientos || []).forEach(m => {
+        m.pagado = !!pagosMap[m.id_movimiento]?.pagado;
+        m.fecha_pago = pagosMap[m.id_movimiento]?.fecha_pago || null;
+
         const amt = Math.abs(Number(m.importe));
         if (m.tipo_mov === 'INGRESO') ingresos += amt;
-        if (m.tipo_mov === 'EGRESO') egresos -= amt;
+        if (m.tipo_mov === 'EGRESO') {
+          egresos -= amt;
+          if (m.pagado) egresosSaldados += amt;
+          else egresosPendientes += amt;
+        }
     });
+
+    const totalEgrAbs = Math.abs(egresos);
 
     return res.status(200).json({
       success: true,
       kpis: {
         ingresos,
         egresos,
-        resultado: ingresos + egresos
+        resultado: ingresos + egresos,
+        egresosSaldados,
+        egresosPendientes,
+        pctSaldado: totalEgrAbs > 0 ? Math.round((egresosSaldados / totalEgrAbs) * 100) : 0,
+        pctPendiente: totalEgrAbs > 0 ? Math.round((egresosPendientes / totalEgrAbs) * 100) : 0
       },
       movimientos: movimientos || []
     });
+
 
   } catch (err) {
     console.error('[API -> getDashboardData -> ERROR]', err.message);

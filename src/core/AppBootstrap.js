@@ -114,6 +114,19 @@ export class BaseModule {
     if (!this._updateEndpoint) return;
     try {
       modal?.setLoading(true);
+
+      // 1. Guardar posición de scroll de la pantalla
+      const scrollEl = document.querySelector('.main-content');
+      const savedScroll = {
+        mainTop: scrollEl ? scrollEl.scrollTop : 0,
+        winY: window.scrollY || document.documentElement.scrollTop || 0
+      };
+
+      // 2. Notificar al módulo para que preserve la página de la tabla
+      if (typeof this.preserveViewOnUpdate === 'function') {
+        this.preserveViewOnUpdate(id);
+      }
+
       await App.API.call(this._updateEndpoint, id, formData, scope);
       modal?.close();
       if (App.Toast) App.Toast.success('Registro actualizado.');
@@ -121,6 +134,16 @@ export class BaseModule {
       if (App.Events) App.Events.emit('data:changed');
       this.destruir();
       await this.cargar();
+
+      // 3. Restaurar posición de scroll exacta en la pantalla
+      const restoreScroll = () => {
+        if (scrollEl && savedScroll.mainTop > 0) scrollEl.scrollTop = savedScroll.mainTop;
+        if (savedScroll.winY > 0) window.scrollTo(0, savedScroll.winY);
+      };
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+      setTimeout(restoreScroll, 50);
+      setTimeout(restoreScroll, 150);
     } catch (err) {
       if (App.Toast) App.Toast.error(err.message || 'Error al actualizar el registro.');
     } finally {
@@ -131,12 +154,31 @@ export class BaseModule {
   async _handleDelete(id, scope = 'SINGLE') {
     if (!this._deleteEndpoint) return;
     try {
+      const scrollEl = document.querySelector('.main-content');
+      const savedScroll = {
+        mainTop: scrollEl ? scrollEl.scrollTop : 0,
+        winY: window.scrollY || document.documentElement.scrollTop || 0
+      };
+
+      if (typeof this.preserveViewOnUpdate === 'function') {
+        this.preserveViewOnUpdate(id);
+      }
+
       await App.API.call(this._deleteEndpoint, id, scope);
       if (App.Toast) App.Toast.success('Registro eliminado.');
       App.API.invalidateAll();
       if (App.Events) App.Events.emit('data:changed');
       this.destruir();
       await this.cargar();
+
+      const restoreScroll = () => {
+        if (scrollEl && savedScroll.mainTop > 0) scrollEl.scrollTop = savedScroll.mainTop;
+        if (savedScroll.winY > 0) window.scrollTo(0, savedScroll.winY);
+      };
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+      setTimeout(restoreScroll, 50);
+      setTimeout(restoreScroll, 150);
     } catch (err) {
       if (App.Toast) App.Toast.error(err.message || 'Error al eliminar el registro.');
     }

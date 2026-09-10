@@ -21,6 +21,7 @@ export class DataTable {
   #page       = 1;
   #pageSize   = 20;
   #searchTerm = '';
+  #preservePageOnNextLoad = false;
 
   /**
    * @param {string|HTMLElement} container  Selector o elemento contenedor
@@ -58,20 +59,54 @@ export class DataTable {
   // --- SECCIÓN 1: API PÚBLICA ---
 
   /**
+   * Página actual (1-indexed)
+   */
+  get page() {
+    return this.#page;
+  }
+
+  set page(val) {
+    const p = Number(val);
+    if (isNaN(p) || p < 1) return;
+    const pages = Math.max(1, Math.ceil(this.#filtered.length / this.#pageSize));
+    this.#page = Math.min(p, pages);
+    this.#renderBody();
+    this.#renderPagination();
+  }
+
+  /**
+   * Marca que la siguiente llamada a load() debe conservar la página actual.
+   */
+  preservePageOnNextLoad() {
+    this.#preservePageOnNextLoad = true;
+  }
+
+  /**
    * Carga datos en la tabla y renderiza.
    * @param {Array} data
+   * @param {Object} [options]
+   * @param {boolean} [options.preservePage=false] Mantener la página actual
+   * @param {number} [options.page] Página destino específica
    */
-  load(data) {
+  load(data, options = {}) {
+    const shouldPreserve = options.preservePage ?? this.#preservePageOnNextLoad ?? false;
+    this.#preservePageOnNextLoad = false;
+    const targetPage = options.page !== undefined ? options.page : (shouldPreserve ? this.#page : 1);
+
     this.#data     = Array.isArray(data) ? data : [];
-    this.#page     = 1;
     let filtered   = this.#applySearch(this.#data);
     if (this.#sortCol) {
       filtered = this.#sortData(filtered);
     }
     this.#filtered = filtered;
+
+    const total = this.#filtered.length;
+    const pages = Math.max(1, Math.ceil(total / this.#pageSize));
+    this.#page = Math.min(Math.max(1, targetPage), pages);
+
     this.#renderBody();
     this.#renderPagination();
-    App.log('DataTable', 'load', `${this.#data.length} registros cargados`);
+    App.log('DataTable', 'load', `${this.#data.length} registros cargados (pág. ${this.#page}/${pages})`);
   }
 
   /**
@@ -203,15 +238,18 @@ export class DataTable {
     }
 
     const clickable = typeof this.#config.onRowClick === 'function';
-    tbody.innerHTML = rows.map((row, i) => `
-      <tr data-index="${i}" class="dt-row${clickable ? ' dt-row-clickable' : ''}">
+    tbody.innerHTML = rows.map((row, i) => {
+      const rowId = row.id_movimiento || row.id_consumo_tc || row.id_consumo_tarjeta || row.id_consumo || row.id || '';
+      return `
+      <tr data-index="${i}" data-id="${rowId}" class="dt-row${clickable ? ' dt-row-clickable' : ''}">
         ${columns.map(c => {
           const val = c.render
             ? c.render(row)
             : App.Utils.escapeHtml(row[c.key] ?? '—');
           return `<td class="${c.align ? 'text-' + c.align : ''} ${c.className || ''}">${val}</td>`;
         }).join('')}
-    `).join('');
+      </tr>`;
+    }).join('');
     // (La delegación de eventos ahora se centraliza en #bindListeners para ser eficiente y prevenir memory leaks)
   }
 

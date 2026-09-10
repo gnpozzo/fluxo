@@ -1,4 +1,5 @@
 'use strict';
+import Chart from 'chart.js/auto';
 /* ============================================================
    module-movimientos.html — v5.1.0
    Módulo Ingresos / Egresos.
@@ -28,6 +29,19 @@ export class MovimientosModule extends BaseModule {
   #modal       = null;
   #editData    = null;
   #cacheIngresos = {};
+  #savedViewPosition = null;
+  #currentData = null;
+  #currentView = 'tabla';
+  #chartInstance = null;
+
+  preserveViewOnUpdate(id) {
+    const scrollEl = document.querySelector('.main-content');
+    this.#savedViewPosition = {
+      scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
+      page: this.#table?.page || 1,
+      rowId: id || this.#editData?.id_movimiento || null
+    };
+  }
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -94,9 +108,47 @@ export class MovimientosModule extends BaseModule {
       invertido: kpis.resultado < 0
     });
 
+    this.#currentData = data;
+
+    // Barra de control de pagos (saldados vs pendientes)
+    this.#renderBarraPagos(kpis);
+
     // Tabla
-    this.#table?.load(movimientos || []);
+    const targetPage = this.#savedViewPosition?.page;
+    if (targetPage) {
+      this.#table?.load(movimientos || [], { page: targetPage });
+    } else {
+      this.#table?.load(movimientos || []);
+    }
+
+    // Si la vista de gráficos está activa, actualizarla
+    if (this.#currentView === 'graficos') {
+      this.#renderGraficos(movimientos || [], kpis);
+    }
+
     App.log('MovimientosModule', '_render', `${(movimientos || []).length} movimientos`);
+
+    // Restaurar ubicación de pantalla y resaltar movimiento modificado
+    if (this.#savedViewPosition) {
+      const { scroll, rowId } = this.#savedViewPosition;
+      this.#savedViewPosition = null;
+      const restore = () => {
+        const sc = document.querySelector('.main-content');
+        if (sc && scroll > 0) sc.scrollTop = scroll;
+        if (window.scrollY > 0 || scroll > 0) window.scrollTo(0, scroll);
+        if (rowId) {
+          const rowEl = document.querySelector(`tr[data-id="${rowId}"]`);
+          if (rowEl) {
+            rowEl.classList.add('dt-row-highlight');
+            setTimeout(() => rowEl.classList.remove('dt-row-highlight'), 2500);
+          }
+        }
+      };
+      restore();
+      requestAnimationFrame(restore);
+      setTimeout(restore, 50);
+      setTimeout(restore, 150);
+    }
   }
 
   // --- SECCIÓN 3: BUILD DOM ---
@@ -109,9 +161,15 @@ export class MovimientosModule extends BaseModule {
       <!-- KPIs -->
       <div class="kpi-grid" id="mov-kpi-grid"></div>
 
-      <!-- Acciones -->
-      <div class="section-header" style="margin-bottom:var(--space-3)">
-        <div class="acciones-container" id="mov-acciones"></div>
+      <!-- Barra de Control de Pagos -->
+      <div id="mov-pagos-bar-wrap" style="margin-bottom:var(--space-3)"></div>
+
+      <!-- Selector de Vista y Buscador -->
+      <div class="section-header" style="margin-bottom:var(--space-3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div class="selector-vista-container">
+          <button id="mov-btn-tabla" class="btn-vista active" type="button">Movimientos</button>
+          <button id="mov-btn-graficos" class="btn-vista" type="button">Análisis Gráfico</button>
+        </div>
         <div class="dt-search" id="mov-search-wrap">
           ${App.Icons.get('search', 'icon-sm')}
           <input id="mov-search" class="input" type="text"
@@ -121,6 +179,9 @@ export class MovimientosModule extends BaseModule {
 
       <!-- Tabla -->
       <div class="table-card" id="mov-tabla-wrap"></div>
+
+      <!-- Vista Gráficos (inicialmente oculta) -->
+      <div class="table-card hidden" id="mov-graficos-wrap"></div>
     `;
 
     // KPI Cards
@@ -144,10 +205,6 @@ export class MovimientosModule extends BaseModule {
       onFormat  : App.Utils.formatearMoneda
     });
 
-    // Botones de acción eliminados en favor del FAB global
-    const acciones = document.getElementById('mov-acciones');
-    acciones.innerHTML = '';
-
     // DataTable
     this.#table = new App.DataTable(
       document.getElementById('mov-tabla-wrap'),
@@ -167,7 +224,14 @@ export class MovimientosModule extends BaseModule {
           { key: 'descripcion',     label: 'Descripción', searchable: true,
             render: (r) => this.#renderDescripcion(r) },
           { key: 'importe',         label: 'Importe',    sortable: true, align: 'right',
-            render: (r) => `<span class="${r.tipo_mov === 'EGRESO' ? 'negativo' : 'positivo'}">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>` }
+            render: (r) => `<span class="${r.tipo_mov === 'EGRESO' ? 'negativo' : 'positivo'}">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>` },
+          { key: 'pagado',          label: 'Estado Pago',sortable: true, align: 'center',
+            sortValue: (r) => r.pagado ? 1 : 0,
+            render: (r) => {
+              if (r.tipo_mov !== 'EGRESO') return `<span style="color:var(--texto-3);font-size:0.75rem;">—</span>`;
+              const isPaid = !!r.pagado;
+              return `<button type="button" class="btn-toggle-pago ${isPaid ? 'pago-saldado' : 'pago-pendiente'}" data-toggle-pago="${r.id_movimiento}" title="${isPaid ? 'Saldado (Clic para marcar pendiente)' : 'Pendiente (Clic para marcar saldado)'}">${isPaid ? '✓ Saldado' : '⏳ Pendiente'}</button>`;
+            } }
         ],
         emptyMsg  : 'No hay movimientos para este período.',
         searchable: false,
@@ -235,6 +299,12 @@ export class MovimientosModule extends BaseModule {
   }
 
   #abrirModalEdicion(row) {
+    const scrollEl = document.querySelector('.main-content');
+    this.#savedViewPosition = {
+      scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
+      page: this.#table?.page || 1,
+      rowId: row.id_movimiento
+    };
     this.#editData = row;
     const tipo     = row.tipo_mov;
     const esIngreso = tipo === 'INGRESO';
@@ -794,6 +864,12 @@ export class MovimientosModule extends BaseModule {
   }
 
   async #eliminar(row) {
+    const scrollEl = document.querySelector('.main-content');
+    this.#savedViewPosition = {
+      scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
+      page: this.#table?.page || 1,
+      rowId: null
+    };
     const esSerio = !!row.recur_group_id || !!row.split_group_id;
     if (!esSerio) {
       const confirmModal = new App.Modal('modal-mov-confirm-delete');
@@ -852,6 +928,203 @@ export class MovimientosModule extends BaseModule {
     }
   }
 
+  // --- SECCIÓN 5b: RENDER HELPERS PAGOS Y GRÁFICOS ---
+
+  #renderBarraPagos(kpis) {
+    const wrap = document.getElementById('mov-pagos-bar-wrap');
+    if (!wrap) return;
+
+    const saldados = Number(kpis?.egresosSaldados || 0);
+    const pendientes = Number(kpis?.egresosPendientes || 0);
+    const totalEgresos = saldados + pendientes;
+
+    if (totalEgresos <= 0) {
+      wrap.innerHTML = '';
+      return;
+    }
+
+    const pctSaldado = Math.round((saldados / totalEgresos) * 100);
+    const pctPendiente = 100 - pctSaldado;
+
+    wrap.innerHTML = `
+      <div class="pagos-bar-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r);padding:12px 18px;box-shadow:var(--sombra-sm);flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:34px;height:34px;border-radius:var(--r-full);background:var(--verde-tint, rgba(16,185,129,0.12));display:flex;align-items:center;justify-content:center;color:var(--verde, #10B981);font-weight:900;font-size:1.1rem;">
+            ✓
+          </div>
+          <div>
+            <span style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--texto-3);font-weight:700;display:block;">Control de Pagos del Mes</span>
+            <div style="font-size:0.85rem;color:var(--texto);font-weight:600;display:flex;align-items:center;gap:8px;margin-top:2px;">
+              <span style="color:var(--verde, #10B981);">Saldado: <strong>${App.Utils.formatearMoneda(saldados)}</strong> (${pctSaldado}%)</span>
+              <span style="color:var(--texto-3);">•</span>
+              <span style="color:var(--kpi-amber, #F59E0B);">Pendiente: <strong>${App.Utils.formatearMoneda(pendientes)}</strong> (${pctPendiente}%)</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:200px;max-width:320px;display:flex;flex-direction:column;gap:5px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.75rem;font-weight:700;">
+            <span style="color:var(--verde, #10B981);">${pctSaldado}% pagado</span>
+            <span style="color:var(--kpi-amber, #F59E0B);">${pctPendiente}% pendiente</span>
+          </div>
+          <div style="width:100%;height:8px;background:var(--bg-2);border-radius:9999px;overflow:hidden;display:flex;">
+            <div style="width:${pctSaldado}%;height:100%;background:var(--verde, #10B981);transition:width .3s ease;"></div>
+            <div style="width:${pctPendiente}%;height:100%;background:var(--kpi-amber, #F59E0B);transition:width .3s ease;"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  #renderGraficos(movimientos, kpis) {
+    const wrap = document.getElementById('mov-graficos-wrap');
+    if (!wrap) return;
+
+    // Solo egresos para el análisis de distribución
+    const egresos = (movimientos || []).filter(m => m.tipo_mov === 'EGRESO');
+    const totalGastos = egresos.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+    const totalIngresos = Number(kpis?.ingresos || 0);
+
+    if (egresos.length === 0 || totalGastos <= 0) {
+      wrap.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.875rem;">No hay gastos registrados en este período para analizar.</div>`;
+      return;
+    }
+
+    // Agrupar por categoría
+    const catMap = {};
+    egresos.forEach(m => {
+      const cat = m.categoria_nombre || 'General';
+      const imp = Math.abs(Number(m.importe || 0));
+      if (!catMap[cat]) catMap[cat] = { total: 0, count: 0 };
+      catMap[cat].total += imp;
+      catMap[cat].count += 1;
+    });
+
+    const sortedCats = Object.entries(catMap)
+      .map(([name, data]) => ({
+        name,
+        total: data.total,
+        count: data.count,
+        pctGastos: ((data.total / totalGastos) * 100),
+        pctIngresos: totalIngresos > 0 ? ((data.total / totalIngresos) * 100) : 0
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const palette = [
+      '#4361EE', '#3A0CA3', '#7209B7', '#F72585', '#4CC9F0',
+      '#2EC4B6', '#FF9F1C', '#E71D36', '#06D6A0', '#118AB2',
+      '#8338EC', '#3F37C9', '#FB8500', '#023047', '#219EBC'
+    ];
+
+    const labels = sortedCats.map(c => c.name);
+    const dataValues = sortedCats.map(c => Math.round(c.total));
+    const bgColors = sortedCats.map((_, i) => palette[i % palette.length]);
+
+    const tasaGastoSobreIngreso = totalIngresos > 0 ? ((totalGastos / totalIngresos) * 100).toFixed(1) : null;
+
+    wrap.innerHTML = `
+      <div style="padding:20px 24px;border-bottom:1px solid var(--borde);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h3 style="margin:0 0 4px 0;font-size:1.05rem;color:var(--texto);font-weight:700;">Distribución de Gastos por Categoría</h3>
+          <p style="margin:0;font-size:0.82rem;color:var(--texto-2);">
+            Doble métrica: <strong>% sobre Gastos Totales</strong> y <strong>% sobre Ingresos Percibidos</strong>.
+          </p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:0.8rem;background:var(--primary-tint);color:var(--primary);padding:4px 10px;border-radius:var(--r-full);font-weight:600;">
+            ${sortedCats.length} categorías
+          </span>
+          ${tasaGastoSobreIngreso ? `
+            <span style="font-size:0.8rem;background:${Number(tasaGastoSobreIngreso) > 80 ? 'var(--rojo-tint)' : 'var(--verde-tint)'};color:${Number(tasaGastoSobreIngreso) > 80 ? 'var(--rojo)' : 'var(--verde)'};padding:4px 10px;border-radius:var(--r-full);font-weight:600;">
+              Total: ${tasaGastoSobreIngreso}% de tus ingresos
+            </span>
+          ` : ''}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:24px;padding:24px;align-items:center;">
+        <!-- Gráfico Doughnut -->
+        <div style="position:relative;max-width:360px;margin:0 auto;width:100%;height:320px;display:flex;align-items:center;justify-content:center;">
+          <canvas id="mov-chart-canvas"></canvas>
+        </div>
+
+        <!-- Desglose con doble métrica -->
+        <div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;padding-right:6px;">
+          ${sortedCats.map((cat, idx) => {
+            const color = bgColors[idx];
+            return `
+              <div style="background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r);padding:10px 14px;display:flex;flex-direction:column;gap:6px;transition:transform .15s ease;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='translateY(0)'">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
+                    <strong style="color:var(--texto);font-size:0.85rem;">${App.Utils.escapeHtml(cat.name)}</strong>
+                    <span style="font-size:0.75rem;color:var(--texto-3);">(${cat.count})</span>
+                  </div>
+                  <strong class="negativo" style="font-size:0.9rem;">${App.Utils.formatearMoneda(cat.total)}</strong>
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:0.78rem;">
+                  <div style="flex:1;display:flex;align-items:center;gap:6px;">
+                    <span style="color:var(--texto-2);min-width:68px;">s/ Gastos:</span>
+                    <div style="flex:1;height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden;">
+                      <div style="width:${cat.pctGastos.toFixed(1)}%;height:100%;background:${color};"></div>
+                    </div>
+                    <strong style="min-width:42px;text-align:right;color:var(--texto);">${cat.pctGastos.toFixed(1)}%</strong>
+                  </div>
+
+                  <div style="min-width:120px;text-align:right;">
+                    <span style="color:var(--texto-3);margin-right:4px;">s/ Ingresos:</span>
+                    <span style="font-weight:700;color:${cat.pctIngresos > 25 ? 'var(--rojo)' : (cat.pctIngresos > 15 ? 'var(--kpi-amber)' : 'var(--texto)')};background:var(--bg-2);padding:2px 6px;border-radius:4px;">
+                      ${totalIngresos > 0 ? cat.pctIngresos.toFixed(1) + '%' : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    // Instanciar Chart.js
+    const canvas = document.getElementById('mov-chart-canvas');
+    if (canvas) {
+      this.#chartInstance?.destroy();
+      const ctx = canvas.getContext('2d');
+      this.#chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: dataValues,
+            backgroundColor: bgColors,
+            borderColor: 'var(--superficie)',
+            borderWidth: 2,
+            hoverOffset: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '68%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const val = context.parsed || 0;
+                  const pctG = ((val / totalGastos) * 100).toFixed(1);
+                  const pctI = totalIngresos > 0 ? ((val / totalIngresos) * 100).toFixed(1) + '% de ingresos' : '';
+                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pctG}% gastos${pctI ? ' | ' + pctI : ''})`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
   // --- SECCIÓN 6: LISTENERS ---
 
   _bindListeners() {
@@ -861,6 +1134,63 @@ export class MovimientosModule extends BaseModule {
         this.#table?.search(e.target.value);
       }, 250));
     }
+
+    // Switch de vista: Tabla vs Análisis Gráfico
+    const btnTabla = document.getElementById('mov-btn-tabla');
+    const btnGraficos = document.getElementById('mov-btn-graficos');
+    const tablaWrap = document.getElementById('mov-tabla-wrap');
+    const graficosWrap = document.getElementById('mov-graficos-wrap');
+    const searchWrap = document.getElementById('mov-search-wrap');
+
+    btnTabla?.addEventListener('click', () => {
+      this.#currentView = 'tabla';
+      btnTabla.classList.add('active');
+      btnGraficos?.classList.remove('active');
+      tablaWrap?.classList.remove('hidden');
+      searchWrap?.classList.remove('hidden');
+      graficosWrap?.classList.add('hidden');
+    });
+
+    btnGraficos?.addEventListener('click', () => {
+      this.#currentView = 'graficos';
+      btnGraficos.classList.add('active');
+      btnTabla?.classList.remove('active');
+      tablaWrap?.classList.add('hidden');
+      searchWrap?.classList.add('hidden');
+      graficosWrap?.classList.remove('hidden');
+      this.#renderGraficos(this.#currentData?.movimientos || [], this.#currentData?.kpis || {});
+    });
+
+    // Delegación para botón toggle pago en movimientos
+    tablaWrap?.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-toggle-pago]');
+      if (!btn) return;
+      e.stopPropagation(); // Evitar abrir modal de detalle
+      const id = btn.dataset.togglePago;
+      if (!id) return;
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      try {
+        const resp = await App.API.fetch('/api/togglePago', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'toggle', id })
+        });
+        if (resp && resp.success) {
+          if (App.Toast) App.Toast.success(resp.pagado ? 'Gasto marcado como Saldado' : 'Gasto marcado como Pendiente');
+          App.API.invalidateAll();
+          if (App.Events) App.Events.emit('data:changed');
+          this.destruir();
+          await this.cargar();
+        } else {
+          throw new Error(resp?.error || 'Error al cambiar estado');
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        if (App.Toast) App.Toast.error(err.message || 'Error al actualizar estado de pago');
+      }
+    });
   }
 
   // --- SECCIÓN 7: DETAIL MODAL ---

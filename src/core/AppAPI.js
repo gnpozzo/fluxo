@@ -64,6 +64,15 @@ class ApiService {
     return this.call(fnName, id);
   }
 
+  async fetch(endpoint, options = {}) {
+    const method = options.method || 'POST';
+    let body = options.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch(e) {}
+    }
+    return this.#internalFetch(endpoint, method, body || {});
+  }
+
   invalidatePattern(pattern) {
     for (const key of this._cache.keys()) {
       if (key.includes(pattern)) this._cache.delete(key);

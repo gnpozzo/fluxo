@@ -1,4 +1,5 @@
 'use strict';
+import Chart from 'chart.js/auto';
 /* ============================================================
    module-tarjetas.html — v5.0.0
    Módulo Tarjetas de Crédito.
@@ -31,6 +32,18 @@ export class TarjetasModule extends BaseModule {
   #selectedCuentaId = '';
   #txListImportar = [];
   #lastStatementPayload = null;
+  #savedViewPosition = null;
+  #chartInstance = null;
+  #currentView = 'mes';
+
+  preserveViewOnUpdate(id) {
+    const scrollEl = document.querySelector('.main-content');
+    this.#savedViewPosition = {
+      scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
+      page: this.#table?.page || 1,
+      rowId: id || this.#editData?.id_consumo_tc || this.#editData?.id_consumo_tarjeta || null
+    };
+  }
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -258,11 +271,13 @@ export class TarjetasModule extends BaseModule {
 
       <div class="kpi-grid" id="tc-kpi-grid"></div>
 
-      <div class="section-header" style="margin-bottom:var(--space-3)">
+      <div class="section-header" style="margin-bottom:var(--space-3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div class="acciones-container" id="tc-acciones"></div>
         <div class="selector-vista-container">
           <button id="tc-btn-mes" class="btn btn-primary btn-vista active">Consumos del Mes</button>
           <button id="tc-btn-proy" class="btn btn-ghost btn-vista">Proyecciones</button>
+          <button id="tc-btn-graficos" class="btn btn-ghost btn-vista">Gráficos</button>
+          <button id="tc-btn-pagar-resumen" class="btn btn-secondary btn-sm" style="margin-left:8px;display:inline-flex;align-items:center;gap:6px;" title="Liquidar resumen y marcar consumos como saldados">💳 Pagar Resumen</button>
         </div>
       </div>
       <div class="table-card" id="tc-tabla-wrap"></div>
@@ -270,6 +285,7 @@ export class TarjetasModule extends BaseModule {
       <div class="table-card hidden" id="tc-proy-wrap">
          <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando proyecciones...</div>
       </div>
+      <div class="table-card hidden" id="tc-graficos-wrap"></div>
     `;
 
     const grid = document.getElementById('tc-kpi-grid');
@@ -333,6 +349,23 @@ export class TarjetasModule extends BaseModule {
               }
               return `<span class="badge badge-tc">Personal</span>`;
             }
+          },
+          {
+            key: 'pagado',
+            label: 'Estado Pago',
+            sortable: true,
+            align: 'center',
+            sortValue: (r) => r.pagado ? 1 : 0,
+            render: (r) => {
+              const isPaid = !!r.pagado;
+              return `
+                <button type="button" class="btn-toggle-pago ${isPaid ? 'pago-saldado' : 'pago-pendiente'}"
+                        data-toggle-pago-tc="${r.id_consumo_tc || r.id_consumo_tarjeta}"
+                        title="${isPaid ? 'Saldado (Clic para marcar como pendiente)' : 'Pendiente (Clic para marcar como saldado)'}">
+                  ${isPaid ? '✓ Saldado' : '⏳ Pendiente'}
+                </button>
+              `;
+            }
           }
         ],
         emptyMsg          : 'No hay consumos para este período.',
@@ -364,6 +397,12 @@ export class TarjetasModule extends BaseModule {
   }
 
   #abrirModalEdicion(row) {
+    const scrollEl = document.querySelector('.main-content');
+    this.#savedViewPosition = {
+      scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
+      page: this.#table?.page || 1,
+      rowId: row.id_consumo_tc || row.id_consumo_tarjeta
+    };
     this.#editData = row;
     this.#modal.open({
       titulo      : 'Editar Consumo',
@@ -586,6 +625,12 @@ export class TarjetasModule extends BaseModule {
   }
 
   async #eliminar(row) {
+    const scrollEl = document.querySelector('.main-content');
+    this.#savedViewPosition = {
+      scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
+      page: this.#table?.page || 1,
+      rowId: null
+    };
     const confirmModal = new App.Modal('modal-tc-del-confirm');
     confirmModal.open({
       titulo      : 'Eliminar consumo',
@@ -614,25 +659,57 @@ export class TarjetasModule extends BaseModule {
         if (btn.id === 'tc-btn-nuevo') {
           this.#abrirModalAlta();
         } else if (btn.id === 'tc-btn-mes') {
+          this.#currentView = 'mes';
           const btnMes = document.getElementById('tc-btn-mes');
           const btnProy = document.getElementById('tc-btn-proy');
+          const btnGraf = document.getElementById('tc-btn-graficos');
           btnMes?.classList.add('active', 'btn-primary');
           btnMes?.classList.remove('btn-ghost');
           btnProy?.classList.remove('active', 'btn-primary');
           btnProy?.classList.add('btn-ghost');
+          btnGraf?.classList.remove('active', 'btn-primary');
+          btnGraf?.classList.add('btn-ghost');
           document.getElementById('tc-tabla-wrap')?.classList.remove('hidden');
           document.getElementById('tc-taxes-wrap')?.classList.remove('hidden');
           document.getElementById('tc-proy-wrap')?.classList.add('hidden');
+          document.getElementById('tc-graficos-wrap')?.classList.add('hidden');
         } else if (btn.id === 'tc-btn-proy') {
+          this.#currentView = 'proy';
           const btnMes = document.getElementById('tc-btn-mes');
           const btnProy = document.getElementById('tc-btn-proy');
+          const btnGraf = document.getElementById('tc-btn-graficos');
           btnProy?.classList.add('active', 'btn-primary');
           btnProy?.classList.remove('btn-ghost');
           btnMes?.classList.remove('active', 'btn-primary');
           btnMes?.classList.add('btn-ghost');
+          btnGraf?.classList.remove('active', 'btn-primary');
+          btnGraf?.classList.add('btn-ghost');
           document.getElementById('tc-proy-wrap')?.classList.remove('hidden');
           document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
           document.getElementById('tc-taxes-wrap')?.classList.add('hidden');
+          document.getElementById('tc-graficos-wrap')?.classList.add('hidden');
+        } else if (btn.id === 'tc-btn-graficos') {
+          this.#currentView = 'graficos';
+          const btnMes = document.getElementById('tc-btn-mes');
+          const btnProy = document.getElementById('tc-btn-proy');
+          const btnGraf = document.getElementById('tc-btn-graficos');
+          btnGraf?.classList.add('active', 'btn-primary');
+          btnGraf?.classList.remove('btn-ghost');
+          btnMes?.classList.remove('active', 'btn-primary');
+          btnMes?.classList.add('btn-ghost');
+          btnProy?.classList.remove('active', 'btn-primary');
+          btnProy?.classList.add('btn-ghost');
+          document.getElementById('tc-graficos-wrap')?.classList.remove('hidden');
+          document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
+          document.getElementById('tc-taxes-wrap')?.classList.add('hidden');
+          document.getElementById('tc-proy-wrap')?.classList.add('hidden');
+          this.#renderGraficos();
+        } else if (btn.id === 'tc-btn-pagar-resumen') {
+          this.#confirmarPagarResumen();
+        } else if (btn.dataset.togglePagoTc) {
+          e.stopPropagation();
+          const id = btn.dataset.togglePagoTc;
+          if (id) this.#togglePagoTc(id, btn);
         } else if (btn.id === 'tc-slide-prev') {
           const selectorEl = document.getElementById('tc-card-selector');
           selectorEl?.scrollBy({ left: -240, behavior: 'smooth' });
@@ -965,8 +1042,35 @@ export class TarjetasModule extends BaseModule {
     const regularConsumos = filtered.filter(c => !this.#isTaxConsumo(c));
     const taxConsumos = filtered.filter(c => this.#isTaxConsumo(c));
 
-    this.#table?.load(regularConsumos);
+    const targetPage = this.#savedViewPosition?.page;
+    if (targetPage) {
+      this.#table?.load(regularConsumos, { page: targetPage });
+    } else {
+      this.#table?.load(regularConsumos);
+    }
     this.#renderImpuestosAccordion(taxConsumos);
+
+    // Restaurar ubicación de pantalla y resaltar consumo modificado
+    if (this.#savedViewPosition) {
+      const { scroll, rowId } = this.#savedViewPosition;
+      this.#savedViewPosition = null;
+      const restore = () => {
+        const sc = document.querySelector('.main-content');
+        if (sc && scroll > 0) sc.scrollTop = scroll;
+        if (window.scrollY > 0 || scroll > 0) window.scrollTo(0, scroll);
+        if (rowId) {
+          const rowEl = document.querySelector(`tr[data-id="${rowId}"]`);
+          if (rowEl) {
+            rowEl.classList.add('dt-row-highlight');
+            setTimeout(() => rowEl.classList.remove('dt-row-highlight'), 2500);
+          }
+        }
+      };
+      restore();
+      requestAnimationFrame(restore);
+      setTimeout(restore, 50);
+      setTimeout(restore, 150);
+    }
   }
 
   #renderImpuestosAccordion(taxes) {
@@ -1025,6 +1129,245 @@ export class TarjetasModule extends BaseModule {
       toggle.addEventListener('click', () => {
         accordion.classList.toggle('open');
       });
+    }
+  }
+
+  #renderGraficos() {
+    const wrap = document.getElementById('tc-graficos-wrap');
+    if (!wrap) return;
+
+    let filtered = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
+    if (this.#selectedTcId) {
+      filtered = filtered.filter(c => c.id_tarjeta === this.#selectedTcId);
+    }
+    if (this.#selectedCuentaId) {
+      if (this.#selectedCuentaId === 'sin_imputar') {
+        filtered = filtered.filter(c => !c.imputado);
+      } else if (this.#selectedCuentaId === 'personal') {
+        filtered = filtered.filter(c => c.imputado && (!c.es_incidencia_externa || c.id_cuenta_imputada === App.Store.cuenta));
+      } else {
+        filtered = filtered.filter(c => c.id_cuenta_imputada === this.#selectedCuentaId);
+      }
+    }
+
+    const totalConsumos = filtered.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+
+    if (filtered.length === 0 || totalConsumos <= 0) {
+      wrap.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.875rem;">No hay consumos en este período para graficar.</div>`;
+      return;
+    }
+
+    const catMap = {};
+    filtered.forEach(c => {
+      if (c.moneda === 'USD') return;
+      const cat = c.categoria_nombre || 'General';
+      const imp = Number(c.importe || 0);
+      if (!catMap[cat]) catMap[cat] = { total: 0, count: 0, personal: 0, externa: 0 };
+      catMap[cat].total += imp;
+      catMap[cat].count += 1;
+      if (c.imputado && c.es_incidencia_externa) catMap[cat].externa += imp;
+      else catMap[cat].personal += imp;
+    });
+
+    const sortedCats = Object.entries(catMap)
+      .map(([name, data]) => ({
+        name,
+        total: data.total,
+        count: data.count,
+        personal: data.personal,
+        externa: data.externa,
+        pct: ((data.total / totalConsumos) * 100)
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const palette = [
+      '#4361EE', '#7209B7', '#F72585', '#4CC9F0', '#2EC4B6',
+      '#FF9F1C', '#E71D36', '#06D6A0', '#118AB2', '#8338EC'
+    ];
+
+    const labels = sortedCats.map(c => c.name);
+    const dataValues = sortedCats.map(c => Math.round(c.total));
+    const bgColors = sortedCats.map((_, i) => palette[i % palette.length]);
+
+    const activeCardName = this.#selectedTcId
+      ? (this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId)?.nombre || 'Tarjeta Seleccionada')
+      : 'Consolidado Todas las Tarjetas';
+
+    wrap.innerHTML = `
+      <div style="padding:20px 24px;border-bottom:1px solid var(--borde);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h3 style="margin:0 0 4px 0;font-size:1.05rem;color:var(--texto);font-weight:700;">Distribución de Consumos — ${App.Utils.escapeHtml(activeCardName)}</h3>
+          <p style="margin:0;font-size:0.82rem;color:var(--texto-2);">
+            Desglose de consumos del resumen por categoría e incidencia personal vs externa.
+          </p>
+        </div>
+        <div>
+          <span style="font-size:0.8rem;background:var(--primary-tint);color:var(--primary);padding:4px 10px;border-radius:var(--r-full);font-weight:600;">
+            Total: ${App.Utils.formatearMoneda(totalConsumos)}
+          </span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:24px;padding:24px;align-items:center;">
+        <div style="position:relative;max-width:360px;margin:0 auto;width:100%;height:320px;display:flex;align-items:center;justify-content:center;">
+          <canvas id="tc-chart-canvas"></canvas>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;padding-right:6px;">
+          ${sortedCats.map((cat, idx) => {
+            const color = bgColors[idx];
+            return `
+              <div style="background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r);padding:10px 14px;display:flex;flex-direction:column;gap:6px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
+                    <strong style="color:var(--texto);font-size:0.85rem;">${App.Utils.escapeHtml(cat.name)}</strong>
+                    <span style="font-size:0.75rem;color:var(--texto-3);">(${cat.count})</span>
+                  </div>
+                  <strong class="negativo" style="font-size:0.9rem;">${App.Utils.formatearMoneda(cat.total)}</strong>
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:0.78rem;">
+                  <div style="flex:1;display:flex;align-items:center;gap:6px;">
+                    <div style="flex:1;height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden;">
+                      <div style="width:${cat.pct.toFixed(1)}%;height:100%;background:${color};"></div>
+                    </div>
+                    <strong style="min-width:42px;text-align:right;color:var(--texto);">${cat.pct.toFixed(1)}%</strong>
+                  </div>
+                  ${cat.externa > 0 ? `
+                    <span style="font-size:0.72rem;color:var(--kpi-amber);background:var(--bg-2);padding:2px 6px;border-radius:4px;" title="Incidencia externa">
+                      🏛️ ${App.Utils.formatearMoneda(cat.externa)}
+                    </span>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    const canvas = document.getElementById('tc-chart-canvas');
+    if (canvas) {
+      this.#chartInstance?.destroy();
+      const ctx = canvas.getContext('2d');
+      this.#chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: dataValues,
+            backgroundColor: bgColors,
+            borderColor: 'var(--superficie)',
+            borderWidth: 2,
+            hoverOffset: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '68%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const val = context.parsed || 0;
+                  const pct = ((val / totalConsumos) * 100).toFixed(1);
+                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  async #confirmarPagarResumen() {
+    const activeCard = this.#selectedTcId
+      ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId)
+      : null;
+
+    const nombreTc = activeCard?.nombre || 'todas las tarjetas (Consolidado)';
+    const consumosAPagar = this.#selectedTcId
+      ? (this.#allConsumos || []).filter(c => c.id_tarjeta === this.#selectedTcId)
+      : (this.#allConsumos || []);
+
+    const totalAPagar = consumosAPagar.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+
+    const modal = new App.Modal('modal-tc-pagar-resumen');
+    modal.open({
+      titulo: 'Confirmar Pago de Resumen',
+      icono: 'credit_card',
+      body: `
+        <div style="text-align:center;padding:12px 0;">
+          <p style="margin:0 0 10px 0;font-size:0.95rem;color:var(--texto);">
+            ¿Confirmás el pago del resumen de <strong>${App.Utils.escapeHtml(nombreTc)}</strong>?
+          </p>
+          <div style="font-size:1.4rem;font-weight:800;color:var(--verde);margin-bottom:12px;">
+            ${App.Utils.formatearMoneda(totalAPagar)}
+          </div>
+          <p style="font-size:0.82rem;color:var(--texto-2);line-height:1.4;margin:0;">
+            Se marcarán como <strong>Saldados</strong> los ${consumosAPagar.length} consumos del período actual.
+          </p>
+        </div>
+      `,
+      confirmLabel: 'Confirmar Pago',
+      onConfirm: async (m) => {
+        m.setLoading(true);
+        try {
+          const ids = consumosAPagar.map(c => c.id_consumo_tc || c.id_consumo_tarjeta).filter(Boolean);
+          const resp = await App.API.fetch('/api/togglePago', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'pagar_resumen',
+              idTarjeta: this.#selectedTcId || '',
+              mes: App.Store?.mes || '',
+              ids
+            })
+          });
+          m.close();
+          if (resp && resp.success) {
+            if (App.Toast) App.Toast.success(`Resumen liquidado: ${resp.updatedCount || consumosAPagar.length} consumos marcados como Saldados`);
+            App.API.invalidateAll();
+            if (App.Events) App.Events.emit('data:changed');
+            this.destruir();
+            await this.cargar();
+          } else {
+            throw new Error(resp?.error || 'Error al procesar el pago');
+          }
+        } catch (err) {
+          m.setLoading(false);
+          if (App.Toast) App.Toast.error(err.message || 'Error al liquidar resumen');
+        }
+      }
+    });
+  }
+
+  async #togglePagoTc(id, btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    try {
+      const resp = await App.API.fetch('/api/togglePago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle', id })
+      });
+      if (resp && resp.success) {
+        if (App.Toast) App.Toast.success(resp.pagado ? 'Consumo marcado como Saldado' : 'Consumo marcado como Pendiente');
+        App.API.invalidateAll();
+        if (App.Events) App.Events.emit('data:changed');
+        this.destruir();
+        await this.cargar();
+      } else {
+        throw new Error(resp?.error || 'Error al actualizar');
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      if (App.Toast) App.Toast.error(err.message || 'Error al cambiar estado de pago');
     }
   }
 

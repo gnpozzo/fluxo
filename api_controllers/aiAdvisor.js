@@ -107,7 +107,40 @@ export default async function handler(req, res) {
                 }
               }
             });
+
+            // Desglose analítico con doble métrica: % sobre gastos y % sobre ingresos
+            const desgloseCats = {};
+            Object.entries(financialContext.gastosPorCategoria).forEach(([cat, imp]) => {
+              const pctG = financialContext.egresosMes > 0 ? (imp / financialContext.egresosMes) * 100 : 0;
+              const pctI = financialContext.ingresosMes > 0 ? (imp / financialContext.ingresosMes) * 100 : 0;
+              desgloseCats[cat] = {
+                monto: Math.round(imp * 100) / 100,
+                pctGastos: Math.round(pctG * 10) / 10 + '%',
+                pctIngresos: financialContext.ingresosMes > 0 ? Math.round(pctI * 10) / 10 + '%' : 'Sin ingresos'
+              };
+            });
+            financialContext.desgloseCategorias = desgloseCats;
           }
+
+          // Estado de pagos (Saldados vs Pendientes)
+          const { data: logRows } = await supabase
+            .from('logs')
+            .select('contexto')
+            .eq('funcion', 'ESTADO_PAGOS')
+            .eq('mensaje', userId)
+            .limit(1);
+          const pagosMap = logRows?.[0]?.contexto || {};
+          let saldados = 0, pendientes = 0;
+          (movs || []).forEach(m => {
+            if (m.tipo_mov === 'EGRESO') {
+              const isPaid = !!pagosMap[m.id_movimiento]?.pagado;
+              const imp = Math.abs(Number(m.importe || 0));
+              if (isPaid) saldados += imp;
+              else pendientes += imp;
+            }
+          });
+          financialContext.egresosSaldados = saldados;
+          financialContext.egresosPendientes = pendientes;
 
           // Deuda de tarjetas
           const { data: tcConsumos } = await supabase
@@ -259,10 +292,11 @@ DATOS DEL USUARIO Y CONTEXTO PATRIMONIAL ACTUAL:
 - Cuenta Activa: ${financialContext.cuentaNombre} (ID: ${financialContext.cuentaId}) | Período: ${mes || 'Actual'} | Moneda base: ${globalCurrency}
 - Cuentas del Usuario: ${cuentasTxt}
 - Perfil de Riesgo: ${riskProfile}
-- Ingresos del Mes: $${financialContext.ingresosMes.toLocaleString('es-AR')} | Egresos: $${financialContext.egresosMes.toLocaleString('es-AR')} | Balance Neto: $${balanceMes.toLocaleString('es-AR')}
+- Ingresos del Mes: $${financialContext.ingresosMes.toLocaleString('es-AR')} | Egresos Totales: $${financialContext.egresosMes.toLocaleString('es-AR')} | Balance Neto: $${balanceMes.toLocaleString('es-AR')}
+- Estado de Pagos del Mes: Ya Saldados/Abonados: $${(financialContext.egresosSaldados || 0).toLocaleString('es-AR')} | Pendientes de Pago: $${(financialContext.egresosPendientes || 0).toLocaleString('es-AR')}
 - Deuda en Tarjetas este mes: $${financialContext.deudaTarjetasTotal.toLocaleString('es-AR')}
 - Fondo en Chanchito (Ahorro líquido): $${financialContext.ahorroTotalARS.toLocaleString('es-AR')} ARS | US$ ${financialContext.ahorroTotalUSD.toLocaleString('es-AR')} USD
-- Gastos por Categoría: ${JSON.stringify(financialContext.gastosPorCategoria, null, 2)}
+- Gastos por Categoría (% sobre gastos y % sobre ingresos): ${JSON.stringify(financialContext.desgloseCategorias || financialContext.gastosPorCategoria, null, 2)}
 - Gastos Recurrentes / Cuotas: ${JSON.stringify(financialContext.gastosRecurrentes.slice(0, 8), null, 2)}
 - Cartera de Inversiones: ${JSON.stringify(financialContext.carteraInversiones.slice(0, 8), null, 2)}
 

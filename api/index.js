@@ -46,6 +46,7 @@ import aiAdvisor from '../api_controllers/aiAdvisor.js';
 import admin_getRecordatorios from '../api_controllers/admin_getRecordatorios.js';
 import admin_saveRecordatorio from '../api_controllers/admin_saveRecordatorio.js';
 import admin_deleteRecordatorio from '../api_controllers/admin_deleteRecordatorio.js';
+import togglePago from '../api_controllers/togglePago.js';
 import { authenticateUser } from '../api_lib/auth.js';
 
 
@@ -110,6 +111,8 @@ export default async function handler(req, res) {
       case 'admin_saveRecordatorio': return await admin_saveRecordatorio(req, res);
       case 'admin_deleteRecordatorio': return await admin_deleteRecordatorio(req, res);
       case 'aiAdvisor': return await aiAdvisor(req, res);
+      case 'togglePago':
+      case 'api_togglePago': return await togglePago(req, res);
 
       default:
         return res.status(404).json({ success: false, error: 'Endpoint not found: ' + endpoint });

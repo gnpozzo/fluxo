@@ -1752,17 +1752,21 @@ button.btn-secundario:hover {
 
 .gemini-panel-body {
   flex: 1;
-  overflow-y: auto;
-  padding: 20px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .gemini-panel-welcome {
   text-align: center;
-  padding: 40px 20px;
+  padding: 30px 16px;
   color: var(--texto-3);
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
 }
 .gemini-panel-welcome .gemini-sparkle-large {
   width: 56px;
@@ -4588,6 +4592,7 @@ body {
   flex-direction: column;
   gap: 12px;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -5612,4 +5617,53 @@ input:checked + .toggle-slider:before {
 
 .tc-proy-tax-detail.open {
   display: block;
+}
+
+/* Fila editada recientemente resaltada */
+@keyframes dtRowPulse {
+  0% { background-color: rgba(67, 97, 238, 0.28); }
+  50% { background-color: rgba(67, 97, 238, 0.14); }
+  100% { background-color: transparent; }
+}
+
+.dt-row-highlight {
+  animation: dtRowPulse 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+/* Badges interactivos para Estado de Pago */
+.btn-toggle-pago {
+  border: none;
+  border-radius: var(--r-full, 9999px);
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.18s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.btn-toggle-pago.pago-saldado {
+  background: var(--verde-tint, rgba(16, 185, 129, 0.12));
+  color: var(--verde, #10B981);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.btn-toggle-pago.pago-saldado:hover {
+  background: rgba(16, 185, 129, 0.22);
+  transform: translateY(-1px);
+}
+
+.btn-toggle-pago.pago-pendiente {
+  background: var(--kpi-amber-tint, rgba(245, 158, 11, 0.12));
+  color: var(--kpi-amber, #F59E0B);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-toggle-pago.pago-pendiente:hover {
+  background: rgba(245, 158, 11, 0.22);
+  transform: translateY(-1px);
 }

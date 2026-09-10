@@ -29,6 +29,38 @@ export class GeminiChatController {
     this.#updateProfileUI();
   }
 
+  open() {
+    const geminiPanel = document.getElementById('gemini-panel');
+    const geminiOverlay = document.getElementById('gemini-overlay');
+    geminiPanel?.classList.add('open');
+    geminiOverlay?.classList.add('open');
+    this.onOpen();
+  }
+
+  onOpen() {
+    if (!this.#initialized) {
+      this.init();
+    }
+    // Si no estamos buscando, arrancar con el lote reciente (estilo WhatsApp)
+    if (!this.#searchQuery && this.#chatHistory.length > 0) {
+      this.#visibleCount = Math.min(10, this.#chatHistory.length);
+      this.#renderChatMessages({ scrollToBottom: true });
+    }
+    this.scrollToBottom();
+    // Asegurar scroll inferior una vez calculado el layout y las transiciones del panel
+    requestAnimationFrame(() => {
+      this.scrollToBottom();
+      setTimeout(() => this.scrollToBottom(), 50);
+      setTimeout(() => this.scrollToBottom(), 150);
+      setTimeout(() => this.scrollToBottom(), 300);
+      setTimeout(() => this.scrollToBottom(), 600);
+    });
+  }
+
+  scrollToBottom() {
+    this.#scrollToBottom();
+  }
+
   async init() {
     if (this.#initialized) return;
     this.#initialized = true;
@@ -151,10 +183,11 @@ export class GeminiChatController {
     // Scroll to top para cargar más historial (estilo WhatsApp)
     if (chatHistoryEl) {
       chatHistoryEl.addEventListener('scroll', () => {
-        if (chatHistoryEl.scrollTop <= 10 && this.#visibleCount < this.#chatHistory.length && !this.#searchQuery) {
+        if (chatHistoryEl.scrollTop <= 40 && this.#visibleCount < this.#chatHistory.length && !this.#searchQuery) {
           const oldScrollHeight = chatHistoryEl.scrollHeight;
-          this.#visibleCount = Math.min(this.#visibleCount + 8, this.#chatHistory.length);
-          this.#renderChatMessages({ preserveScroll: true, oldScrollHeight });
+          const oldScrollTop = chatHistoryEl.scrollTop;
+          this.#visibleCount = Math.min(this.#visibleCount + 10, this.#chatHistory.length);
+          this.#renderChatMessages({ preserveScroll: true, oldScrollHeight, oldScrollTop });
         }
       });
     }
@@ -313,8 +346,9 @@ export class GeminiChatController {
       loadMoreBtn.innerHTML = `▲ Ver mensajes anteriores (${hiddenCount})`;
       loadMoreBtn.addEventListener('click', () => {
         const oldScrollHeight = chatHistoryEl.scrollHeight;
+        const oldScrollTop = chatHistoryEl.scrollTop;
         this.#visibleCount = Math.min(this.#visibleCount + 10, total);
-        this.#renderChatMessages({ preserveScroll: true, oldScrollHeight });
+        this.#renderChatMessages({ preserveScroll: true, oldScrollHeight, oldScrollTop });
       });
       chatHistoryEl.appendChild(loadMoreBtn);
     }
@@ -328,7 +362,7 @@ export class GeminiChatController {
       this.#scrollToBottom();
     } else if (opts.preserveScroll && opts.oldScrollHeight) {
       const newScrollHeight = chatHistoryEl.scrollHeight;
-      chatHistoryEl.scrollTop = newScrollHeight - opts.oldScrollHeight;
+      chatHistoryEl.scrollTop = (newScrollHeight - opts.oldScrollHeight) + (opts.oldScrollTop || 0);
     }
   }
 
@@ -687,6 +721,10 @@ export class GeminiChatController {
     const chatHistory = document.getElementById('gemini-chat-history');
     if (chatHistory) {
       chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+    const panelBody = document.querySelector('.gemini-panel-body');
+    if (panelBody) {
+      panelBody.scrollTop = panelBody.scrollHeight;
     }
   }
 }

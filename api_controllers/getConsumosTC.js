@@ -168,15 +168,32 @@ export default async function handler(req, res) {
       c.tipo_consumo = c.recur_group_id?.startsWith('REC_') ? 'RECURRENTE' : (Number(c.cuota_total) > 1 ? 'CUOTAS' : 'COMUN');
     });
 
+    // Obtener estado de pagos
+    const { data: logRows } = await supabase
+      .from('logs')
+      .select('contexto')
+      .eq('funcion', 'ESTADO_PAGOS')
+      .eq('mensaje', userId)
+      .limit(1);
+    const pagosMap = logRows?.[0]?.contexto || {};
+
     let saldoTotal = 0;
     let incidenciaPersonal = 0;
     let incidenciaFamiliar = 0;
+    let saldoSaldado = 0;
+    let saldoPendiente = 0;
 
     (consumos || []).forEach(c => {
+      c.pagado = !!pagosMap[c.id_consumo_tarjeta]?.pagado;
+      c.fecha_pago = pagosMap[c.id_consumo_tarjeta]?.fecha_pago || null;
+
       if (c.moneda === 'USD') return;
       const imp = Number(c.importe || 0);
       saldoTotal += imp;
       
+      if (c.pagado) saldoSaldado += imp;
+      else saldoPendiente += imp;
+
       // Calculate incidence based on imputado flag and external status
       if (c.imputado && c.es_incidencia_externa) {
         incidenciaFamiliar += imp;
@@ -187,9 +204,11 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      kpis: { saldoTotal, incidenciaPersonal, incidenciaFamiliar },
+      kpis: { saldoTotal, incidenciaPersonal, incidenciaFamiliar, saldoSaldado, saldoPendiente },
+      pagosMap,
       consumos: consumos || []
     });
+
 
   } catch (err) {
     console.error('[API -> getConsumosTC Error]', err.message);

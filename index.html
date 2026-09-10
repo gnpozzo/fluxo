@@ -494,6 +494,9 @@
       function openGemini() {
         geminiPanel?.classList.add('open');
         geminiOverlay?.classList.add('open');
+        if (window.App && window.App.Gemini) {
+          window.App.Gemini.onOpen();
+        }
       }
 
       function closeGemini() {
