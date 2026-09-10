@@ -402,11 +402,11 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
         let isAuto = false;
 
         // Criterios de diferenciación para La Segunda:
-        // 1. Póliza 8758204 o ciclo de 3 cuotas (/03) -> Seguro Hogar (Vivienda)
-        // 2. Póliza 1028363 o ciclo de 6 cuotas (/06) -> Seguro Auto (Transporte)
-        if (sig.policyId === '8758204' || sig.cuotaTot === 3) {
+        // 1. Póliza 1028363 o ciclo de 6 cuotas (/06) -> Seguro Hogar (Vivienda)
+        // 2. Póliza 8758204 o ciclo de 3 cuotas (/03) -> Seguro Auto (Transporte)
+        if (sig.policyId === '1028363' || sig.cuotaTot === 6) {
           isHogar = true;
-        } else if (sig.policyId === '1028363' || sig.cuotaTot === 6) {
+        } else if (sig.policyId === '8758204' || sig.cuotaTot === 3) {
           isAuto = true;
         } else {
           // Consultar historial del usuario en consumosHist
@@ -419,8 +419,8 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
             else if (pastMatch.id_categoria === transporteCat.id_categoria) isAuto = true;
           }
           if (!isHogar && !isAuto) {
-            // Heurística de monto
-            if (Number(tx.importe) < 60000) isHogar = true;
+            // Heurística de monto: Hogar es de mayor valor (~71k), Auto es de menor valor (~43k)
+            if (Number(tx.importe) > 60000) isHogar = true;
             else isAuto = true;
           }
         }
