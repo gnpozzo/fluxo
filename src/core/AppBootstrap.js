@@ -148,7 +148,13 @@ export class BaseModule {
   _unbindListeners() {}
 
   _subscribeEvents() {
-    const recargar = () => { this.destruir(); this.cargar(); };
+    const recargar = () => {
+      this.destruir();
+      const vista = document.getElementById(this.vistaId);
+      if (vista && vista.classList.contains('active')) {
+        this.cargar();
+      }
+    };
     if(App.Events) {
       App.Events.on('store:cuenta-changed', recargar);
       App.Events.on('store:mes-changed',    recargar);
