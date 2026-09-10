@@ -234,7 +234,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background-color: var(--fondo);
   color: var(--texto);
   line-height: 1.55;
@@ -242,6 +242,10 @@ body {
   overflow: hidden;
   padding: 0;
   transition: background-color 0.3s, color 0.3s;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
 }
 
 h1 { font-size: 1.2rem;  font-weight: 700; letter-spacing: -0.02em; }
@@ -763,6 +767,147 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
 .table tbody tr.dt-row-clickable:hover {
   background: var(--primary-tint);
 }
+
+/* DataTable Sorting */
+.table thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+.table thead th.sortable:hover {
+  color: var(--primary);
+}
+.table thead th .sort-icon {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+  opacity: 0.35;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.table thead th.sortable:hover .sort-icon {
+  opacity: 0.8;
+}
+.table thead th.sort-asc .sort-icon,
+.table thead th.sort-desc .sort-icon {
+  opacity: 1;
+  color: var(--primary);
+}
+.table thead th.sort-desc .sort-icon {
+  transform: rotate(180deg);
+}
+
+/* DataTable Toolbar & Search */
+.dt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 12px 18px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  flex-wrap: wrap;
+}
+.dt-search {
+  display: flex;
+  align-items: center;
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+}
+.dt-search .icon,
+.dt-search svg {
+  position: absolute;
+  left: 12px;
+  color: var(--texto-3);
+  pointer-events: none;
+}
+.dt-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 36px !important;
+  font-size: 0.875rem !important;
+  font-family: inherit !important;
+  border-radius: var(--r-sm) !important;
+  border: 1px solid var(--borde) !important;
+  background: var(--fondo) !important;
+  color: var(--texto) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.dt-search-input:focus {
+  outline: none;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px var(--primary-tint);
+}
+.dt-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* DataTable Pagination */
+.dt-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--superficie);
+  border-top: 1px solid var(--borde);
+  font-size: 0.85rem;
+  color: var(--texto-2);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+.dt-pag-info {
+  font-size: 0.85rem;
+  color: var(--texto-2);
+  font-weight: 500;
+  font-family: inherit;
+}
+.dt-pag-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dt-pag-current {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--texto);
+  font-family: inherit;
+  padding: 0 4px;
+}
+.dt-pag-controls .btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--borde);
+  background: var(--fondo);
+  color: var(--texto);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.dt-pag-controls .btn-icon:hover:not(:disabled) {
+  background: var(--superficie-hover);
+  border-color: var(--borde-fuerte);
+  color: var(--primary);
+}
+.dt-pag-controls .btn-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* DataTable Empty & Skeleton */
+.dt-empty-cell {
+  text-align: center;
+  padding: 3rem 1.5rem !important;
+  color: var(--texto-3);
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
 
 .movimientos-container {
   background-color: transparent;

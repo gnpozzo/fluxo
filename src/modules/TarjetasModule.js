@@ -28,6 +28,7 @@ export class TarjetasModule extends BaseModule {
   #editData    = null;
   #allConsumos = [];
   #selectedTcId = null;
+  #selectedCuentaId = '';
   #txListImportar = [];
   #lastStatementPayload = null;
 
@@ -158,7 +159,8 @@ export class TarjetasModule extends BaseModule {
     // Build the card selector pills
     this.#renderCardSelector();
 
-    this.#filterConsumosByCard();
+    this.#renderToolbarFiltros();
+    this.#filterConsumos();
     App.log('TarjetasModule', '_render', `${filteredConsumos.length} consumos (filtered from ${(consumos || []).length})`);
   }
 
@@ -166,26 +168,26 @@ export class TarjetasModule extends BaseModule {
      const wrap = document.getElementById('tc-proy-wrap');
      if (!wrap) return;
      if (!data.proyeccion || data.proyeccion.length === 0) {
-        wrap.innerHTML = `<div style="padding: 2rem;text-align:center;color:var(--texto-3)">No hay proyecciones futuras.</div>`;
+        wrap.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.875rem;">No hay proyecciones futuras para mostrar.</div>`;
         return;
      }
 
      const rows = data.proyeccion.map(p => `
-        <div style="display:flex; justify-content:space-between; padding:var(--space-3); border-bottom:1px solid var(--border-color);">
-           <strong style="font-size:1.1rem; color:var(--texto-1)">${App.Utils.formatearMes(p.mes)}</strong>
-           <span class="negativo" style="font-size:1.1rem">${App.Utils.formatearMoneda(p.total)}</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid var(--borde); font-size:0.875rem; transition:background-color 0.15s ease;" onmouseover="this.style.backgroundColor='var(--superficie-hover)'" onmouseout="this.style.backgroundColor='transparent'">
+           <span style="font-weight:600; color:var(--texto); font-size:0.875rem;">${App.Utils.escapeHtml(App.Utils.formatearMes(p.mes))}</span>
+           <span class="negativo" style="font-weight:600; font-size:0.875rem;">${App.Utils.formatearMoneda(p.total)}</span>
         </div>
      `).join('');
 
      wrap.innerHTML = `
-        <div style="padding:var(--space-3); border-bottom:1px solid var(--border-color); display:flex; align-items:center; gap:var(--space-2)">
-          <div style="flex-grow:1">
-            <h3 style="margin:0;color:var(--texto-1)">Proyección a 12 meses</h3>
-            <p style="margin:0;color:var(--texto-3);font-size:0.85rem">Totales consolidados pendientes de facturación en todos tus plásticos.</p>
+        <div style="padding:14px 18px; border-bottom:1px solid var(--borde); background:var(--fondo); display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);">
+          <div>
+            <h4 style="margin:0 0 2px 0; color:var(--texto); font-size:0.82rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Proyección a 12 meses</h4>
+            <p style="margin:0; color:var(--texto-2); font-size:0.8rem;">Totales consolidados pendientes de facturación en todos tus plásticos.</p>
           </div>
-          ${App.Icons.get('trending_up', 'icon-md', { style: 'color:var(--kpi-amber)' })}
+          ${App.Icons.get('trending_up', 'icon-md', { style: 'color:var(--kpi-amber);' })}
         </div>
-        <div>${rows}</div>
+        <div style="background:var(--superficie);">${rows}</div>
      `;
   }
 
@@ -249,17 +251,49 @@ export class TarjetasModule extends BaseModule {
       document.getElementById('tc-tabla-wrap'),
       {
         columns: [
-          { key: 'fecha',           label: 'Fecha',     sortable: true,
-            render: (r) => App.Utils.formatearFecha(r.fecha?.value || r.fecha) },
-          { key: 'tarjeta_nombre',  label: 'Tarjeta',   sortable: true,
-            render: (r) => App.Utils.escapeHtml(r.tarjeta_nombre || '—') },
-          { key: 'categoria_nombre',label: 'Categoría', sortable: true,
-            render: (r) => App.Utils.escapeHtml(r.categoria_nombre || 'General') },
-          { key: 'descripcion',     label: 'Descripción', searchable: true,
-            render: (r) => this.#renderDescripcion(r) },
-          { key: 'importe',         label: 'Importe',   sortable: true, align: 'right',
-            render: (r) => `<span class="negativo">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>` },
-          { key: 'imputacion',      label: 'Imputación',
+          {
+            key: 'fecha',
+            label: 'Fecha',
+            sortable: true,
+            sortValue: (r) => new Date(r.fecha?.value || r.fecha || '2000-01-01').getTime(),
+            render: (r) => App.Utils.formatearFecha(r.fecha?.value || r.fecha)
+          },
+          {
+            key: 'tarjeta_nombre',
+            label: 'Tarjeta',
+            sortable: true,
+            sortValue: (r) => r.tarjeta_nombre || '',
+            render: (r) => App.Utils.escapeHtml(r.tarjeta_nombre || '—')
+          },
+          {
+            key: 'categoria_nombre',
+            label: 'Categoría',
+            sortable: true,
+            sortValue: (r) => r.categoria_nombre || '',
+            render: (r) => App.Utils.escapeHtml(r.categoria_nombre || 'General')
+          },
+          {
+            key: 'descripcion',
+            label: 'Descripción',
+            sortable: true,
+            searchable: true,
+            sortValue: (r) => r.descripcion || '',
+            searchValue: (r) => `${r.descripcion || ''} ${r.categoria_nombre || ''} ${r.tarjeta_nombre || ''} ${r.cuenta_imputada_nombre || ''}`,
+            render: (r) => this.#renderDescripcion(r)
+          },
+          {
+            key: 'importe',
+            label: 'Importe',
+            sortable: true,
+            align: 'right',
+            sortValue: (r) => Number(r.importe || 0),
+            render: (r) => `<span class="negativo">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>`
+          },
+          {
+            key: 'imputacion',
+            label: 'Imputación',
+            sortable: true,
+            sortValue: (r) => !r.imputado ? 'AAA_SIN_IMPUTAR' : (r.es_incidencia_externa ? (r.cuenta_imputada_nombre || 'Externa') : 'Personal'),
             render: (r) => {
               if (!r.imputado) return `<span class="badge badge-neutro">Sin Imputar</span>`;
               if (r.es_incidencia_externa) {
@@ -269,10 +303,12 @@ export class TarjetasModule extends BaseModule {
             }
           }
         ],
-        emptyMsg  : 'No hay consumos para este período.',
-        paginated : true,
-        pageSize  : 25,
-        onRowClick: ({ row }) => this.#abrirModalDetalle(row)
+        emptyMsg          : 'No hay consumos para este período.',
+        searchable        : true,
+        searchPlaceholder : 'Buscar consumo o comercio...',
+        paginated         : true,
+        pageSize          : 25,
+        onRowClick        : ({ row }) => this.#abrirModalDetalle(row)
       }
     );
   }
@@ -845,19 +881,58 @@ export class TarjetasModule extends BaseModule {
         const val = btn.dataset.tcFilter;
         this.#selectedTcId = val === 'all' ? null : val;
         this.#renderCardSelector();
-        this.#filterConsumosByCard();
+        this.#filterConsumos();
       });
     });
 
     this.#updateSliderArrows();
   }
 
-  #filterConsumosByCard() {
-    if (!this.#selectedTcId) {
-      this.#table?.load(this.#allConsumos);
-    } else {
-      const filtered = this.#allConsumos.filter(c => c.id_tarjeta === this.#selectedTcId);
-      this.#table?.load(filtered);
+  #filterConsumos() {
+    let filtered = this.#allConsumos || [];
+    if (this.#selectedTcId) {
+      filtered = filtered.filter(c => c.id_tarjeta === this.#selectedTcId);
+    }
+    if (this.#selectedCuentaId) {
+      if (this.#selectedCuentaId === 'sin_imputar') {
+        filtered = filtered.filter(c => !c.imputado);
+      } else if (this.#selectedCuentaId === 'personal') {
+        filtered = filtered.filter(c => c.imputado && (!c.es_incidencia_externa || c.id_cuenta_imputada === App.Store.cuenta));
+      } else {
+        filtered = filtered.filter(c => c.id_cuenta_imputada === this.#selectedCuentaId);
+      }
+    }
+    this.#table?.load(filtered);
+  }
+
+  #renderToolbarFiltros() {
+    if (!this.#table) return;
+    const cuentasList = this.#cuentas && this.#cuentas.length > 0 ? this.#cuentas : (App.Store.cuentas || []);
+    const opts = cuentasList.map(c => `
+      <option value="${c.id_cuenta_principal}" ${this.#selectedCuentaId === c.id_cuenta_principal ? 'selected' : ''}>
+        ${App.Utils.escapeHtml(c.nombre)}
+      </option>
+    `).join('');
+
+    const html = `
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label for="tc-filter-cuenta" style="font-size:0.8rem;color:var(--texto-2);font-weight:600;white-space:nowrap;">Cuenta:</label>
+        <select id="tc-filter-cuenta" class="input" style="padding:6px 10px;font-size:0.82rem;height:34px;border-radius:var(--r-sm);background:var(--fondo);color:var(--texto);border:1px solid var(--borde);cursor:pointer;">
+          <option value="">Todas las cuentas</option>
+          ${opts}
+          <option value="sin_imputar" ${this.#selectedCuentaId === 'sin_imputar' ? 'selected' : ''}>Sin Imputar</option>
+        </select>
+      </div>
+    `;
+
+    this.#table.setToolbarActions(html);
+
+    const sel = document.getElementById('tc-filter-cuenta');
+    if (sel) {
+      sel.addEventListener('change', (e) => {
+        this.#selectedCuentaId = e.target.value;
+        this.#filterConsumos();
+      });
     }
   }
 

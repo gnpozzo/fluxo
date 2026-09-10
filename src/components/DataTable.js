@@ -38,13 +38,15 @@ export class DataTable {
       : container;
 
     this.#config = {
-      columns    : [],
-      emptyMsg   : 'No hay datos para mostrar.',
-      searchable : false,
-      paginated  : false,
-      pageSize   : 20,
-      onAction   : null,
-      onRowClick : null,
+      columns           : [],
+      emptyMsg          : 'No hay datos para mostrar.',
+      searchable        : false,
+      searchPlaceholder : 'Buscar...',
+      toolbarActions    : '',
+      paginated         : false,
+      pageSize          : 20,
+      onAction          : null,
+      onRowClick        : null,
       ...config
     };
 
@@ -62,10 +64,23 @@ export class DataTable {
   load(data) {
     this.#data     = Array.isArray(data) ? data : [];
     this.#page     = 1;
-    this.#filtered = this.#applySearch(this.#data);
+    let filtered   = this.#applySearch(this.#data);
+    if (this.#sortCol) {
+      filtered = this.#sortData(filtered);
+    }
+    this.#filtered = filtered;
     this.#renderBody();
     this.#renderPagination();
     App.log('DataTable', 'load', `${this.#data.length} registros cargados`);
+  }
+
+  /**
+   * Actualiza los controles adicionales en la barra de herramientas.
+   * @param {string} html
+   */
+  setToolbarActions(html) {
+    const el = this.#container.querySelector('.dt-toolbar-actions');
+    if (el) el.innerHTML = html;
   }
 
   /**
@@ -136,9 +151,9 @@ export class DataTable {
         <div class="dt-toolbar">
           <div class="dt-search">
             ${App.Icons.get('search', 'icon-sm')}
-            <input class="dt-search-input input" type="text" placeholder="Buscar..." aria-label="Buscar en tabla">
+            <input class="dt-search-input input" type="text" placeholder="${App.Utils.escapeHtml(this.#config.searchPlaceholder || 'Buscar...')}" aria-label="Buscar en tabla">
           </div>
-          <div class="dt-toolbar-actions"></div>
+          <div class="dt-toolbar-actions">${this.#config.toolbarActions || ''}</div>
         </div>`;
     }
 
@@ -242,13 +257,17 @@ export class DataTable {
 
   #applySearch(data) {
     if (!this.#searchTerm) return [...data];
+    const terms = this.#searchTerm.split(/\s+/).filter(Boolean);
     return data.filter(row =>
-      this.#config.columns.some(c => {
-        if (!c.searchable && c.searchable !== undefined) return false;
-        const val = row[c.key];
-        return val !== null && val !== undefined &&
-               String(val).toLowerCase().includes(this.#searchTerm);
-      })
+      terms.every(term =>
+        this.#config.columns.some(c => {
+          if (c.searchable === false) return false;
+          let val = c.searchValue ? c.searchValue(row) : (c.exportValue ? c.exportValue(row) : row[c.key]);
+          if (val && typeof val === 'object' && val.value !== undefined) val = val.value;
+          if (val === null || val === undefined) return false;
+          return String(val).toLowerCase().includes(term);
+        })
+      )
     );
   }
 
@@ -258,7 +277,7 @@ export class DataTable {
     if (input) {
       input.addEventListener('input', App.Utils.debounce((e) => {
         this.search(e.target.value);
-      }, 250));
+      }, 200));
     }
 
     // Ordenamiento
@@ -274,6 +293,7 @@ export class DataTable {
         this.#filtered = this.#sortData(this.#filtered);
         this.#page     = 1;
         this.#renderBody();
+        this.#renderPagination();
 
         // Actualizar ícono de sort
         this.#container.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
@@ -314,12 +334,29 @@ export class DataTable {
 
   #sortData(data) {
     const key = this.#sortCol;
+    if (!key) return data;
+    const colDef = this.#config.columns.find(c => c.key === key);
     const dir = this.#sortDir === 'asc' ? 1 : -1;
     return [...data].sort((a, b) => {
-      const va = a[key] ?? '';
-      const vb = b[key] ?? '';
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
-      return String(va).localeCompare(String(vb), 'es-AR') * dir;
+      let va = colDef?.sortValue ? colDef.sortValue(a) : a[key];
+      let vb = colDef?.sortValue ? colDef.sortValue(b) : b[key];
+      if (va && typeof va === 'object' && va.value !== undefined) va = va.value;
+      if (vb && typeof vb === 'object' && vb.value !== undefined) vb = vb.value;
+      if (va === null || va === undefined) va = '';
+      if (vb === null || vb === undefined) vb = '';
+
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return (va - vb) * dir;
+      }
+
+      // Check numeric strings (e.g. monetary amounts)
+      const na = typeof va === 'string' ? parseFloat(va.replace(/\./g, '').replace(',', '.')) : Number(va);
+      const nb = typeof vb === 'string' ? parseFloat(vb.replace(/\./g, '').replace(',', '.')) : Number(vb);
+      if (!isNaN(na) && !isNaN(nb) && typeof va !== 'boolean' && typeof vb !== 'boolean' && String(va).trim() !== '' && String(vb).trim() !== '') {
+        return (na - nb) * dir;
+      }
+
+      return String(va).localeCompare(String(vb), 'es-AR', { sensitivity: 'base', numeric: true }) * dir;
     });
   }
 }

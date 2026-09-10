@@ -332,6 +332,53 @@ export default async function handler(req, res) {
       }
     }
 
+    // 4. Guardar regla aprendida de imputación y categoría en perfiles_usuario
+    if (targetAccountId && targetCategoriaId && consumo.descripcion) {
+      try {
+        const descRaw = String(consumo.descripcion).trim();
+        const policyMatch = descRaw.match(/\b\d{6,}\b/);
+        const policyId = policyMatch ? policyMatch[0] : null;
+
+        const cleanWords = descRaw.toLowerCase()
+          .replace(/[\/\-]\d{1,2}[\/\-]\d{1,2}/g, '')
+          .replace(/cuota\s*\d+(\s*\/\s*\d+)?/gi, '')
+          .replace(/[^a-z0-9]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length >= 3);
+        const baseKey = cleanWords.slice(0, 4).join('_');
+
+        const { data: perfil } = await supabase
+          .from('perfiles_usuario')
+          .select('preferencias')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const prefs = (perfil && typeof perfil.preferencias === 'object' && perfil.preferencias) ? perfil.preferencias : {};
+        const reglas = prefs.reglas_imputacion || {};
+
+        const ruleData = {
+          id_cuenta: targetAccountId,
+          id_categoria: targetCategoriaId,
+          descripcion_ejemplo: descRaw,
+          updated_at: new Date().toISOString()
+        };
+
+        if (policyId) {
+          reglas['pol_' + policyId] = ruleData;
+        }
+        if (baseKey && baseKey.length >= 3) {
+          reglas['desc_' + baseKey] = ruleData;
+        }
+
+        prefs.reglas_imputacion = reglas;
+        await supabase
+          .from('perfiles_usuario')
+          .upsert({ id: userId, preferencias: prefs, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+      } catch (prefErr) {
+        console.warn('[updateConsumoTC] Could not save learned rule in perfiles_usuario:', prefErr.message);
+      }
+    }
+
     return res.status(200).json({ success: true, data: {} });
   } catch (err) {
     console.error('[API -> updateConsumoTC]', err.message);

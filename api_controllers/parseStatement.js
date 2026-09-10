@@ -222,12 +222,23 @@ export default async function handler(req, res) {
       .gte('fecha', sixMonthsAgoStr);
     if (dbConsErr) throw dbConsErr;
 
-    // Fetch past movements to remember imputed principal account per consumption / recur_group
+    // Fetch user preferences and learned imputation rules
+    const { data: userProfile } = await supabase
+      .from('perfiles_usuario')
+      .select('preferencias')
+      .eq('id', userId)
+      .maybeSingle();
+    const learnedRules = (userProfile && typeof userProfile.preferencias === 'object' && userProfile.preferencias)
+      ? (userProfile.preferencias.reglas_imputacion || {})
+      : {};
+
+    // Fetch past movements to remember imputed principal account and category per consumption / recur_group / merchant
     const { data: dbMovs } = await supabase
       .from('movimientos')
-      .select('id_consumo_tarjeta_origen, id_cuenta_principal, recur_group_id')
+      .select('id_consumo_tarjeta_origen, id_cuenta_principal, id_categoria, descripcion, recur_group_id, fecha')
       .eq('user_id', userId)
-      .not('id_cuenta_principal', 'is', null);
+      .not('id_cuenta_principal', 'is', null)
+      .order('fecha', { ascending: false });
 
     // 4. Fetch user accounts to resolve imputed accounts
     const { data: allUserCuentas } = await supabase
@@ -329,6 +340,20 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 
     const hogarAcc = (allUserCuentas || []).find(a => a.nombre.toLowerCase().includes('hogar'))?.id_cuenta_principal || null;
     const personalAcc = (allUserCuentas || []).find(a => a.nombre.toLowerCase().includes('personal'))?.id_cuenta_principal || matchedCard.id_cuenta_principal;
+    const cuentaMap = {};
+    (allUserCuentas || []).forEach(a => { cuentaMap[a.id_cuenta_principal] = a.nombre; });
+
+    function extractBaseKey(desc) {
+      if (!desc) return '';
+      return String(desc).toLowerCase()
+        .replace(/[\/\-]\d{1,2}[\/\-]\d{1,2}/g, '')
+        .replace(/cuota\s*\d+(\s*\/\s*\d+)?/gi, '')
+        .replace(/[^a-z0-9]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3)
+        .slice(0, 4)
+        .join('_');
+    }
 
     function getInsuranceSignature(desc) {
       if (!desc) return null;
@@ -396,7 +421,68 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     function resolveTransactionMetadata(tx, consumosHist) {
       const d = (tx.descripcion || '').toLowerCase();
       const sig = getInsuranceSignature(tx.descripcion);
+      const baseKey = extractBaseKey(tx.descripcion);
+      const normTx = d.replace(/[^a-z0-9]/g, '');
 
+      // 1. PRIORIDAD 1: Reglas aprendidas explícitas del usuario (guardadas al editar consumos)
+      let matchedRule = null;
+      if (sig?.policyId && learnedRules['pol_' + sig.policyId]) {
+        matchedRule = learnedRules['pol_' + sig.policyId];
+      } else {
+        for (const [key, rule] of Object.entries(learnedRules)) {
+          if (key.startsWith('desc_')) {
+            const pattern = key.replace('desc_', '');
+            const words = pattern.split('_').filter(w => w.length >= 3);
+            if (words.length > 0 && words.every(w => d.includes(w))) {
+              matchedRule = rule;
+              break;
+            }
+          }
+        }
+      }
+
+      if (matchedRule) {
+        const accName = cuentaMap[matchedRule.id_cuenta] || 'Externa';
+        const isCuotas = tx.cuota_total && Number(tx.cuota_total) > 1;
+        return {
+          id_categoria: matchedRule.id_categoria,
+          id_cuenta_imputar: matchedRule.id_cuenta,
+          tipo_consumo: isCuotas ? 'CUOTAS' : 'RECURRENTE',
+          sugerencia_ia: `✨ Imputación aprendida: ${accName}`,
+          isRecur: true,
+          subtype: 'LEARNED'
+        };
+      }
+
+      // 2. PRIORIDAD 2: Historial directo de movimientos previos del usuario (ordenados de más reciente a más antiguo)
+      if (dbMovs && dbMovs.length > 0) {
+        const pastMov = dbMovs.find(m => {
+          if (!m.descripcion) return false;
+          const mSig = getInsuranceSignature(m.descripcion);
+          if (sig && mSig && sig.provider === mSig.provider) {
+            if (sig.policyId && mSig.policyId && sig.policyId === mSig.policyId) return true;
+            if (sig.cuotaTot && mSig.cuotaTot && sig.cuotaTot === mSig.cuotaTot) return true;
+          }
+          const normM = m.descripcion.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return normM.length >= 4 && normTx.length >= 4 && (normM.includes(normTx) || normTx.includes(normM));
+        });
+
+        if (pastMov && pastMov.id_cuenta_principal) {
+          const accName = cuentaMap[pastMov.id_cuenta_principal] || 'Externa';
+          const isCuotas = tx.cuota_total && Number(tx.cuota_total) > 1;
+          const isRec = !isCuotas && isRecurringCandidate(tx.descripcion, consumosHist);
+          return {
+            id_categoria: pastMov.id_categoria || variosCat.id_categoria,
+            id_cuenta_imputar: pastMov.id_cuenta_principal,
+            tipo_consumo: isCuotas ? 'CUOTAS' : (isRec ? 'RECURRENTE' : 'SIMPLE'),
+            sugerencia_ia: `✨ Imputado según historial previo: ${accName}`,
+            isRecur: isRec,
+            subtype: 'HISTORY'
+          };
+        }
+      }
+
+      // 3. PRIORIDAD 3: Diferenciación de Seguros (La Segunda)
       if (sig && sig.provider === 'LA_SEGUNDA') {
         let isHogar = false;
         let isAuto = false;
@@ -446,7 +532,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
         }
       }
 
-      // Categorización estándar para otros conceptos
+      // 4. PRIORIDAD 4: Categorización estándar para otros conceptos
       let id_categoria = variosCat.id_categoria;
       if (d.includes('epe') || d.includes('gas') || d.includes('litoral') || d.includes('claro') || d.includes('impuesto') || d.includes('iibb') || d.includes('iva') || d.includes('db.rg') || d.includes('adt')) {
         id_categoria = servCat.id_categoria;
