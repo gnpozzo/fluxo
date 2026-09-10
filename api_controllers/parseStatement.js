@@ -229,6 +229,12 @@ export default async function handler(req, res) {
       .eq('user_id', userId)
       .not('id_cuenta_principal', 'is', null);
 
+    // 4. Fetch user accounts to resolve imputed accounts
+    const { data: allUserCuentas } = await supabase
+      .from('cuentas_principales')
+      .select('id_cuenta_principal, nombre')
+      .eq('user_id', userId);
+
     let extractedData = null;
 
     // Try direct XLSX parsing first for instant speed and 100% precision
@@ -314,20 +320,54 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       ultimos_4_digitos: matchedCard.ultimos_4_digitos || ultimos4 || ''
     };
 
-    // 5. Default category mapping helper
+    // 5. Intelligent Category & Account Resolution
     const servCat = categorias.find(c => c.nombre.toLowerCase().includes('servicio')) || categorias[0];
     const variosCat = categorias.find(c => c.nombre.toLowerCase().includes('varios') || c.nombre.toLowerCase().includes('general')) || categorias[0];
     const superCat = categorias.find(c => c.nombre.toLowerCase().includes('super') || c.nombre.toLowerCase().includes('alimento'));
+    const viviendaCat = categorias.find(c => c.nombre.toLowerCase().includes('vivienda') || c.nombre.toLowerCase().includes('hogar')) || servCat;
+    const transporteCat = categorias.find(c => c.nombre.toLowerCase().includes('transporte') || c.nombre.toLowerCase().includes('auto') || c.nombre.toLowerCase().includes('vehic')) || servCat;
 
-    function inferCategory(desc) {
-      const d = (desc || '').toLowerCase();
-      if (d.includes('epe') || d.includes('gas') || d.includes('litoral') || d.includes('claro') || d.includes('impuesto') || d.includes('iibb') || d.includes('iva') || d.includes('db.rg') || d.includes('adt') || d.includes('segunda')) {
-        return servCat.id_categoria;
+    const hogarAcc = (allUserCuentas || []).find(a => a.nombre.toLowerCase().includes('hogar'))?.id_cuenta_principal || null;
+    const personalAcc = (allUserCuentas || []).find(a => a.nombre.toLowerCase().includes('personal'))?.id_cuenta_principal || matchedCard.id_cuenta_principal;
+
+    function getInsuranceSignature(desc) {
+      if (!desc) return null;
+      const s = String(desc).toLowerCase();
+
+      // Detección de La Segunda (ej. "La segunda coo8758204-01/03-000-046" o renovaciones)
+      if (s.includes('segunda')) {
+        const polMatch = s.match(/(?:coo|poliza|pol|seg)?[\s\-_]*(\d{5,10})/i);
+        const policyId = polMatch ? polMatch[1] : null;
+
+        const cuotaMatch = s.match(/(\d{1,2})[\/\-](\d{1,2})/);
+        const cuotaAct = cuotaMatch ? parseInt(cuotaMatch[1], 10) : null;
+        const cuotaTot = cuotaMatch ? parseInt(cuotaMatch[2], 10) : null;
+
+        return {
+          isInsurance: true,
+          provider: 'LA_SEGUNDA',
+          policyId,
+          cuotaAct,
+          cuotaTot,
+          // Base limpia sin los números variables de cuota
+          cleanBase: s.replace(/[\/\-]\d{1,2}[\/\-]\d{1,2}/g, '').replace(/[^a-z0-9]/g, '')
+        };
       }
-      if (d.includes('coto') || d.includes('jumbo') || d.includes('carrefour') || d.includes('dia') || d.includes('super')) {
-        return superCat ? superCat.id_categoria : variosCat.id_categoria;
+
+      // Otros seguros recurrentes en formato cuotas
+      const cuotaGeneric = s.match(/(\d{1,2})[\/\-](\d{1,2})/);
+      if (cuotaGeneric && (s.includes('seguro') || s.includes('san cristobal') || s.includes('federacion') || s.includes('sancor') || s.includes('mapfre') || s.includes('zurich') || s.includes('allianz') || s.includes('rivadavia') || s.includes('mercantil'))) {
+        return {
+          isInsurance: true,
+          provider: 'OTHER_INSURANCE',
+          policyId: null,
+          cuotaAct: parseInt(cuotaGeneric[1], 10),
+          cuotaTot: parseInt(cuotaGeneric[2], 10),
+          cleanBase: s.replace(/[\/\-]\d{1,2}[\/\-]\d{1,2}/g, '').replace(/[^a-z0-9]/g, '')
+        };
       }
-      return variosCat.id_categoria;
+
+      return null;
     }
 
     // 6. Helper for recurring detection
@@ -351,6 +391,89 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
         if (pastOccurrences.length >= 1) return true;
       }
       return false;
+    }
+
+    function resolveTransactionMetadata(tx, consumosHist) {
+      const d = (tx.descripcion || '').toLowerCase();
+      const sig = getInsuranceSignature(tx.descripcion);
+
+      if (sig && sig.provider === 'LA_SEGUNDA') {
+        let isHogar = false;
+        let isAuto = false;
+
+        // Criterios de diferenciación para La Segunda:
+        // 1. Póliza 8758204 o ciclo de 3 cuotas (/03) -> Seguro Hogar (Vivienda)
+        // 2. Póliza 1028363 o ciclo de 6 cuotas (/06) -> Seguro Auto (Transporte)
+        if (sig.policyId === '8758204' || sig.cuotaTot === 3) {
+          isHogar = true;
+        } else if (sig.policyId === '1028363' || sig.cuotaTot === 6) {
+          isAuto = true;
+        } else {
+          // Consultar historial del usuario en consumosHist
+          const pastMatch = (consumosHist || []).find(db => {
+            const dbSig = getInsuranceSignature(db.descripcion);
+            return dbSig && (dbSig.policyId === sig.policyId || (sig.cuotaTot && dbSig.cuotaTot === sig.cuotaTot));
+          });
+          if (pastMatch) {
+            if (pastMatch.id_categoria === viviendaCat.id_categoria) isHogar = true;
+            else if (pastMatch.id_categoria === transporteCat.id_categoria) isAuto = true;
+          }
+          if (!isHogar && !isAuto) {
+            // Heurística de monto
+            if (Number(tx.importe) < 60000) isHogar = true;
+            else isAuto = true;
+          }
+        }
+
+        if (isHogar) {
+          return {
+            id_categoria: viviendaCat.id_categoria,
+            id_cuenta_imputar: hogarAcc,
+            tipo_consumo: 'RECURRENTE',
+            sugerencia_ia: 'Seguro del Hogar (La Segunda) - Recurrente imputado a Hogar',
+            isRecur: true,
+            subtype: 'HOGAR'
+          };
+        } else {
+          return {
+            id_categoria: transporteCat.id_categoria,
+            id_cuenta_imputar: personalAcc,
+            tipo_consumo: 'RECURRENTE',
+            sugerencia_ia: 'Seguro del Auto (La Segunda) - Recurrente imputado a Personal',
+            isRecur: true,
+            subtype: 'AUTO'
+          };
+        }
+      }
+
+      // Categorización estándar para otros conceptos
+      let id_categoria = variosCat.id_categoria;
+      if (d.includes('epe') || d.includes('gas') || d.includes('litoral') || d.includes('claro') || d.includes('impuesto') || d.includes('iibb') || d.includes('iva') || d.includes('db.rg') || d.includes('adt')) {
+        id_categoria = servCat.id_categoria;
+      } else if (d.includes('coto') || d.includes('jumbo') || d.includes('carrefour') || d.includes('dia') || d.includes('super')) {
+        id_categoria = superCat ? superCat.id_categoria : variosCat.id_categoria;
+      } else {
+        const norm = d.replace(/[^a-z0-9]/g, '');
+        if (norm.length >= 4) {
+          const hist = (consumosHist || []).find(db => {
+            const dbNorm = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return dbNorm.length >= 4 && (dbNorm.includes(norm) || norm.includes(dbNorm));
+          });
+          if (hist && hist.id_categoria) id_categoria = hist.id_categoria;
+        }
+      }
+
+      const isCuotas = tx.cuota_total && Number(tx.cuota_total) > 1;
+      const isRecur = !isCuotas && isRecurringCandidate(tx.descripcion, consumosHist);
+
+      return {
+        id_categoria,
+        id_cuenta_imputar: null,
+        tipo_consumo: isCuotas ? 'CUOTAS' : (isRecur ? 'RECURRENTE' : 'SIMPLE'),
+        sugerencia_ia: isRecur ? 'Sugerido: Recurrente (gasto mensual detectado)' : null,
+        isRecur,
+        subtype: null
+      };
     }
 
     // 7. Deterministic comparison against dbConsumos
@@ -378,23 +501,38 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     }
 
     (extractedData.transactions || []).forEach(tx => {
-      tx.id_categoria = inferCategory(tx.descripcion);
-      const isCuotas = tx.cuota_total && Number(tx.cuota_total) > 1;
-      const isRecur = !isCuotas && isRecurringCandidate(tx.descripcion, cardConsumos);
+      const meta = resolveTransactionMetadata(tx, cardConsumos);
+      tx.id_categoria = meta.id_categoria;
+      tx.tipo_consumo = meta.tipo_consumo;
+      if (meta.sugerencia_ia) tx.sugerencia_ia = meta.sugerencia_ia;
+      if (meta.id_cuenta_imputar) tx.id_cuenta_imputar = meta.id_cuenta_imputar;
 
-      if (isCuotas) {
-        tx.tipo_consumo = 'CUOTAS';
-      } else if (isRecur) {
-        tx.tipo_consumo = 'RECURRENTE';
-        tx.sugerencia_ia = 'Sugerido: Recurrente (gasto mensual detectado)';
-      } else {
-        tx.tipo_consumo = 'SIMPLE';
-      }
-
+      const isCuotas = tx.tipo_consumo === 'CUOTAS';
+      const isRecur = meta.isRecur;
+      const txSig = getInsuranceSignature(tx.descripcion);
       const normTx = (tx.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
       const match = cardConsumos.find(db => {
         if (matchedDbIds.has(db.id_consumo_tarjeta)) return false;
+        
+        const dbSig = getInsuranceSignature(db.descripcion);
+
+        // A. Coincidencia para seguros/servicios recurrentes con cuotas o renovaciones de póliza
+        if (txSig && dbSig && txSig.provider === dbSig.provider) {
+          const samePolicy = txSig.policyId && dbSig.policyId && txSig.policyId === dbSig.policyId;
+          const sameCleanBase = txSig.cleanBase.length >= 6 && txSig.cleanBase === dbSig.cleanBase;
+          const sameSubtype = (meta.subtype && db.id_categoria === meta.id_categoria) || (txSig.cuotaTot && dbSig.cuotaTot && txSig.cuotaTot === dbSig.cuotaTot);
+
+          if (samePolicy || sameCleanBase || sameSubtype) {
+            const dbMes = (db.fecha || '').substring(0, 7);
+            const txMes = (tx.fecha || stVto || stCierre || '').substring(0, 7);
+            if (dbMes === txMes || (db.recur_group_id && db.recur_group_id.startsWith('REC_TC_'))) {
+              return true;
+            }
+          }
+        }
+
+        // B. Coincidencia estándar por importe, fecha o recurrencia
         const sameImp = Math.abs(Number(db.importe) - Number(tx.importe)) < 0.05;
         const sameDate = db.fecha === tx.fecha;
         const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -417,7 +555,9 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       if (match) {
         matchedDbIds.add(match.id_consumo_tarjeta);
         if (match.recur_group_id) tx.recur_group_id = match.recur_group_id;
-        tx.id_cuenta_imputar = findImputedAccount(match.recur_group_id, match.id_consumo_tarjeta);
+        if (!tx.id_cuenta_imputar) {
+          tx.id_cuenta_imputar = findImputedAccount(match.recur_group_id, match.id_consumo_tarjeta);
+        }
 
         const dbCuotaAct = match.cuota_actual || 1;
         const dbCuotaTot = match.cuota_total || 1;
@@ -434,16 +574,23 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
           exactMatches.push({ ...tx, dbRecord: match });
         }
       } else {
-        // Look for past recurring group or installments to preserve group and account imputation
+        // Buscar grupo recurrente previo o cuotas para preservar grupo e imputación de cuenta
         if (isRecur && !tx.recur_group_id) {
           const pastRec = cardConsumos.find(db => {
             if (!db.recur_group_id) return false;
+            const dbSig = getInsuranceSignature(db.descripcion);
+            if (txSig && dbSig && txSig.provider === dbSig.provider) {
+              if (txSig.policyId && dbSig.policyId && txSig.policyId === dbSig.policyId) return true;
+              if (txSig.cuotaTot && dbSig.cuotaTot && txSig.cuotaTot === dbSig.cuotaTot) return true;
+              if (meta.subtype && db.id_categoria === meta.id_categoria) return true;
+            }
             const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             return normDb.length >= 4 && normTx.length >= 4 && (normDb.includes(normTx) || normTx.includes(normDb));
           });
           if (pastRec) {
             tx.recur_group_id = pastRec.recur_group_id;
-            tx.id_cuenta_imputar = findImputedAccount(pastRec.recur_group_id, pastRec.id_consumo_tarjeta);
+            if (!tx.id_cuenta_imputar) tx.id_cuenta_imputar = findImputedAccount(pastRec.recur_group_id, pastRec.id_consumo_tarjeta);
+            if (!tx.id_categoria) tx.id_categoria = pastRec.id_categoria;
           }
         } else if (isCuotas && !tx.recur_group_id) {
           const pastCuota = cardConsumos.find(db => {
@@ -453,7 +600,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
           });
           if (pastCuota) {
             tx.recur_group_id = pastCuota.recur_group_id;
-            tx.id_cuenta_imputar = findImputedAccount(pastCuota.recur_group_id, pastCuota.id_consumo_tarjeta);
+            if (!tx.id_cuenta_imputar) tx.id_cuenta_imputar = findImputedAccount(pastCuota.recur_group_id, pastCuota.id_consumo_tarjeta);
           }
         }
         newConsumptions.push(tx);
