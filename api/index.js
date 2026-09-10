@@ -50,67 +50,72 @@ import { authenticateUser } from '../api_lib/auth.js';
 
 
 export default async function handler(req, res) {
-  const endpoint = req.query?.endpoint || req.url.split('?')[0].split('/').pop();
-  
-  // Public endpoints exempt from user JWT check
-  const publicEndpoints = ['getConfig', 'telegramWebhook', 'sendReminders'];
-  if (!publicEndpoints.includes(endpoint)) {
-    const user = await authenticateUser(req, res);
-    if (!user) return; // 401 response already handled by authenticateUser
-  }
-  
-  switch(endpoint) {
-    case 'admin_deleteAhorroSubcuenta': return await admin_deleteAhorroSubcuenta(req, res);
-    case 'admin_deleteCategoria': return await admin_deleteCategoria(req, res);
-    case 'admin_deleteCtaCorrienteUsuario': return await admin_deleteCtaCorrienteUsuario(req, res);
-    case 'admin_deleteCuentaPrincipal': return await admin_deleteCuentaPrincipal(req, res);
-    case 'admin_deleteTarjeta': return await admin_deleteTarjeta(req, res);
-    case 'admin_getAhorroSubcuentas': return await admin_getAhorroSubcuentas(req, res);
-    case 'admin_getCategorias': return await admin_getCategorias(req, res);
-    case 'admin_getCtaCorrienteUsuarios': return await admin_getCtaCorrienteUsuarios(req, res);
-    case 'admin_getCuentasPrincipales': return await admin_getCuentasPrincipales(req, res);
-    case 'admin_getTarjetas': return await admin_getTarjetas(req, res);
-    case 'admin_saveAhorroSubcuenta': return await admin_saveAhorroSubcuenta(req, res);
-    case 'admin_saveCategoria': return await admin_saveCategoria(req, res);
-    case 'admin_saveCtaCorrienteUsuario': return await admin_saveCtaCorrienteUsuario(req, res);
-    case 'admin_saveCuentaPrincipal': return await admin_saveCuentaPrincipal(req, res);
-    case 'admin_saveTarjeta': return await admin_saveTarjeta(req, res);
-    case 'createAhorro': return await createAhorro(req, res);
-    case 'createConsumoCC': return await createConsumoCC(req, res);
-    case 'createConsumoTC': return await createConsumoTC(req, res);
-    case 'createInversion': return await createInversion(req, res);
-    case 'createMovimiento': return await createMovimiento(req, res);
-    case 'deleteAhorro': return await deleteAhorro(req, res);
-    case 'deleteConsumoCC': return await deleteConsumoCC(req, res);
-    case 'deleteConsumoTC': return await deleteConsumoTC(req, res);
-    case 'deleteInversion': return await deleteInversion(req, res);
-    case 'deleteMovimiento': return await deleteMovimiento(req, res);
-    case 'getAhorros': return await getAhorros(req, res);
-    case 'getConfig': return await getConfig(req, res);
-    case 'getConsumosCC': return await getConsumosCC(req, res);
-    case 'getConsumosTC': return await getConsumosTC(req, res);
-    case 'getDashboardData': return await getDashboardData(req, res);
-    case 'getDolarCotizaciones': return await getDolarCotizaciones(req, res);
-    case 'getInitialData': return await getInitialData(req, res);
-    case 'getMarketData': return await getMarketData(req, res);
-    case 'getNotificaciones': return await getNotificaciones(req, res);
-    case 'getPortfolio': return await getPortfolio(req, res);
-    case 'getProyeccionTC': return await getProyeccionTC(req, res);
-    case 'getUserInfo':
-    case 'api_getUserInfo': return await getUserInfo(req, res);
-    case 'updateAhorro': return await updateAhorro(req, res);
-    case 'updateConsumoCC': return await updateConsumoCC(req, res);
-    case 'updateConsumoTC': return await updateConsumoTC(req, res);
-    case 'updateMovimiento': return await updateMovimiento(req, res);
-    case 'telegramWebhook': return await telegramWebhook(req, res);
-    case 'sendReminders': return await sendReminders(req, res);
-    case 'parseStatement': return await parseStatement(req, res);
-    case 'admin_getRecordatorios': return await admin_getRecordatorios(req, res);
-    case 'admin_saveRecordatorio': return await admin_saveRecordatorio(req, res);
-    case 'admin_deleteRecordatorio': return await admin_deleteRecordatorio(req, res);
-    case 'aiAdvisor': return await aiAdvisor(req, res);
+  try {
+    const endpoint = req.query?.endpoint || req.url.split('?')[0].split('/').pop();
+    
+    // Public endpoints exempt from user JWT check
+    const publicEndpoints = ['getConfig', 'telegramWebhook', 'sendReminders'];
+    if (!publicEndpoints.includes(endpoint)) {
+      const user = await authenticateUser(req, res);
+      if (!user) return; // 401 response already handled by authenticateUser
+    }
+    
+    switch(endpoint) {
+      case 'admin_deleteAhorroSubcuenta': return await admin_deleteAhorroSubcuenta(req, res);
+      case 'admin_deleteCategoria': return await admin_deleteCategoria(req, res);
+      case 'admin_deleteCtaCorrienteUsuario': return await admin_deleteCtaCorrienteUsuario(req, res);
+      case 'admin_deleteCuentaPrincipal': return await admin_deleteCuentaPrincipal(req, res);
+      case 'admin_deleteTarjeta': return await admin_deleteTarjeta(req, res);
+      case 'admin_getAhorroSubcuentas': return await admin_getAhorroSubcuentas(req, res);
+      case 'admin_getCategorias': return await admin_getCategorias(req, res);
+      case 'admin_getCtaCorrienteUsuarios': return await admin_getCtaCorrienteUsuarios(req, res);
+      case 'admin_getCuentasPrincipales': return await admin_getCuentasPrincipales(req, res);
+      case 'admin_getTarjetas': return await admin_getTarjetas(req, res);
+      case 'admin_saveAhorroSubcuenta': return await admin_saveAhorroSubcuenta(req, res);
+      case 'admin_saveCategoria': return await admin_saveCategoria(req, res);
+      case 'admin_saveCtaCorrienteUsuario': return await admin_saveCtaCorrienteUsuario(req, res);
+      case 'admin_saveCuentaPrincipal': return await admin_saveCuentaPrincipal(req, res);
+      case 'admin_saveTarjeta': return await admin_saveTarjeta(req, res);
+      case 'createAhorro': return await createAhorro(req, res);
+      case 'createConsumoCC': return await createConsumoCC(req, res);
+      case 'createConsumoTC': return await createConsumoTC(req, res);
+      case 'createInversion': return await createInversion(req, res);
+      case 'createMovimiento': return await createMovimiento(req, res);
+      case 'deleteAhorro': return await deleteAhorro(req, res);
+      case 'deleteConsumoCC': return await deleteConsumoCC(req, res);
+      case 'deleteConsumoTC': return await deleteConsumoTC(req, res);
+      case 'deleteInversion': return await deleteInversion(req, res);
+      case 'deleteMovimiento': return await deleteMovimiento(req, res);
+      case 'getAhorros': return await getAhorros(req, res);
+      case 'getConfig': return await getConfig(req, res);
+      case 'getConsumosCC': return await getConsumosCC(req, res);
+      case 'getConsumosTC': return await getConsumosTC(req, res);
+      case 'getDashboardData': return await getDashboardData(req, res);
+      case 'getDolarCotizaciones': return await getDolarCotizaciones(req, res);
+      case 'getInitialData': return await getInitialData(req, res);
+      case 'getMarketData': return await getMarketData(req, res);
+      case 'getNotificaciones': return await getNotificaciones(req, res);
+      case 'getPortfolio': return await getPortfolio(req, res);
+      case 'getProyeccionTC': return await getProyeccionTC(req, res);
+      case 'getUserInfo':
+      case 'api_getUserInfo': return await getUserInfo(req, res);
+      case 'updateAhorro': return await updateAhorro(req, res);
+      case 'updateConsumoCC': return await updateConsumoCC(req, res);
+      case 'updateConsumoTC': return await updateConsumoTC(req, res);
+      case 'updateMovimiento': return await updateMovimiento(req, res);
+      case 'telegramWebhook': return await telegramWebhook(req, res);
+      case 'sendReminders': return await sendReminders(req, res);
+      case 'parseStatement': return await parseStatement(req, res);
+      case 'admin_getRecordatorios': return await admin_getRecordatorios(req, res);
+      case 'admin_saveRecordatorio': return await admin_saveRecordatorio(req, res);
+      case 'admin_deleteRecordatorio': return await admin_deleteRecordatorio(req, res);
+      case 'aiAdvisor': return await aiAdvisor(req, res);
 
-    default:
-      return res.status(404).json({ success: false, error: 'Endpoint not found: ' + endpoint });
+      default:
+        return res.status(404).json({ success: false, error: 'Endpoint not found: ' + endpoint });
+    }
+  } catch (err) {
+    console.error('[API Router Error]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
   }
 }

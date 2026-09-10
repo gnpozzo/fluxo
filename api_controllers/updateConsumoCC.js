@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { verifyCuentaOwnership } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 // En el OLD API, updateConsumoCC hacía un delete + create.
@@ -56,9 +57,8 @@ export default async function handler(req, res) {
     }
     
     // 2. CREATE
-    if (scope === 'SINGLE') data.tipo = 'SIMPLE';
+    if (scope === 'SINGLE') consumo.tipo = 'SIMPLE';
     
-    const consumo = data;
     if (consumo?.idCuenta) {
       const isOwner = await verifyCuentaOwnership(supabase, consumo.idCuenta, userId);
       if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
