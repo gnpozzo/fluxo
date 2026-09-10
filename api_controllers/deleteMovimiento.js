@@ -4,17 +4,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    let request = req.body;
-    if (Array.isArray(req.body)) {
-      if (typeof req.body[0] === 'object' && req.body[0] !== null) {
-        request = req.body[0];
+    const rawArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
+    let request = req.body || {};
+    if (rawArgs) {
+      if (typeof rawArgs[0] === 'object' && rawArgs[0] !== null) {
+        request = rawArgs[0];
       } else {
         request = {
-          id: req.body[0],
-          scope: req.body[1] || 'SINGLE',
-          recurGroupId: req.body[2],
-          splitGroupId: req.body[3],
-          fecha: req.body[4]
+          id: rawArgs[0],
+          scope: rawArgs[1] || 'SINGLE',
+          recurGroupId: rawArgs[2],
+          splitGroupId: rawArgs[3],
+          fecha: rawArgs[4]
         };
       }
     }

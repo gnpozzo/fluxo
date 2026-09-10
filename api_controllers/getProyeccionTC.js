@@ -65,7 +65,7 @@ export default async function handler(req, res) {
       if (tarjetaIds.length > 0) {
         const { data: cData, error: cErr } = await supabase
           .from('consumos_tc')
-          .select('fecha, importe')
+          .select('fecha, importe, descripcion, moneda')
           .in('id_tarjeta', tarjetaIds)
           .eq('user_id', userId)
           .gte('fecha', fechaInicio)
@@ -76,32 +76,104 @@ export default async function handler(req, res) {
       }
     }
 
-    // Inicializar los 12 meses
+    // Funciones auxiliares para detección de impuestos existentes y consumos gravados
+    const isTaxDesc = (desc = '') => {
+      const d = desc.toLowerCase();
+      return (
+        d.includes('impuesto de sellos') ||
+        d.includes('sellos') ||
+        d.includes('iibb percep') ||
+        d.includes('iva rg 4240') ||
+        d.includes('db.rg 5617') ||
+        d.includes('percep-sant') ||
+        d.startsWith('db.rg') ||
+        d.startsWith('iva rg') ||
+        d.startsWith('iibb') ||
+        d.startsWith('impuesto')
+      );
+    };
+
+    const isDigitalOrUsd = (c) => {
+      if (c.moneda === 'USD') return true;
+      const d = (c.descripcion || '').toLowerCase();
+      return (
+        d.includes('adobe') ||
+        d.includes('google') ||
+        d.includes('youtube') ||
+        d.includes('netflix') ||
+        d.includes('spotify') ||
+        d.includes('apple') ||
+        d.includes('amazon') ||
+        d.includes('microsoft') ||
+        d.includes('openai') ||
+        d.includes('github') ||
+        d.includes('steam') ||
+        d.includes('uber') ||
+        d.includes('patreon')
+      );
+    };
+
+    // Inicializar los 12 meses con subtotales y bases imponibles
     const objMeses = {};
     for (let i = 0; i < 12; i++) {
       const m = new Date(start);
       m.setMonth(start.getMonth() + i);
       const k = m.toISOString().substring(0, 7);
-      objMeses[k] = 0;
+      objMeses[k] = {
+        subtotal_consumos: 0,
+        base_digital: 0
+      };
     }
 
-    // Sumarizar importes por mes
+    // Sumarizar importes por mes excluyendo duplicación de impuestos históricos
     consumos.forEach(c => {
       const mesStr = (c.fecha || '').substring(0, 7);
       if (objMeses[mesStr] !== undefined) {
-        objMeses[mesStr] += Number(c.importe || 0);
+        if (!isTaxDesc(c.descripcion)) {
+          const imp = Number(c.importe || 0);
+          objMeses[mesStr].subtotal_consumos += imp;
+          if (isDigitalOrUsd(c)) {
+            objMeses[mesStr].base_digital += imp;
+          }
+        }
       }
     });
 
-    const proyeccion = Object.keys(objMeses).sort().map(m => ({
-      mes: m,
-      total: objMeses[m]
-    }));
+    const proyeccion = Object.keys(objMeses).sort().map(m => {
+      const sub = Math.round(objMeses[m].subtotal_consumos * 100) / 100;
+      const baseDig = Math.round(objMeses[m].base_digital * 100) / 100;
+
+      // Sellos provincial (0.10% = 1 por mil sobre el total de la liquidación en pesos/USD pesificados)
+      const sellos = Math.round(sub * 0.001 * 100) / 100;
+
+      // Impuestos sobre servicios digitales del exterior (normativa AFIP/ARCA y Santa Fe)
+      const iva_digital = baseDig > 0 ? Math.round(baseDig * 0.21 * 100) / 100 : 0;
+      const ganancias_rg5617 = baseDig > 0 ? Math.round(baseDig * 0.30 * 100) / 100 : 0;
+      const iibb_santafe = baseDig > 0 ? Math.round(baseDig * 0.03 * 100) / 100 : 0;
+
+      const total_impuestos = Math.round((sellos + iva_digital + ganancias_rg5617 + iibb_santafe) * 100) / 100;
+      const total = Math.round((sub + total_impuestos) * 100) / 100;
+
+      return {
+        mes: m,
+        subtotal_consumos: sub,
+        impuestos: {
+          sellos,
+          iva_digital,
+          ganancias_rg5617,
+          iibb_santafe,
+          total_impuestos
+        },
+        total
+      };
+    });
 
     return res.status(200).json({
       success: true,
       proyeccion: proyeccion,
       totales: {
+        subtotal_consumos: proyeccion.reduce((acc, p) => acc + p.subtotal_consumos, 0),
+        total_impuestos: proyeccion.reduce((acc, p) => acc + p.impuestos.total_impuestos, 0),
         total: proyeccion.reduce((acc, p) => acc + p.total, 0)
       }
     });

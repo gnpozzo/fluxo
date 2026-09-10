@@ -245,7 +245,7 @@ export class AdminModule extends BaseModule {
           </div>
           <select id="adm-cat-filter-tipo" class="input select" style="width:auto;min-width:150px;">
             <option value="ALL">Todos los tipos</option>
-            <option value="EGRESO">Egresos</option>
+            <option value="EGRESO">Gastos</option>
             <option value="INGRESO">Ingresos</option>
           </select>
         </div>
@@ -665,7 +665,7 @@ export class AdminModule extends BaseModule {
             <label>Tipo de movimiento</label>
             <select class="input" name="tipo_mov">
               <option value="INGRESO" ${data?.tipo_mov === 'INGRESO' ? 'selected':''}>Ingreso</option>
-              <option value="EGRESO"  ${!data || data?.tipo_mov === 'EGRESO' ? 'selected':''}>Egreso</option>
+              <option value="EGRESO"  ${!data || data?.tipo_mov === 'EGRESO' ? 'selected':''}>Gasto</option>
             </select>
           </div>
           <div class="form-group">

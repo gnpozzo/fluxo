@@ -6,7 +6,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    const ahorroData = Array.isArray(req.body) ? req.body[0] : req.body;
+    let ahorroData = req.body;
+    if (Array.isArray(ahorroData)) {
+      ahorroData = ahorroData[0];
+    } else if (ahorroData && Array.isArray(ahorroData.args)) {
+      ahorroData = ahorroData.args[0];
+    } else if (typeof ahorroData === 'string') {
+      try {
+        const parsed = JSON.parse(ahorroData);
+        ahorroData = Array.isArray(parsed) ? parsed[0] : (parsed.args ? parsed.args[0] : parsed);
+      } catch (e) {}
+    }
+    ahorroData = ahorroData || {};
     
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });

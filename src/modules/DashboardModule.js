@@ -81,7 +81,7 @@ export class DashboardModule extends BaseModule {
             </div>
           </div>
           <div class="portfolio-kpi">
-            <span class="portfolio-kpi-label">Egresos</span>
+            <span class="portfolio-kpi-label">Gastos</span>
             <div style="display:flex;align-items:center;gap:8px">
               <span class="portfolio-kpi-icon kpi-red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg></span>
               <span class="portfolio-kpi-val negativo" id="pf-egr-${c.id_cuenta_principal}">—</span>
@@ -295,7 +295,7 @@ export class DashboardModule extends BaseModule {
             <div class="fhc-conversion-text" id="dash-conversion-val">≈ US$ 0,00</div>
           </div>
 
-          <div class="fhc-breakdown-row fhc-breakdown-clickable" id="dash-breakdown-toggle" role="button" tabindex="0" title="Ver movimientos (ingresos y egresos)">
+          <div class="fhc-breakdown-row fhc-breakdown-clickable" id="dash-breakdown-toggle" role="button" tabindex="0" title="Ver movimientos (ingresos y gastos)">
             <div class="fhc-stat-box fhc-stat-ing">
               <div class="fhc-stat-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
@@ -313,7 +313,7 @@ export class DashboardModule extends BaseModule {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
               </div>
               <div class="fhc-stat-info">
-                <span class="fhc-stat-label">Egresos</span>
+                <span class="fhc-stat-label">Gastos</span>
                 <span class="fhc-stat-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
               </div>
             </div>
@@ -395,7 +395,7 @@ export class DashboardModule extends BaseModule {
             <div class="dh-filter-tabs">
               <button class="dh-tab-btn active" data-filter="ALL" id="drilldown-tab-all">Todos</button>
               <button class="dh-tab-btn" data-filter="INGRESO" id="drilldown-tab-ing">Ingresos</button>
-              <button class="dh-tab-btn" data-filter="EGRESO" id="drilldown-tab-egr">Egresos</button>
+              <button class="dh-tab-btn" data-filter="EGRESO" id="drilldown-tab-egr">Gastos</button>
             </div>
           </div>
 
@@ -1087,7 +1087,7 @@ export class DashboardModule extends BaseModule {
     }
     if (titleEl) {
       if (this.#drilldownFilter === 'INGRESO') titleEl.textContent = 'Movimientos: Ingresos';
-      else if (this.#drilldownFilter === 'EGRESO') titleEl.textContent = 'Movimientos: Egresos';
+      else if (this.#drilldownFilter === 'EGRESO') titleEl.textContent = 'Movimientos: Gastos';
       else titleEl.textContent = 'Todos los Movimientos';
     }
     if (summaryEl) {

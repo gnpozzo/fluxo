@@ -172,18 +172,49 @@ export class TarjetasModule extends BaseModule {
         return;
      }
 
-     const rows = data.proyeccion.map(p => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid var(--borde); font-size:0.875rem; transition:background-color 0.15s ease;" onmouseover="this.style.backgroundColor='var(--superficie-hover)'" onmouseout="this.style.backgroundColor='transparent'">
-           <span style="font-weight:600; color:var(--texto); font-size:0.875rem;">${App.Utils.escapeHtml(App.Utils.formatearMes(p.mes))}</span>
-           <span class="negativo" style="font-weight:600; font-size:0.875rem;">${App.Utils.formatearMoneda(p.total)}</span>
+     const rows = data.proyeccion.map((p, idx) => {
+        const imp = p.impuestos || {};
+        const hasTaxes = (imp.total_impuestos || 0) > 0;
+        const taxDetailId = `tc-proy-tax-${idx}`;
+
+        return `
+        <div class="tc-proy-row" style="border-bottom:1px solid var(--borde); font-size:0.875rem; transition:background-color 0.15s ease;">
+           <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; flex-wrap:wrap; gap:8px;">
+              <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                 <span style="font-weight:600; color:var(--texto); font-size:0.875rem; min-width:130px;">${App.Utils.escapeHtml(App.Utils.formatearMes(p.mes))}</span>
+                 <span style="font-size:0.8rem; color:var(--texto-2);">Consumos: <strong>${App.Utils.formatearMoneda(p.subtotal_consumos !== undefined ? p.subtotal_consumos : p.total)}</strong></span>
+                 ${hasTaxes ? `
+                 <button type="button" class="tc-proy-tax-badge" onclick="const el = document.getElementById('${taxDetailId}'); el?.classList.toggle('open'); this.classList.toggle('active');" title="Ver desglose de impuestos estimados">
+                    <span>🏛️ + Impuestos: ${App.Utils.formatearMoneda(imp.total_impuestos)}</span>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                 </button>
+                 ` : ''}
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                 <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--texto-3);">Total Resumen</span>
+                 <span class="negativo" style="font-weight:700; font-size:0.95rem;">${App.Utils.formatearMoneda(p.total)}</span>
+              </div>
+           </div>
+
+           ${hasTaxes ? `
+           <div class="tc-proy-tax-detail" id="${taxDetailId}">
+              <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; padding:10px 18px 14px 18px; background:var(--bg-2); border-top:1px dashed var(--borde-1); font-size:0.8rem;">
+                 <div><span style="color:var(--texto-3);">Sellos Prov. (0,10%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.sellos || 0)}</strong></div>
+                 ${imp.iva_digital > 0 ? `<div><span style="color:var(--texto-3);">IVA Serv. Digitales (21%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.iva_digital)}</strong></div>` : ''}
+                 ${imp.ganancias_rg5617 > 0 ? `<div><span style="color:var(--texto-3);">Percep. Ganancias (30%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.ganancias_rg5617)}</strong></div>` : ''}
+                 ${imp.iibb_santafe > 0 ? `<div><span style="color:var(--texto-3);">Percep. IIBB (3%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.iibb_santafe)}</strong></div>` : ''}
+              </div>
+           </div>
+           ` : ''}
         </div>
-     `).join('');
+        `;
+     }).join('');
 
      wrap.innerHTML = `
         <div style="padding:14px 18px; border-bottom:1px solid var(--borde); background:var(--fondo); display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);">
           <div>
             <h4 style="margin:0 0 2px 0; color:var(--texto); font-size:0.82rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Proyección a 12 meses</h4>
-            <p style="margin:0; color:var(--texto-2); font-size:0.8rem;">Totales consolidados pendientes de facturación en todos tus plásticos.</p>
+            <p style="margin:0; color:var(--texto-2); font-size:0.8rem;">Incluye cálculo dinámico de Sellos (0,10%) y percepciones sobre servicios digitales (IVA 21%, RG 5617 30%, IIBB 3%).</p>
           </div>
           ${App.Icons.get('trending_up', 'icon-md', { style: 'color:var(--kpi-amber);' })}
         </div>
@@ -235,6 +266,7 @@ export class TarjetasModule extends BaseModule {
         </div>
       </div>
       <div class="table-card" id="tc-tabla-wrap"></div>
+      <div id="tc-taxes-wrap" style="margin-top:var(--space-3)"></div>
       <div class="table-card hidden" id="tc-proy-wrap">
          <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando proyecciones...</div>
       </div>
@@ -582,15 +614,25 @@ export class TarjetasModule extends BaseModule {
         if (btn.id === 'tc-btn-nuevo') {
           this.#abrirModalAlta();
         } else if (btn.id === 'tc-btn-mes') {
-          document.getElementById('tc-btn-mes')?.classList.replace('btn-ghost', 'btn-primary');
-          document.getElementById('tc-btn-proy')?.classList.replace('btn-primary', 'btn-ghost');
+          const btnMes = document.getElementById('tc-btn-mes');
+          const btnProy = document.getElementById('tc-btn-proy');
+          btnMes?.classList.add('active', 'btn-primary');
+          btnMes?.classList.remove('btn-ghost');
+          btnProy?.classList.remove('active', 'btn-primary');
+          btnProy?.classList.add('btn-ghost');
           document.getElementById('tc-tabla-wrap')?.classList.remove('hidden');
+          document.getElementById('tc-taxes-wrap')?.classList.remove('hidden');
           document.getElementById('tc-proy-wrap')?.classList.add('hidden');
         } else if (btn.id === 'tc-btn-proy') {
-          document.getElementById('tc-btn-proy')?.classList.replace('btn-ghost', 'btn-primary');
-          document.getElementById('tc-btn-mes')?.classList.replace('btn-primary', 'btn-ghost');
+          const btnMes = document.getElementById('tc-btn-mes');
+          const btnProy = document.getElementById('tc-btn-proy');
+          btnProy?.classList.add('active', 'btn-primary');
+          btnProy?.classList.remove('btn-ghost');
+          btnMes?.classList.remove('active', 'btn-primary');
+          btnMes?.classList.add('btn-ghost');
           document.getElementById('tc-proy-wrap')?.classList.remove('hidden');
           document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
+          document.getElementById('tc-taxes-wrap')?.classList.add('hidden');
         } else if (btn.id === 'tc-slide-prev') {
           const selectorEl = document.getElementById('tc-card-selector');
           selectorEl?.scrollBy({ left: -240, behavior: 'smooth' });
@@ -888,6 +930,22 @@ export class TarjetasModule extends BaseModule {
     this.#updateSliderArrows();
   }
 
+  #isTaxConsumo(c) {
+    const desc = (c.descripcion || '').toLowerCase();
+    return (
+      desc.includes('impuesto de sellos') ||
+      desc.includes('sellos') ||
+      desc.includes('iibb percep') ||
+      desc.includes('iva rg 4240') ||
+      desc.includes('db.rg 5617') ||
+      desc.includes('percep-sant') ||
+      desc.startsWith('db.rg') ||
+      desc.startsWith('iva rg') ||
+      desc.startsWith('iibb') ||
+      desc.startsWith('impuesto')
+    );
+  }
+
   #filterConsumos() {
     let filtered = this.#allConsumos || [];
     if (this.#selectedTcId) {
@@ -902,7 +960,72 @@ export class TarjetasModule extends BaseModule {
         filtered = filtered.filter(c => c.id_cuenta_imputada === this.#selectedCuentaId);
       }
     }
-    this.#table?.load(filtered);
+
+    // Separar impuestos de la liquidación de los consumos habituales
+    const regularConsumos = filtered.filter(c => !this.#isTaxConsumo(c));
+    const taxConsumos = filtered.filter(c => this.#isTaxConsumo(c));
+
+    this.#table?.load(regularConsumos);
+    this.#renderImpuestosAccordion(taxConsumos);
+  }
+
+  #renderImpuestosAccordion(taxes) {
+    const wrap = document.getElementById('tc-taxes-wrap');
+    if (!wrap) return;
+    if (!taxes || taxes.length === 0) {
+      wrap.innerHTML = '';
+      return;
+    }
+
+    const totalImpuestos = taxes.reduce((acc, t) => acc + Number(t.importe || 0), 0);
+    wrap.innerHTML = `
+      <div class="tc-taxes-accordion" id="tc-taxes-accordion">
+        <div class="tc-taxes-header" id="tc-taxes-toggle" role="button" tabindex="0" title="Ver desglose detallado de impuestos">
+          <div class="tc-taxes-header-left">
+            <span class="tc-taxes-icon">🏛️</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="tc-taxes-title">Impuestos y Percepciones del Resumen</span>
+              <span class="tc-taxes-badge">${taxes.length} ${taxes.length === 1 ? 'ítem' : 'ítems'}</span>
+            </div>
+          </div>
+          <div class="tc-taxes-header-right">
+            <span class="tc-taxes-total-label">Total Impuestos:</span>
+            <span class="tc-taxes-total-val negativo">${App.Utils.formatearMoneda(totalImpuestos)}</span>
+            <svg class="tc-taxes-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+        </div>
+        <div class="tc-taxes-body">
+          <div class="table-responsive">
+            <table class="table" style="margin:0;width:100%;font-family:inherit;">
+              <thead>
+                <tr style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--texto-3);border-bottom:1px solid var(--borde);">
+                  <th style="padding:10px 16px;text-align:left;">Fecha</th>
+                  <th style="padding:10px 16px;text-align:left;">Concepto Impositivo</th>
+                  <th style="padding:10px 16px;text-align:right;">Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${taxes.map(t => `
+                  <tr style="border-bottom:1px solid var(--borde-1);">
+                    <td style="padding:10px 16px;font-size:0.82rem;color:var(--texto-2);">${App.Utils.formatearFecha(t.fecha)}</td>
+                    <td style="padding:10px 16px;font-size:0.84rem;font-weight:500;color:var(--texto);">${App.Utils.escapeHtml(t.descripcion)}</td>
+                    <td style="padding:10px 16px;font-size:0.84rem;font-weight:600;text-align:right;color:var(--rojo);">${App.Utils.formatearMoneda(t.importe)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const toggle = document.getElementById('tc-taxes-toggle');
+    const accordion = document.getElementById('tc-taxes-accordion');
+    if (toggle && accordion) {
+      toggle.addEventListener('click', () => {
+        accordion.classList.toggle('open');
+      });
+    }
   }
 
   #renderToolbarFiltros() {

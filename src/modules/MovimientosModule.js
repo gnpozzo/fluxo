@@ -131,13 +131,13 @@ export class MovimientosModule extends BaseModule {
       onFormat  : App.Utils.formatearMoneda
     });
     this.#kpiEgresos  = new App.KpiCard(grid, {
-      titulo    : 'Egresos',
+      titulo    : 'Gastos',
       icono     : 'trending_down',
       colorClass: 'kpi-red',
       onFormat  : (v) => App.Utils.formatearMoneda(Math.abs(v))
     });
     this.#kpiResult   = new App.KpiCard(grid, {
-      titulo    : 'Resultado',
+      titulo    : 'Balance',
       icono     : 'scale',
       colorClass: 'kpi-blue',
       onFormat  : App.Utils.formatearMoneda
@@ -155,7 +155,12 @@ export class MovimientosModule extends BaseModule {
           { key: 'fecha',           label: 'Fecha',      sortable: true,
             render: (r) => App.Utils.formatearFecha(r.fecha?.value || r.fecha) },
           { key: 'tipo_mov',        label: 'Tipo',
-            render: (r) => `<span class="tipo-mov tipo-${r.tipo_mov?.toLowerCase()}">${App.Utils.escapeHtml(r.tipo_mov)}</span>` },
+            render: (r) => {
+              const esGasto = r.tipo_mov === 'EGRESO';
+              const label = esGasto ? 'Gasto' : 'Ingreso';
+              const cls = esGasto ? 'tipo-egreso tipo-gasto' : 'tipo-ingreso';
+              return `<span class="tipo-mov ${cls}">${label}</span>`;
+            } },
           { key: 'categoria_nombre',label: 'Categoría',  sortable: true,
             render: (r) => App.Utils.escapeHtml(r.categoria_nombre || 'General') },
           { key: 'descripcion',     label: 'Descripción', searchable: true,
@@ -174,8 +179,42 @@ export class MovimientosModule extends BaseModule {
 
   // --- SECCIÓN 4: MODAL ALTA/EDICIÓN ---
   
-  abrirAlta(tipo) {
+  async #asegurarDatosMaestros() {
+    if (!this.#cuentas.length && App.Store?.cuentas?.length) {
+      this.#cuentas = [...App.Store.cuentas];
+    }
+    if (!this.#categorias.length && window._appCategorias?.length) {
+      this.#categorias = [...window._appCategorias];
+    }
+    if (!this.#cuentas.length || !this.#categorias.length) {
+      try {
+        const resp = await App.API.call('api_getInitialData');
+        if (resp && resp.success) {
+          if (resp.cuentas?.length) {
+            this.#cuentas = resp.cuentas;
+            App.Store.setCuentas(resp.cuentas);
+          }
+          if (resp.categorias?.length) {
+            this.#categorias = resp.categorias;
+            window._appCategorias = resp.categorias;
+          }
+          if (resp.tarjetas?.length) window._appTarjetas = resp.tarjetas;
+          if (resp.usuarios_cc?.length) window._appUsuariosCC = resp.usuarios_cc;
+        }
+      } catch (err) {
+        App.warn('MovimientosModule', 'asegurarDatosMaestros', err);
+      }
+    }
+  }
+
+  async abrirAlta(tipo) {
+    await this.#asegurarDatosMaestros();
     this.#abrirModalAlta(tipo);
+  }
+
+  async abrirEdicion(row) {
+    await this.#asegurarDatosMaestros();
+    this.#abrirModalEdicion(row);
   }
 
   #abrirModalAlta(tipo) {
@@ -183,10 +222,10 @@ export class MovimientosModule extends BaseModule {
     const esIngreso = tipo === 'INGRESO';
 
     this.#modal.open({
-      titulo      : esIngreso ? 'Nuevo Ingreso' : 'Nuevo Egreso',
+      titulo      : esIngreso ? 'Nuevo Ingreso' : 'Nuevo Gasto',
       icono       : esIngreso ? 'trending_up' : 'trending_down',
       body        : this.#buildFormHtml(tipo, null),
-      confirmLabel: esIngreso ? 'Guardar Ingreso' : 'Registrar Gasto',
+      confirmLabel: esIngreso ? 'Guardar Ingreso' : 'Guardar Gasto',
       danger      : !esIngreso,
       size        : 'md',
       onConfirm   : (modal) => this.#guardar(modal)
@@ -200,10 +239,10 @@ export class MovimientosModule extends BaseModule {
     const esIngreso = tipo === 'INGRESO';
 
     this.#modal.open({
-      titulo      : 'Editar Movimiento',
+      titulo      : esIngreso ? 'Editar Ingreso' : 'Editar Gasto',
       icono       : 'edit',
       body        : this.#buildFormHtml(tipo, row),
-      confirmLabel: esIngreso ? 'Actualizar Ingreso' : 'Actualizar Gasto',
+      confirmLabel: esIngreso ? 'Guardar Ingreso' : 'Guardar Gasto',
       danger      : !esIngreso,
       size        : 'md',
       onConfirm   : (modal) => this.#guardar(modal)
@@ -216,11 +255,15 @@ export class MovimientosModule extends BaseModule {
     const colorClass = esIngreso ? 'monto-ingreso' : 'monto-egreso';
     const sign       = esIngreso ? '+' : '−';
 
-    const categoriasFiltradas = this.#categorias
-      .filter(c => c.tipo_mov === tipo && c.activa);
+    const allCats = this.#categorias.length ? this.#categorias : (window._appCategorias || []);
+    const categoriasFiltradas = allCats
+      .filter(c => ((c.tipo_mov || '').toUpperCase() === tipo.toUpperCase()) && (c.activa !== false));
+
+    const allCuentas = this.#cuentas.length ? this.#cuentas : (App.Store?.cuentas || []);
+    const activeCuenta = App.Store?.cuenta;
 
     const usuariosCC = window._appUsuariosCC || [];
-    const otherUsers = usuariosCC.filter(u => u.id_cuenta_principal === App.Store.cuenta && !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
+    const otherUsers = usuariosCC.filter(u => u.id_cuenta_principal === activeCuenta && !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
     const optsU = otherUsers
       .map(u => `<option value="${u.id_usuario}">${App.Utils.escapeHtml(u.nombre)}</option>`)
       .join('');
@@ -238,19 +281,26 @@ export class MovimientosModule extends BaseModule {
 
     const importeVal = data?.importe || '';
 
-    // Cuenta destino: lista de cuentas principales
-    const optsCuentas = this.#cuentas
+    // Cuenta destino / origen: lista de cuentas principales
+    const optsCuentas = allCuentas
+      .filter(c => c.activa !== false)
       .map(c => `<option value="${c.id_cuenta_principal}"
-        ${(data?.id_cuenta_principal === c.id_cuenta_principal || (!data && c.id_cuenta_principal === App.Store.cuenta)) ? 'selected' : ''}>
+        ${(data?.id_cuenta_principal === c.id_cuenta_principal || (!data && c.id_cuenta_principal === activeCuenta)) ? 'selected' : ''}>
         ${App.Utils.escapeHtml(c.nombre)}
       </option>`)
       .join('');
 
-    // Tarjetas para cuotas con TC (solo egresos)
+    // Tarjetas para cuotas con TC (solo gastos)
     const allTarjetas = window._appTarjetas || [];
-    const tarjetasCuenta = allTarjetas.filter(t => t.id_cuenta_principal === App.Store.cuenta);
+    const tarjetasCuenta = allTarjetas.filter(t => t.id_cuenta_principal === activeCuenta);
     const optsTc = tarjetasCuenta
       .map(t => `<option value="${t.id_tarjeta}">${App.Utils.escapeHtml(t.nombre)}</option>`)
+      .join('');
+
+    // Split: opciones de cuentas disponibles excluyendo la principal
+    const splitCuentasOpts = allCuentas
+      .filter(c => c.activa !== false && c.id_cuenta_principal !== activeCuenta)
+      .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
       .join('');
 
     return `
@@ -285,7 +335,7 @@ export class MovimientosModule extends BaseModule {
         </div>
 
         <div class="form-group">
-          <label>Cuenta de Destino</label>
+          <label>${esIngreso ? 'Cuenta de Destino' : 'Cuenta de Origen'}</label>
           <select class="input" name="id_cuenta_destino">
             ${optsCuentas}
           </select>
@@ -373,8 +423,8 @@ export class MovimientosModule extends BaseModule {
               <div class="form-group">
                 <label>Cuenta de Distribución</label>
                 <select class="input" name="split_cuenta_destino_1">
-                  <option value="">-- Ninguna --</option>
-                  ${this.#cuentas.filter(c => c.id_cuenta_principal !== App.Store.cuenta).map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`).join('')}
+                  <option value="">-- Seleccionar cuenta --</option>
+                  ${splitCuentasOpts}
                 </select>
               </div>
               <div class="form-group">
@@ -451,8 +501,10 @@ export class MovimientosModule extends BaseModule {
         splitCount++;
         const container = document.getElementById('split-rows-container');
         if (!container) return;
-        const optsCuentas = this.#cuentas
-          .filter(c => c.id_cuenta_principal !== App.Store.cuenta)
+        const allCuentas = this.#cuentas.length ? this.#cuentas : (App.Store?.cuentas || []);
+        const activeCuenta = App.Store?.cuenta;
+        const optsCuentas = allCuentas
+          .filter(c => c.activa !== false && c.id_cuenta_principal !== activeCuenta)
           .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
           .join('');
         const newRow = document.createElement('div');
@@ -462,7 +514,7 @@ export class MovimientosModule extends BaseModule {
           <div class="form-group">
             <label>Cuenta de Distribución ${splitCount}</label>
             <select class="input" name="split_cuenta_destino_${splitCount}">
-              <option value="">-- Ninguna --</option>
+              <option value="">-- Seleccionar cuenta --</option>
               ${optsCuentas}
             </select>
           </div>

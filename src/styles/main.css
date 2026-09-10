@@ -954,7 +954,8 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   color: var(--badge-ing-text);
   border: 1px solid var(--badge-ing-border);
 }
-.tipo-egreso {
+.tipo-egreso,
+.tipo-gasto {
   background-color: var(--badge-egr-bg);
   color: var(--badge-egr-text);
   border: 1px solid var(--badge-egr-border);
@@ -2931,11 +2932,16 @@ body {
   line-height: 1.2 !important;
 }
 
-.selector-vista-container .btn-vista.active,
-.selector-vista-container .btn-vista.btn-primary {
+.selector-vista-container .btn-vista.active {
   background: var(--primary) !important;
   color: #ffffff !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+}
+
+.selector-vista-container .btn-vista:not(.active) {
+  background: transparent !important;
+  color: var(--texto-2) !important;
+  box-shadow: none !important;
 }
 
 .selector-vista-container .btn-vista:not(.active):hover {
@@ -5467,5 +5473,143 @@ input:checked + .toggle-slider:before {
   transform: translateX(20px);
 }
 
+/* ============================================================
+   Tarjetas de Crédito — Acordeón de Impuestos y Proyecciones Dinámicas
+   ============================================================ */
 
+.tc-taxes-accordion {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-md, 10px);
+  box-shadow: var(--s-card, 0 1px 3px rgba(0,0,0,0.05));
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-family: inherit;
+}
 
+.tc-taxes-accordion:hover {
+  border-color: var(--borde-2, #cbd5e1);
+}
+
+.tc-taxes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 18px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--superficie);
+  transition: background 0.15s ease;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tc-taxes-header:hover {
+  background: var(--superficie-hover);
+}
+
+.tc-taxes-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tc-taxes-icon {
+  font-size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tc-taxes-title {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--texto);
+}
+
+.tc-taxes-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  color: var(--texto-2);
+  padding: 2px 8px;
+  border-radius: var(--r-full, 9999px);
+}
+
+.tc-taxes-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tc-taxes-total-label {
+  font-size: 0.78rem;
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.tc-taxes-total-val {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.tc-taxes-chevron {
+  transition: transform 0.25s ease;
+  color: var(--texto-2);
+}
+
+.tc-taxes-accordion.open .tc-taxes-chevron {
+  transform: rotate(180deg);
+}
+
+.tc-taxes-body {
+  display: none;
+  border-top: 1px solid var(--borde);
+  background: var(--fondo);
+}
+
+.tc-taxes-accordion.open .tc-taxes-body {
+  display: block;
+}
+
+/* Badge y Desglose de Impuestos en Proyecciones TC */
+.tc-proy-tax-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--r-full, 9999px);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: var(--rojo, #ef4444);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.tc-proy-tax-badge:hover,
+.tc-proy-tax-badge.active {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.tc-proy-tax-badge svg {
+  transition: transform 0.2s ease;
+}
+
+.tc-proy-tax-badge.active svg {
+  transform: rotate(180deg);
+}
+
+.tc-proy-tax-detail {
+  display: none;
+}
+
+.tc-proy-tax-detail.open {
+  display: block;
+}

@@ -11,8 +11,18 @@ function addMonthsSafe(date, months) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
-    const supabase = getSupabaseClient(req);
-    const consumo = Array.isArray(req.body) ? req.body[0] : req.body;
+    let consumo = req.body;
+    if (Array.isArray(consumo)) {
+      consumo = consumo[0];
+    } else if (consumo && Array.isArray(consumo.args)) {
+      consumo = consumo.args[0];
+    } else if (typeof consumo === 'string') {
+      try {
+        const parsed = JSON.parse(consumo);
+        consumo = Array.isArray(parsed) ? parsed[0] : (parsed.args ? parsed.args[0] : parsed);
+      } catch (e) {}
+    }
+    consumo = consumo || {};
 
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
