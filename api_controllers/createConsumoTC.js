@@ -235,8 +235,8 @@ export default async function handler(req, res) {
           }
         }
 
-        // Base para proyecciones futuras (vencimiento del resumen o fecha de compra)
-        const baseDate = stVto ? new Date(stVto + 'T12:00:00Z') : new Date(fechaISO + 'T12:00:00Z');
+        // Base para proyecciones futuras (mes consecutivo a partir de la fecha del consumo)
+        const baseDate = new Date(fechaISO + 'T12:00:00Z');
 
         // A) Proyección a futuro de cuotas restantes (X+1 ... N)
         if (tipoConsumo === 'CUOTAS' && cuotaTot > cuotaAct) {

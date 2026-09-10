@@ -27,6 +27,7 @@ export class MovimientosModule extends BaseModule {
   #kpiResult   = null;
   #modal       = null;
   #editData    = null;
+  #cacheIngresos = {};
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -308,6 +309,41 @@ export class MovimientosModule extends BaseModule {
         <input type="hidden" name="tipo" value="${tipo}">
         <input type="hidden" name="id_movimiento" value="${data?.id_movimiento || ''}">
 
+        ${!esIngreso ? `
+        <!-- Modalidad de Cálculo para Gastos -->
+        <div class="form-group full-width" style="margin-bottom:var(--space-1)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <span style="font-size:0.8rem;font-weight:600;color:var(--texto-2);text-transform:uppercase;letter-spacing:0.04em">Modalidad de Importe</span>
+            <div class="pill-group" style="display:inline-flex;background:var(--fondo);border:1px solid var(--borde);border-radius:var(--r-sm);padding:2px">
+              <button type="button" class="btn-pill-mode active" id="btn-modo-monto-fijo" style="padding:4px 12px;font-size:0.75rem;font-weight:600;border:none;background:var(--primary);color:#fff;border-radius:calc(var(--r-sm) - 2px);cursor:pointer;transition:all 0.15s ease">Monto Fijo ($)</button>
+              <button type="button" class="btn-pill-mode" id="btn-modo-monto-pct" style="padding:4px 12px;font-size:0.75rem;font-weight:600;border:none;background:transparent;color:var(--texto-2);border-radius:calc(var(--r-sm) - 2px);cursor:pointer;transition:all 0.15s ease">% sobre Ingresos</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel de Cálculo Dinámico por Porcentaje -->
+        <div id="wrap-gasto-pct" class="form-group full-width hidden" style="background:var(--primary-tint);border:1px solid rgba(29,25,93,0.15);padding:12px 14px;border-radius:var(--r);margin-bottom:var(--space-2)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <span style="font-weight:600;font-size:0.82rem;color:var(--primary)">Calcular % sobre ingresos de la cuenta</span>
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              <button type="button" class="btn-pct-preset" data-pct="25" style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--superficie);border:1px solid var(--borde);color:var(--texto);cursor:pointer">25% (Super)</button>
+              <button type="button" class="btn-pct-preset" data-pct="4.55" data-formula="super/5.5" style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--superficie);border:1px solid var(--borde);color:var(--texto);cursor:pointer">÷ 5.5 (Verdu)</button>
+              <button type="button" class="btn-pct-preset" data-pct="1" style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--superficie);border:1px solid var(--borde);color:var(--texto);cursor:pointer">1%</button>
+              <button type="button" class="btn-pct-preset" data-pct="5" style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--superficie);border:1px solid var(--borde);color:var(--texto);cursor:pointer">5%</button>
+              <button type="button" class="btn-pct-preset" data-pct="10" style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--superficie);border:1px solid var(--borde);color:var(--texto);cursor:pointer">10%</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="display:inline-flex;align-items:center;gap:4px;background:var(--superficie);padding:4px 8px;border-radius:var(--r-sm);border:1px solid var(--borde)">
+              <input type="number" id="input-gasto-pct" min="0.01" max="100" step="0.01" placeholder="Ej: 25" style="width:75px;border:none;outline:none;font-size:1rem;font-weight:700;color:var(--primary);background:transparent">
+              <span style="font-weight:700;color:var(--primary);font-size:0.9rem">%</span>
+            </div>
+            <div id="info-gasto-pct" style="font-size:0.8rem;color:var(--texto-2);flex:1;min-width:180px">
+              Ingresá el porcentaje para calcular el monto sobre los ingresos.
+            </div>
+          </div>
+        </div>` : ''}
+
         <!-- Fila 1: Monto + Fecha -->
         <div class="form-group ${colorClass}">
           <label>Monto <span class="required-mark">*</span></label>
@@ -324,6 +360,7 @@ export class MovimientosModule extends BaseModule {
           <label>Fecha <span class="required-mark">*</span></label>
           <input class="input" type="date" name="fecha" value="${rawFecha}" required>
         </div>
+
 
         <!-- Fila 2: Categoría + Cuenta destino -->
         <div class="form-group">
@@ -534,7 +571,89 @@ export class MovimientosModule extends BaseModule {
         document.getElementById('mov-compartir-opts')?.classList.toggle('hidden', !chkComp.checked);
       });
     }
+
+    // Modalidad de cálculo de monto (% sobre ingresos)
+    const btnFijo = document.getElementById('btn-modo-monto-fijo');
+    const btnPct = document.getElementById('btn-modo-monto-pct');
+    const wrapPct = document.getElementById('wrap-gasto-pct');
+    const inputPct = document.getElementById('input-gasto-pct');
+    const infoPct = document.getElementById('info-gasto-pct');
+    const inputImporte = document.querySelector('input[name="importe"]');
+    const selCuentaDest = document.querySelector('select[name="id_cuenta_destino"]');
+    const inputFecha = document.querySelector('input[name="fecha"]');
+
+    let modoPctActivo = false;
+
+    const recalcularMontoPct = async () => {
+      if (!modoPctActivo || !inputPct || !infoPct || !inputImporte) return;
+      const pct = parseFloat(inputPct.value);
+      if (isNaN(pct) || pct <= 0) {
+        infoPct.innerHTML = '<span style="color:var(--texto-3)">Ingresá un porcentaje mayor a 0%</span>';
+        return;
+      }
+      const idCuenta = selCuentaDest?.value || App.Store.cuenta;
+      const fecha = inputFecha?.value || new Date().toISOString().substring(0, 10);
+      const allCuentas = this.#cuentas.length ? this.#cuentas : (App.Store?.cuentas || []);
+      const cuentaObj = allCuentas.find(c => c.id_cuenta_principal === idCuenta);
+      const nombreCuenta = cuentaObj?.nombre || 'la cuenta';
+
+      infoPct.innerHTML = '<span style="color:var(--texto-3)">Consultando ingresos de la cuenta...</span>';
+      const totalIngresos = await this.#obtenerIngresosPeriodo(idCuenta, fecha);
+
+      if (totalIngresos > 0) {
+        const montoCalculado = (totalIngresos * (pct / 100));
+        const montoFinal = Math.round(montoCalculado * 100) / 100;
+        inputImporte.value = montoFinal.toFixed(2);
+        infoPct.innerHTML = `<strong>Ingresos ${App.Utils.escapeHtml(nombreCuenta)}:</strong> ${App.Utils.formatearMoneda(totalIngresos)} <br><strong>${pct}% =</strong> <span style="color:var(--rojo);font-weight:700">${App.Utils.formatearMoneda(montoFinal)}</span>`;
+      } else {
+        infoPct.innerHTML = `<span style="color:var(--amarillo-text)">Sin ingresos registrados en ${App.Utils.escapeHtml(nombreCuenta)} para este período.</span>`;
+      }
+    };
+
+    if (btnFijo && btnPct && wrapPct) {
+      btnFijo.addEventListener('click', () => {
+        modoPctActivo = false;
+        btnFijo.style.background = 'var(--primary)';
+        btnFijo.style.color = '#fff';
+        btnPct.style.background = 'transparent';
+        btnPct.style.color = 'var(--texto-2)';
+        wrapPct.classList.add('hidden');
+      });
+
+      btnPct.addEventListener('click', () => {
+        modoPctActivo = true;
+        btnPct.style.background = 'var(--primary)';
+        btnPct.style.color = '#fff';
+        btnFijo.style.background = 'transparent';
+        btnFijo.style.color = 'var(--texto-2)';
+        wrapPct.classList.remove('hidden');
+        if (!inputPct.value) inputPct.value = '25';
+        recalcularMontoPct();
+      });
+
+      inputPct?.addEventListener('input', () => {
+        recalcularMontoPct();
+      });
+
+      document.querySelectorAll('.btn-pct-preset').forEach(presetBtn => {
+        presetBtn.addEventListener('click', () => {
+          if (inputPct) {
+            inputPct.value = presetBtn.dataset.pct;
+            recalcularMontoPct();
+          }
+        });
+      });
+
+      selCuentaDest?.addEventListener('change', () => {
+        if (modoPctActivo) recalcularMontoPct();
+      });
+
+      inputFecha?.addEventListener('change', () => {
+        if (modoPctActivo) recalcularMontoPct();
+      });
+    }
   }
+
 
   // --- SECCIÓN 5: CRUD ---
 
@@ -859,7 +978,27 @@ export class MovimientosModule extends BaseModule {
       fechaFin   : `${y}-${String(mo).padStart(2, '0')}-${ultimo}`
     };
   }
+
+  async #obtenerIngresosPeriodo(idCuenta, fechaStr) {
+    if (!idCuenta || !fechaStr) return 0;
+    const ym = fechaStr.substring(0, 7);
+    const cacheKey = `${idCuenta}_${ym}`;
+    if (this.#cacheIngresos[cacheKey] !== undefined) {
+      return this.#cacheIngresos[cacheKey];
+    }
+    const { fechaInicio, fechaFin } = this.#calcFechas(ym);
+    try {
+      const resp = await App.API.call('api_getDashboardData', [idCuenta, fechaInicio, fechaFin, false]);
+      const totalIngresos = Number(resp?.data?.kpis?.ingresos || 0);
+      this.#cacheIngresos[cacheKey] = totalIngresos;
+      return totalIngresos;
+    } catch (err) {
+      App.warn('MovimientosModule', 'obtenerIngresosPeriodo', err);
+      return 0;
+    }
+  }
 }
+
 
 // --- REGISTRO EN NAMESPACE ---
 
