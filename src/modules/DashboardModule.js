@@ -1,4 +1,5 @@
 'use strict';
+import Chart from 'chart.js/auto';
 /* ============================================================
    module-dashboard.html — v6.0.0
    Dashboard unificado One-Page App.
@@ -20,6 +21,12 @@ export class DashboardModule extends BaseModule {
   #drilldownOpen = false;
   #drilldownFilter = 'ALL'; // 'ALL' | 'INGRESO' | 'EGRESO'
   #drilldownSearch = '';
+  #donutChartInstance = null;
+  #evolucionChartInstance = null;
+  #evolucionMode = 'ingresos_vs_gastos'; // 'ingresos_vs_gastos' | 'balance'
+  #donutMetric = 'gastos'; // 'gastos' | 'ingresos'
+  #evolucionMensual = [];
+  #kpisData = {};
 
   get movData() { return this.#movData; }
 
@@ -30,6 +37,12 @@ export class DashboardModule extends BaseModule {
     this._bindListeners();
     this._subscribeEvents();
     App.log('DashboardModule', 'init', 'Dashboard unificado iniciado');
+  }
+
+  destruir() {
+    this.#donutChartInstance?.destroy();
+    this.#evolucionChartInstance?.destroy();
+    super.destruir();
   }
 
   async cargar() {
@@ -262,6 +275,8 @@ export class DashboardModule extends BaseModule {
     setTimeout(() => { if (window.renderChart) window.renderChart(kpis); }, 100);
 
     this.#movData = movimientos || [];
+    this.#evolucionMensual = data?.evolucionMensual || [];
+    this.#kpisData = kpis || {};
     if (this.#drilldownOpen) {
       this.#renderDrilldown();
     }
@@ -410,8 +425,19 @@ export class DashboardModule extends BaseModule {
           </div>
         </div>
 
-        <div class="dh-drilldown-body" id="drilldown-body-container">
-          <!-- Movimientos dinámicos renderizados aquí -->
+        <!-- Layout Side-by-Side: Grilla a la izquierda + Analítica a la derecha -->
+        <div class="analytics-side-layout dh-side-layout">
+          <div class="analytics-main-col dh-side-main">
+            <div class="dh-drilldown-body dh-drilldown-list" id="drilldown-body-container">
+              <!-- Movimientos dinámicos renderizados aquí -->
+            </div>
+          </div>
+          <div class="analytics-side-col dh-side-analytics">
+            <!-- Card 1: Top Categorías Donut -->
+            <div class="table-card fintech-card" id="dash-drill-donut-wrap"></div>
+            <!-- Card 2: Evolución Mensual Time-Series -->
+            <div class="table-card fintech-card" id="dash-drill-evolucion-wrap"></div>
+          </div>
         </div>
       </div>
 
@@ -1191,6 +1217,287 @@ export class DashboardModule extends BaseModule {
         const row = this.#movData.find(m => (m.id_movimiento || m.id) == id);
         if (row) this.#abrirModalDetalleMov(row);
       });
+    });
+
+    this.#renderDrilldownAnalytics(filtered);
+  }
+
+  #renderDrilldownAnalytics(filtered) {
+    this.#renderDrilldownDonut(filtered);
+    this.#renderDrilldownEvolucion();
+  }
+
+  #renderDrilldownDonut(filtered) {
+    const wrap = document.getElementById('dash-drill-donut-wrap');
+    if (!wrap) return;
+
+    if (this.#drilldownFilter === 'INGRESO') this.#donutMetric = 'ingresos';
+    else if (this.#drilldownFilter === 'EGRESO') this.#donutMetric = 'gastos';
+
+    const isIngresos = this.#donutMetric === 'ingresos';
+    const targetType = isIngresos ? 'INGRESO' : 'EGRESO';
+    
+    // Agrupar a partir de los movimientos disponibles
+    const pool = (this.#movData || []).filter(m => m.tipo_mov === targetType);
+    const totalMetric = pool.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+
+    if (pool.length === 0 || totalMetric <= 0) {
+      wrap.innerHTML = `
+        <div class="fintech-card-header">
+          <h3 class="fintech-card-title">Top Categorías</h3>
+          <div class="fintech-pill-switch" id="dash-drill-donut-switch">
+            <button class="fintech-pill-btn ${!isIngresos ? 'active' : ''}" data-metric="gastos">% Gastos</button>
+            <button class="fintech-pill-btn ${isIngresos ? 'active' : ''}" data-metric="ingresos">% Ingresos</button>
+          </div>
+        </div>
+        <div style="padding:2rem 1rem;text-align:center;color:var(--texto-3);font-size:0.85rem;">
+          No hay ${isIngresos ? 'ingresos' : 'gastos'} registrados en este período.
+        </div>`;
+      this.#bindDonutSwitch(filtered);
+      return;
+    }
+
+    const catMap = {};
+    pool.forEach(m => {
+      const cat = m.categoria_nombre || (isIngresos ? 'Ingreso' : 'General');
+      const imp = Math.abs(Number(m.importe || 0));
+      if (!catMap[cat]) catMap[cat] = { total: 0, count: 0 };
+      catMap[cat].total += imp;
+      catMap[cat].count += 1;
+    });
+
+    const sortedCats = Object.entries(catMap)
+      .map(([name, data]) => ({
+        name,
+        total: data.total,
+        count: data.count,
+        pct: (data.total / totalMetric) * 100
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const palette = [
+      '#1D195D', '#2563EB', '#0EA5E9', '#10B981', '#8B5CF6',
+      '#F59E0B', '#F43F5E', '#4F46E5', '#64748B'
+    ];
+
+    wrap.innerHTML = `
+      <div class="fintech-card-header">
+        <div>
+          <h3 class="fintech-card-title">Top Categorías</h3>
+          <span style="font-size:0.75rem;color:var(--texto-3);">${isIngresos ? 'Distribución Ingresos' : 'Distribución Gastos'}</span>
+        </div>
+        <div class="fintech-pill-switch" id="dash-drill-donut-switch">
+          <button class="fintech-pill-btn ${!isIngresos ? 'active' : ''}" data-metric="gastos">% Gastos</button>
+          <button class="fintech-pill-btn ${isIngresos ? 'active' : ''}" data-metric="ingresos">% Ingresos</button>
+        </div>
+      </div>
+
+      <div class="fintech-donut-wrapper">
+        <canvas id="dash-drill-donut-canvas"></canvas>
+        <div class="fintech-donut-center">
+          <span class="fintech-donut-center-label">${isIngresos ? 'Total Ingresos' : 'Total Gastos'}</span>
+          <span class="fintech-donut-center-val" style="color:var(--primary);">${App.Utils.formatearMoneda(totalMetric)}</span>
+        </div>
+      </div>
+
+      <div class="fintech-legend-list">
+        ${sortedCats.map((cat, idx) => {
+          const color = palette[idx % palette.length];
+          return `
+            <div class="fintech-legend-item">
+              <div class="fintech-legend-left" title="${App.Utils.escapeHtml(cat.name)}">
+                <span class="fintech-legend-dot" style="background:${color};"></span>
+                <span style="color:var(--texto);">${App.Utils.escapeHtml(cat.name)}</span>
+              </div>
+              <div class="fintech-legend-right">
+                <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${cat.pct.toFixed(1)}%</span>
+                <span class="${isIngresos ? 'positivo' : 'negativo'}" style="font-size:0.82rem;">${App.Utils.formatearMoneda(cat.total)}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    this.#bindDonutSwitch(filtered);
+
+    const canvas = document.getElementById('dash-drill-donut-canvas');
+    if (canvas) {
+      this.#donutChartInstance?.destroy();
+      const ctx = canvas.getContext('2d');
+      this.#donutChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: sortedCats.map(c => c.name),
+          datasets: [{
+            data: sortedCats.map(c => Math.round(c.total)),
+            backgroundColor: sortedCats.map((_, i) => palette[i % palette.length]),
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            hoverOffset: 5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '74%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const val = context.parsed || 0;
+                  const pct = ((val / totalMetric) * 100).toFixed(1);
+                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  #bindDonutSwitch(filtered) {
+    const wrap = document.getElementById('dash-drill-donut-wrap');
+    if (!wrap) return;
+    wrap.querySelectorAll('#dash-drill-donut-switch .fintech-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.#donutMetric = btn.dataset.metric;
+        this.#renderDrilldownDonut(filtered);
+      });
+    });
+  }
+
+  #renderDrilldownEvolucion() {
+    const wrap = document.getElementById('dash-drill-evolucion-wrap');
+    if (!wrap) return;
+
+    const hist = this.#evolucionMensual || [];
+    if (!hist.length) {
+      wrap.innerHTML = `
+        <div class="fintech-card-header">
+          <h3 class="fintech-card-title">Evolución Mensual</h3>
+        </div>
+        <div style="padding:1.5rem 1rem;text-align:center;color:var(--texto-3);font-size:0.82rem;">
+          Cargando serie histórica...
+        </div>`;
+      return;
+    }
+
+    const isIngVsGas = this.#evolucionMode === 'ingresos_vs_gastos';
+
+    wrap.innerHTML = `
+      <div class="fintech-card-header">
+        <div>
+          <h3 class="fintech-card-title">Evolución Mensual</h3>
+          <span style="font-size:0.75rem;color:var(--texto-3);">Variación últimos 6 meses</span>
+        </div>
+        <div class="fintech-pill-switch" id="dash-drill-evol-switch">
+          <button class="fintech-pill-btn ${isIngVsGas ? 'active' : ''}" data-mode="ingresos_vs_gastos" title="Comparar Ingresos vs Gastos">Ingresos vs Gastos</button>
+          <button class="fintech-pill-btn ${!isIngVsGas ? 'active' : ''}" data-mode="balance" title="Balance mensual neto">Balance</button>
+        </div>
+      </div>
+      <div style="position:relative;width:100%;height:175px;display:flex;align-items:center;justify-content:center;margin:4px 0;">
+        <canvas id="dash-drill-evolucion-canvas"></canvas>
+      </div>
+    `;
+
+    wrap.querySelectorAll('#dash-drill-evol-switch .fintech-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.#evolucionMode = btn.dataset.mode;
+        this.#renderDrilldownEvolucion();
+      });
+    });
+
+    const canvas = document.getElementById('dash-drill-evolucion-canvas');
+    if (!canvas) return;
+
+    this.#evolucionChartInstance?.destroy();
+    const ctx = canvas.getContext('2d');
+
+    const labels = hist.map(e => App.Utils.formatearMes(e.mes));
+
+    let datasets = [];
+    if (isIngVsGas) {
+      datasets = [
+        {
+          label: 'Ingresos',
+          data: hist.map(e => Math.round(e.ingresos || 0)),
+          backgroundColor: '#10B981',
+          borderRadius: 5,
+          barPercentage: 0.65,
+          categoryPercentage: 0.8
+        },
+        {
+          label: 'Gastos',
+          data: hist.map(e => Math.round(e.egresos || 0)),
+          backgroundColor: '#1D195D',
+          borderRadius: 5,
+          barPercentage: 0.65,
+          categoryPercentage: 0.8
+        }
+      ];
+    } else {
+      datasets = [
+        {
+          label: 'Balance Neto',
+          data: hist.map(e => Math.round(e.balance || 0)),
+          backgroundColor: hist.map(e => (e.balance || 0) >= 0 ? '#10B981' : '#F43F5E'),
+          borderRadius: 5,
+          barPercentage: 0.7,
+          categoryPercentage: 0.85
+        }
+      ];
+    }
+
+    this.#evolucionChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: isIngVsGas,
+            position: 'top',
+            align: 'end',
+            labels: {
+              boxWidth: 8,
+              boxHeight: 8,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              font: { size: 10, family: 'Inter, sans-serif' },
+              color: 'var(--texto-2)'
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const val = context.parsed.y || 0;
+                return ` ${context.dataset.label || ''}: $ ${val.toLocaleString('es-AR')}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
+          },
+          y: {
+            grid: { color: 'rgba(0,0,0,0.04)' },
+            ticks: {
+              font: { size: 9, family: 'Inter, sans-serif' },
+              color: 'var(--texto-3)',
+              callback: (v) => '$ ' + (Math.abs(v) >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : (v / 1000).toFixed(0) + 'k')
+            }
+          }
+        }
+      }
     });
   }
 

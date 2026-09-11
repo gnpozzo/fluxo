@@ -34,6 +34,8 @@ export class TarjetasModule extends BaseModule {
   #lastStatementPayload = null;
   #savedViewPosition = null;
   #chartInstance = null;
+  #evolucionChartInstance = null;
+  #proyeccionesData = [];
   #currentView = 'mes';
 
   preserveViewOnUpdate(id) {
@@ -178,6 +180,8 @@ export class TarjetasModule extends BaseModule {
   }
 
   _renderProyecciones(data) {
+     this.#proyeccionesData = data?.proyeccion || [];
+     this.#renderEvolucionProyeccion();
      const wrap = document.getElementById('tc-proy-wrap');
      if (!wrap) return;
      if (!data.proyeccion || data.proyeccion.length === 0) {
@@ -283,7 +287,7 @@ export class TarjetasModule extends BaseModule {
       <!-- Layout 2 Columnas Side-by-Side: Grilla a la izquierda + Analítica Lateral a la derecha -->
       <div class="analytics-side-layout">
         <div class="analytics-main-col">
-          <div class="table-card" id="tc-tabla-wrap"></div>
+          <div class="table-card table-compact" id="tc-tabla-wrap"></div>
           <div id="tc-taxes-wrap" style="margin-top:var(--space-3)"></div>
           <div class="table-card hidden" id="tc-proy-wrap">
              <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando proyecciones...</div>
@@ -291,6 +295,7 @@ export class TarjetasModule extends BaseModule {
         </div>
         <div class="analytics-side-col">
           <div class="table-card fintech-card" id="tc-graficos-wrap"></div>
+          <div class="table-card fintech-card" id="tc-evolucion-wrap"></div>
         </div>
       </div>
     `;
@@ -1162,6 +1167,7 @@ export class TarjetasModule extends BaseModule {
         <div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.85rem;">
           No hay consumos en este período.
         </div>`;
+      this.#renderEvolucionProyeccion();
       return;
     }
 
@@ -1188,9 +1194,10 @@ export class TarjetasModule extends BaseModule {
       }))
       .sort((a, b) => b.total - a.total);
 
+    // Paleta de identidad Fluxo: encabezada por el azul oscuro característico
     const palette = [
-      '#06b6d4', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899',
-      '#f59e0b', '#f43f5e', '#059669', '#6366f1', '#e11d48'
+      '#1D195D', '#2563EB', '#0EA5E9', '#10B981', '#8B5CF6',
+      '#F59E0B', '#F43F5E', '#4F46E5', '#64748B'
     ];
 
     const labels = sortedCats.map(c => c.name);
@@ -1208,8 +1215,12 @@ export class TarjetasModule extends BaseModule {
         <span class="fintech-pill-btn active">${App.Utils.escapeHtml(activeCardName)}</span>
       </div>
 
-      <div style="position:relative;width:100%;height:185px;display:flex;align-items:center;justify-content:center;margin:6px 0;">
+      <div class="fintech-donut-wrapper">
         <canvas id="tc-chart-canvas"></canvas>
+        <div class="fintech-donut-center">
+          <span class="fintech-donut-center-label">${App.Utils.escapeHtml(activeCardName)}</span>
+          <span class="fintech-donut-center-val" style="color:var(--primary);">${App.Utils.formatearMoneda(totalConsumos)}</span>
+        </div>
       </div>
 
       <div class="fintech-legend-list">
@@ -1242,7 +1253,7 @@ export class TarjetasModule extends BaseModule {
           datasets: [{
             data: dataValues,
             backgroundColor: bgColors,
-            borderColor: 'var(--superficie)',
+            borderColor: '#ffffff',
             borderWidth: 2,
             hoverOffset: 5
           }]
@@ -1250,7 +1261,7 @@ export class TarjetasModule extends BaseModule {
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '72%',
+          cutout: '74%',
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -1266,6 +1277,91 @@ export class TarjetasModule extends BaseModule {
         }
       });
     }
+
+    this.#renderEvolucionProyeccion();
+  }
+
+  #renderEvolucionProyeccion() {
+    const wrap = document.getElementById('tc-evolucion-wrap');
+    if (!wrap) return;
+
+    const proyList = this.#proyeccionesData || [];
+    if (!proyList.length) {
+      wrap.innerHTML = `
+        <div class="fintech-card-header">
+          <h3 class="fintech-card-title">Proyección de Pagos</h3>
+        </div>
+        <div style="padding:1.5rem 1rem;text-align:center;color:var(--texto-3);font-size:0.82rem;">
+          Cargando datos de proyección...
+        </div>`;
+      return;
+    }
+
+    const items = proyList.slice(0, 6);
+    const labels = items.map(p => App.Utils.formatearMes(p.mes));
+    const values = items.map(p => Math.round(p.total || 0));
+
+    wrap.innerHTML = `
+      <div class="fintech-card-header">
+        <div>
+          <h3 class="fintech-card-title">Proyección de Pagos</h3>
+          <span style="font-size:0.75rem;color:var(--texto-3);">Vencimientos a 6 meses</span>
+        </div>
+        <span class="fintech-pill-btn active">Próximos Meses</span>
+      </div>
+      <div style="position:relative;width:100%;height:165px;display:flex;align-items:center;justify-content:center;margin:4px 0;">
+        <canvas id="tc-evolucion-canvas"></canvas>
+      </div>
+    `;
+
+    const canvas = document.getElementById('tc-evolucion-canvas');
+    if (!canvas) return;
+
+    this.#evolucionChartInstance?.destroy();
+    const ctx = canvas.getContext('2d');
+    this.#evolucionChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Total Resumen',
+          data: values,
+          backgroundColor: '#1D195D',
+          borderRadius: 5,
+          barPercentage: 0.65,
+          categoryPercentage: 0.8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const val = context.parsed.y || 0;
+                return ` Resumen: $ ${val.toLocaleString('es-AR')}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
+          },
+          y: {
+            grid: { color: 'rgba(0,0,0,0.04)' },
+            ticks: {
+              font: { size: 9, family: 'Inter, sans-serif' },
+              color: 'var(--texto-3)',
+              callback: (v) => '$ ' + (v >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : (v / 1000).toFixed(0) + 'k')
+            }
+          }
+        }
+      }
+    });
   }
 
   async #confirmarPagarResumen() {

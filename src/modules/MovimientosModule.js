@@ -1027,9 +1027,8 @@ export class MovimientosModule extends BaseModule {
       .sort((a, b) => b.total - a.total);
 
     const palette = [
-      '#06b6d4', '#10b981', '#3b82f6', '#8b5cf6',
-      '#ec4899', '#f59e0b', '#6366f1', '#14b8a6',
-      '#f97316', '#a855f7', '#64748b'
+      '#1D195D', '#2563EB', '#0EA5E9', '#10B981', '#8B5CF6',
+      '#F59E0B', '#F43F5E', '#4F46E5', '#64748B'
     ];
 
     const isPctGastos = this.#donutMetric === 'gastos';
@@ -1043,8 +1042,12 @@ export class MovimientosModule extends BaseModule {
         </div>
       </div>
 
-      <div style="position:relative;width:100%;height:180px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;">
+      <div class="fintech-donut-wrapper">
         <canvas id="mov-donut-canvas"></canvas>
+        <div class="fintech-donut-center">
+          <span class="fintech-donut-center-label">Total Gastos</span>
+          <span class="fintech-donut-center-val" style="color:var(--primary);">${App.Utils.formatearMoneda(totalGastos)}</span>
+        </div>
       </div>
 
       <div class="fintech-legend-list">
@@ -1085,7 +1088,7 @@ export class MovimientosModule extends BaseModule {
           datasets: [{
             data: sortedCats.map(c => Math.round(c.total)),
             backgroundColor: sortedCats.map((_, i) => palette[i % palette.length]),
-            borderColor: 'var(--superficie)',
+            borderColor: '#ffffff',
             borderWidth: 2,
             hoverOffset: 6
           }]
@@ -1093,7 +1096,7 @@ export class MovimientosModule extends BaseModule {
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '72%',
+          cutout: '74%',
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -1172,9 +1175,9 @@ export class MovimientosModule extends BaseModule {
         {
           label: 'Gastos',
           data: evolucionMensual.map(e => Math.round(e.egresos || 0)),
-          backgroundColor: '#f43f5e',
-          borderRadius: 4,
-          barPercentage: 0.7,
+          backgroundColor: '#1D195D',
+          borderRadius: 5,
+          barPercentage: 0.65,
           categoryPercentage: 0.8
         }
       ];
