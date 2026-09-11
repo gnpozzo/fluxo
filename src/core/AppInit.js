@@ -236,6 +236,19 @@ class AppInit {
          });
       }
 
+      // Bind mobile sidebar toggle
+      const btnSidebarToggle = document.getElementById('sidebar-toggle');
+      const sidebarEl = document.getElementById('app-sidebar');
+      const backdropEl = document.getElementById('sidebar-backdrop');
+      btnSidebarToggle?.addEventListener('click', () => {
+        sidebarEl?.classList.toggle('sidebar-open');
+        backdropEl?.classList.toggle('open');
+      });
+      backdropEl?.addEventListener('click', () => {
+        sidebarEl?.classList.remove('sidebar-open');
+        backdropEl?.classList.remove('open');
+      });
+
     } catch (err) {
       App.error('AppInit', 'boot', 'Error fatal en boot', err);
       App.Toast.error('Error al iniciar la aplicación: ' + err.message);

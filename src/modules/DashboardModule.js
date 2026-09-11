@@ -23,8 +23,14 @@ export class DashboardModule extends BaseModule {
   #drilldownSearch = '';
   #donutChartInstance = null;
   #evolucionChartInstance = null;
+  #moneyFlowChartInstance = null;
+  #categoriesDonutInstance = null;
   #evolucionMode = 'ingresos_vs_gastos'; // 'ingresos_vs_gastos' | 'balance'
   #donutMetric = 'gastos'; // 'gastos' | 'ingresos'
+  #recentsFilter = 'ALL'; // 'ALL' | 'INGRESO' | 'EGRESO'
+  #recentsSearch = '';
+  #ahorroTotal = 0;
+  #inversionesTotal = 0;
   #evolucionMensual = [];
   #kpisData = {};
 
@@ -40,6 +46,8 @@ export class DashboardModule extends BaseModule {
   }
 
   destruir() {
+    this.#moneyFlowChartInstance?.destroy();
+    this.#categoriesDonutInstance?.destroy();
     this.#donutChartInstance?.destroy();
     this.#evolucionChartInstance?.destroy();
     super.destruir();
@@ -272,11 +280,68 @@ export class DashboardModule extends BaseModule {
       breakdownEgresosEl.textContent = App.Utils.formatearMoneda(kpis.egresos);
     }
 
-    setTimeout(() => { if (window.renderChart) window.renderChart(kpis); }, 100);
-
     this.#movData = movimientos || [];
     this.#evolucionMensual = data?.evolucionMensual || [];
     this.#kpisData = kpis || {};
+
+    // Calculate trends vs previous month from evolucionMensual
+    const hist = this.#evolucionMensual;
+    const currentMes = App.Store.mes;
+    const currIdx = hist.findIndex(h => h.mes === currentMes);
+    let prev = null;
+    if (currIdx > 0) {
+      prev = hist[currIdx - 1];
+    } else if (hist.length >= 2) {
+      prev = hist[hist.length - 2];
+    }
+
+    const balTrendEl = document.getElementById('dash-balance-trend');
+    if (balTrendEl) {
+      if (prev && typeof prev.balance === 'number' && prev.balance !== 0) {
+        const diff = (kpis.resultado || 0) - prev.balance;
+        const pct = Math.abs(prev.balance) > 0 ? Math.min(Math.abs((diff / prev.balance) * 100), 999).toFixed(1) : 0;
+        const isUp = diff >= 0;
+        balTrendEl.className = `finset-trend-pill ${isUp ? 'trend-up' : 'trend-down'}`;
+        balTrendEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="${isUp ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"/></svg><span>${isUp ? '+' : '-'}${pct}%</span>`;
+      } else {
+        balTrendEl.className = 'finset-trend-pill trend-up';
+        balTrendEl.innerHTML = '<span>Neto</span>';
+      }
+    }
+
+    const ingTrendEl = document.getElementById('dash-ingresos-trend');
+    if (ingTrendEl) {
+      if (prev && prev.ingresos > 0) {
+        const diff = (kpis.ingresos || 0) - prev.ingresos;
+        const pct = Math.min(Math.abs((diff / prev.ingresos) * 100), 999).toFixed(1);
+        const isUp = diff >= 0;
+        ingTrendEl.className = `finset-trend-pill ${isUp ? 'trend-up' : 'trend-down'}`;
+        ingTrendEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="${isUp ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"/></svg><span>${isUp ? '+' : '-'}${pct}%</span>`;
+      } else {
+        ingTrendEl.className = 'finset-trend-pill trend-up';
+        ingTrendEl.innerHTML = '<span>Ingresos</span>';
+      }
+    }
+
+    const gasTrendEl = document.getElementById('dash-gastos-trend');
+    if (gasTrendEl) {
+      if (prev && prev.egresos > 0) {
+        const diff = (kpis.egresos || 0) - prev.egresos;
+        const pct = Math.min(Math.abs((diff / prev.egresos) * 100), 999).toFixed(1);
+        const spentMore = diff > 0;
+        gasTrendEl.className = `finset-trend-pill ${spentMore ? 'trend-down' : 'trend-up'}`;
+        gasTrendEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="${spentMore ? '6 9 12 15 18 9' : '18 15 12 9 6 15'}"/></svg><span>${spentMore ? '+' : '-'}${pct}%</span>`;
+      } else {
+        gasTrendEl.className = 'finset-trend-pill trend-neutral';
+        gasTrendEl.innerHTML = '<span>Gastos</span>';
+      }
+    }
+
+    // Render FinSet Widgets
+    this.#renderMoneyFlowChart();
+    this.#renderTopCategoriesWidget();
+    this.#renderRecentTransactions();
+
     if (this.#drilldownOpen) {
       this.#renderDrilldown();
     }
@@ -289,252 +354,343 @@ export class DashboardModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
-      <!-- ═══ TOP ROW: HERO PATRIMONIAL & ACCIONES RÁPIDAS ═══ -->
-      <div class="dash-hero-grid">
-        
-        <!-- Hero Saldo Card -->
-        <div class="fintech-hero-card" id="dash-saldo-card">
-          <div class="fhc-header">
-            <div class="fhc-title-wrap">
-              <span class="fhc-badge">Patrimonio Disponible</span>
-              <span class="fhc-subtitle">Balance y flujo mensual</span>
-            </div>
-            <button class="fhc-visibility-btn" id="btn-toggle-privacy" title="Ocultar/Mostrar saldo" aria-label="Alternar privacidad">
-              <svg id="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg id="icon-eye-closed" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
-          </div>
-
-          <div class="fhc-body">
-            <div class="fhc-main-amount" id="dash-saldo-val">$ 0,00</div>
-            <div class="fhc-conversion-text" id="dash-conversion-val">≈ US$ 0,00</div>
-          </div>
-
-          <div class="fhc-breakdown-row fhc-breakdown-clickable" id="dash-breakdown-toggle" role="button" tabindex="0" title="Ver movimientos (ingresos y gastos)">
-            <div class="fhc-stat-box fhc-stat-ing">
-              <div class="fhc-stat-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
-              </div>
-              <div class="fhc-stat-info">
-                <span class="fhc-stat-label">Ingresos</span>
-                <span class="fhc-stat-val positivo" id="dash-breakdown-ingresos">$ 0,00</span>
-              </div>
-            </div>
-
-            <div class="fhc-stat-divider"></div>
-
-            <div class="fhc-stat-box fhc-stat-egr">
-              <div class="fhc-stat-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
-              </div>
-              <div class="fhc-stat-info">
-                <span class="fhc-stat-label">Gastos</span>
-                <span class="fhc-stat-val negativo" id="dash-breakdown-egresos">$ 0,00</span>
-              </div>
-            </div>
-
-            <!-- Single downward arrow button/indicator -->
-            <div class="fhc-breakdown-arrow-btn">
-              <span class="fhc-arrow-label">Movimientos</span>
-              <div class="fhc-arrow-circle" id="dash-hero-arrow-icon">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-              </div>
-            </div>
-          </div>
+      <!-- MULTI-ACCOUNT PORTFOLIO VIEW -->
+      <div id="dash-portfolio-view" style="display: none;">
+        <div class="portfolio-header" style="margin-bottom:20px;">
+          <h2 class="portfolio-title" style="font-size:1.4rem;font-weight:800;color:var(--texto);">Mis Cuentas</h2>
+          <p class="portfolio-sub" style="font-size:0.85rem;color:var(--texto-3);">Selecciona una cuenta para ver su desglose patrimonial</p>
         </div>
-
-        <!-- Quick Actions Panel -->
-        <div class="fintech-actions-card">
-          <div class="fac-header">
-            <span class="fac-title">Acciones Directas</span>
-          </div>
-          <div class="fac-grid">
-            <button class="fac-btn" id="qa-btn-gasto" onclick="App.Modules.movimientos?.abrirAlta('EGRESO')">
-              <div class="fac-btn-icon icon-red">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
-              </div>
-              <span class="fac-btn-label">Gasto</span>
-            </button>
-
-            <button class="fac-btn" id="qa-btn-ingreso" onclick="App.Modules.movimientos?.abrirAlta('INGRESO')">
-              <div class="fac-btn-icon icon-green">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
-              </div>
-              <span class="fac-btn-label">Ingreso</span>
-            </button>
-
-            <button class="fac-btn" id="qa-btn-tc" onclick="App.Modules.tarjetas?.abrirAlta()">
-              <div class="fac-btn-icon icon-blue">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-              </div>
-              <span class="fac-btn-label">Tarjeta</span>
-            </button>
-
-            <button class="fac-btn" id="qa-btn-cc" onclick="App.Modules.cc?.abrirAlta()">
-              <div class="fac-btn-icon icon-purple">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              </div>
-              <span class="fac-btn-label">Compartido</span>
-            </button>
-
-            <button class="fac-btn" id="qa-btn-ahorro" onclick="App.Modules.ahorro?.abrirAlta()">
-              <div class="fac-btn-icon icon-yellow">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
-              </div>
-              <span class="fac-btn-label">Ahorrar</span>
-            </button>
-
-            <button class="fac-btn" id="qa-btn-inversiones" onclick="document.querySelector('[data-vista=vista-inversiones]')?.click()">
-              <div class="fac-btn-icon icon-cyan">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              </div>
-              <span class="fac-btn-label">Invertir</span>
-            </button>
-          </div>
-        </div>
-
+        <div class="portfolio-grid" id="dash-portfolio-grid"></div>
       </div>
 
-      <!-- ═══ ACORDEÓN / CONSOLA DE DRILL-DOWN DE MOVIMIENTOS ═══ -->
-      <div class="dash-hero-drilldown" id="dash-hero-drilldown" style="display: none;">
-        <div class="dh-drilldown-header">
-          <div class="dh-drilldown-left">
-            <div class="dh-drilldown-badge" id="drilldown-badge">
-              <span class="dh-badge-dot"></span>
-              <span class="dh-badge-title" id="drilldown-title">Movimientos</span>
-            </div>
-            <div class="dh-drilldown-summary" id="drilldown-summary">—</div>
-          </div>
+      <!-- SINGLE ACCOUNT DETAIL VIEW (FinSet Dashboard Grid) -->
+      <div id="dash-detail-view">
 
-          <div class="dh-drilldown-center">
-            <div class="dh-filter-tabs">
-              <button class="dh-tab-btn active" data-filter="ALL" id="drilldown-tab-all">Todos</button>
-              <button class="dh-tab-btn" data-filter="INGRESO" id="drilldown-tab-ing">Ingresos</button>
-              <button class="dh-tab-btn" data-filter="EGRESO" id="drilldown-tab-egr">Gastos</button>
-            </div>
-          </div>
+        <!-- Navigation back to portfolio when in detail -->
+        <div id="dash-detail-nav" class="dash-detail-nav" style="display:none;margin-bottom:18px;"></div>
 
-          <div class="dh-drilldown-right">
-            <div class="dh-search-box">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="drilldown-search-input" placeholder="Buscar concepto o categoría..." autocomplete="off">
-            </div>
-            <button class="dh-close-btn" id="drilldown-close-btn" title="Cerrar panel de movimientos" aria-label="Cerrar">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Layout Side-by-Side: Grilla a la izquierda + Analítica a la derecha -->
-        <div class="analytics-side-layout dh-side-layout">
-          <div class="analytics-main-col dh-side-main">
-            <div class="dh-drilldown-body dh-drilldown-list" id="drilldown-body-container">
-              <!-- Movimientos dinámicos renderizados aquí -->
-            </div>
-          </div>
-          <div class="analytics-side-col dh-side-analytics">
-            <!-- Card 1: Top Categorías Donut -->
-            <div class="table-card fintech-card" id="dash-drill-donut-wrap"></div>
-            <!-- Card 2: Evolución Mensual Time-Series -->
-            <div class="table-card fintech-card" id="dash-drill-evolucion-wrap"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ BENTO GRID: 4 MÓDULOS DE RESUMEN PATRIMONIAL ═══ -->
-      <div class="dash-bento-section">
-        <div class="dash-bento-grid" id="dash-modules-row">
+        <div class="finset-dashboard">
           
-          <!-- 1. Tarjetas de Crédito -->
-          <div class="bento-card bento-card-tarjetas" id="dash-card-tarjetas">
-            <div class="bc-top">
-              <div class="bc-icon icon-blue">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <!-- ═══ ROW 1: 4 TOP KPI CARDS ═══ -->
+          <div class="finset-kpi-row" id="dash-kpi-grid">
+            
+            <!-- Card 1: Balance Total -->
+            <div class="finset-kpi-card" id="dash-saldo-card">
+              <div class="finset-kpi-header">
+                <div class="finset-kpi-title-wrap">
+                  <div class="finset-kpi-icon icon-navy">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>
+                  </div>
+                  <span class="finset-kpi-title">Balance Total</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <button class="fhc-visibility-btn" id="btn-toggle-privacy" title="Ocultar/Mostrar saldo" aria-label="Alternar privacidad">
+                    <svg id="icon-eye-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg id="icon-eye-closed" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  </button>
+                  <button class="finset-arrow-btn" id="btn-expand-balance" title="Ver movimientos">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                  </button>
+                </div>
               </div>
-              <span class="bc-tag">Tarjetas</span>
-              <button class="bc-arrow-btn" id="dash-tc-ver-consumos" title="Ver detalle de tarjetas">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
+              <div class="finset-kpi-value" id="dash-saldo-val">$ 0,00</div>
+              <div class="finset-kpi-footer">
+                <span class="finset-kpi-subtext" id="dash-conversion-val">≈ US$ 0,00</span>
+                <span class="finset-trend-pill trend-up" id="dash-balance-trend">
+                  <span>Neto</span>
+                </span>
+              </div>
             </div>
-            <div class="bc-preview-wrap">
-              <div class="dash-tc-carousel">
-                <button class="dash-tc-arrow" id="dash-tc-prev" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
-                <div class="dash-tc-visual" id="dash-tc-visual">
-                  <div class="tc-card-pill" style="background: linear-gradient(135deg, #1D195D 0%, #0c0a2a 100%);">
-                    <div class="tc-card-shimmer"></div>
-                    <div class="tc-card-row tc-card-top">
-                      <span class="tc-card-issuer-name">SANTANDER</span>
-                      <div style="width:28px; height:18px;"></div>
+
+            <!-- Card 2: Ingresos Totales -->
+            <div class="finset-kpi-card" id="dash-kpi-card-ingresos">
+              <div class="finset-kpi-header">
+                <div class="finset-kpi-title-wrap">
+                  <div class="finset-kpi-icon icon-green">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+                  </div>
+                  <span class="finset-kpi-title">Ingresos Totales</span>
+                </div>
+                <button class="finset-arrow-btn" id="btn-expand-ingresos" title="Filtrar ingresos">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                </button>
+              </div>
+              <div class="finset-kpi-value positivo" id="dash-breakdown-ingresos">$ 0,00</div>
+              <div class="finset-kpi-footer">
+                <span class="finset-kpi-subtext">Entradas del mes</span>
+                <span class="finset-trend-pill trend-up" id="dash-ingresos-trend">
+                  <span>Ingresos</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Card 3: Gastos Totales -->
+            <div class="finset-kpi-card" id="dash-kpi-card-gastos">
+              <div class="finset-kpi-header">
+                <div class="finset-kpi-title-wrap">
+                  <div class="finset-kpi-icon icon-red">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+                  </div>
+                  <span class="finset-kpi-title">Gastos Totales</span>
+                </div>
+                <button class="finset-arrow-btn" id="btn-expand-gastos" title="Filtrar gastos">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                </button>
+              </div>
+              <div class="finset-kpi-value negativo" id="dash-breakdown-egresos">$ 0,00</div>
+              <div class="finset-kpi-footer">
+                <span class="finset-kpi-subtext">Consumos y débitos</span>
+                <span class="finset-trend-pill trend-down" id="dash-gastos-trend">
+                  <span>Gastos</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Card 4: Ahorro & Metas -->
+            <div class="finset-kpi-card" id="dash-kpi-card-ahorro">
+              <div class="finset-kpi-header">
+                <div class="finset-kpi-title-wrap">
+                  <div class="finset-kpi-icon icon-purple">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                  </div>
+                  <span class="finset-kpi-title">Ahorro & Metas</span>
+                </div>
+                <button class="finset-arrow-btn" id="btn-expand-ahorro" title="Ver alcancías de ahorro">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                </button>
+              </div>
+              <div class="finset-kpi-value" id="dash-ahorro-kpi-val">$ 0,00</div>
+              <div class="finset-kpi-footer">
+                <span class="finset-kpi-subtext">Alcancías y reservas</span>
+                <span class="finset-trend-pill trend-neutral" id="dash-ahorro-trend">
+                  <span>Metas</span>
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Money Flow + Top Categories) ═══ -->
+          <div class="finset-grid-2col">
+            
+            <!-- Left (60%): Money Flow / Evolución Mensual -->
+            <div class="finset-card" id="dash-widget-moneyflow">
+              <div class="finset-card-header">
+                <div class="finset-card-title-wrap">
+                  <h3 class="finset-card-title">Flujo de Fondos</h3>
+                  <span class="finset-card-subtitle">Evolución histórica últimos 6 meses</span>
+                </div>
+                <div class="fintech-pill-switch" id="dash-moneyflow-switch">
+                  <button class="fintech-pill-btn active" data-mode="ingresos_vs_gastos">Ingresos vs Gastos</button>
+                  <button class="fintech-pill-btn" data-mode="balance">Balance</button>
+                </div>
+              </div>
+              <div style="position:relative; width:100%; height:230px; margin: 4px 0;">
+                <canvas id="dash-moneyflow-canvas"></canvas>
+              </div>
+              <div class="finset-chart-summary" id="dash-moneyflow-summary"></div>
+            </div>
+
+            <!-- Right (40%): Top Categorías -->
+            <div class="finset-card" id="dash-widget-categories">
+              <div class="finset-card-header">
+                <div class="finset-card-title-wrap">
+                  <h3 class="finset-card-title">Top Categorías</h3>
+                  <span class="finset-card-subtitle" id="dash-categories-subtitle">Distribución de gastos</span>
+                </div>
+                <div class="fintech-pill-switch" id="dash-categories-switch">
+                  <button class="fintech-pill-btn active" data-metric="gastos">% Gastos</button>
+                  <button class="fintech-pill-btn" data-metric="ingresos">% Ingresos</button>
+                </div>
+              </div>
+              
+              <div class="fintech-donut-wrapper" style="height:190px;">
+                <canvas id="dash-categories-donut-canvas"></canvas>
+                <div class="fintech-donut-center" id="dash-categories-donut-center">
+                  <span class="fintech-donut-center-label" id="dash-donut-center-label">Total Gastos</span>
+                  <span class="fintech-donut-center-val" id="dash-donut-center-val" style="color:var(--primary); font-size:1.1rem;">$ 0,00</span>
+                </div>
+              </div>
+
+              <div class="fintech-legend-list" id="dash-categories-legend" style="margin-top:12px;"></div>
+            </div>
+
+          </div>
+
+          <!-- ═══ ROW 3: OPERATIONS & MODULES (Recent Transactions + Fintech Widgets) ═══ -->
+          <div class="finset-grid-2col">
+            
+            <!-- Left (60%): Movimientos Recientes -->
+            <div class="finset-card" id="dash-widget-recents">
+              <div class="finset-card-header">
+                <div class="finset-card-title-wrap">
+                  <h3 class="finset-card-title">Movimientos Recientes</h3>
+                  <span class="finset-card-subtitle">Últimas operaciones del mes</span>
+                </div>
+                <div class="finset-card-actions">
+                  <div class="dh-search-box" style="margin:0;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="dash-recents-search" placeholder="Buscar..." class="finset-search-input">
+                  </div>
+                  <div class="dh-filter-tabs">
+                    <button class="dh-tab-btn active" data-filter="ALL" id="dash-recents-tab-all">Todos</button>
+                    <button class="dh-tab-btn" data-filter="INGRESO" id="dash-recents-tab-ing">Ingresos</button>
+                    <button class="dh-tab-btn" data-filter="EGRESO" id="dash-recents-tab-egr">Gastos</button>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" id="dash-recents-expand-btn" title="Ver consola completa de movimientos" style="font-weight:700;font-size:0.75rem;padding:4px 10px;gap:4px;">
+                    <span>Ver todos</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Compact Recent List -->
+              <div class="finset-recents-body" id="dash-recents-body"></div>
+            </div>
+
+            <!-- Right (40%): Módulos Fintech Rápidos -->
+            <div class="finset-card" id="dash-widget-modules">
+              <div class="finset-card-header">
+                <div class="finset-card-title-wrap">
+                  <h3 class="finset-card-title">Módulos Financieros</h3>
+                  <span class="finset-card-subtitle">Tarjetas, cuentas y metas activas</span>
+                </div>
+              </div>
+
+              <div class="finset-modules-stack">
+                
+                <!-- 1. Tarjetas de Crédito Bento Widget -->
+                <div class="finset-submodule-card" id="dash-card-tarjetas">
+                  <div class="fsc-header">
+                    <div class="fsc-tag-wrap">
+                      <div class="bc-icon icon-blue" style="width:28px;height:28px;border-radius:8px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                      </div>
+                      <span style="font-weight:700;font-size:0.85rem;color:var(--texto);">Tarjetas de Crédito</span>
                     </div>
-                    <div class="tc-card-row tc-card-bottom">
-                      <span class="tc-card-number">**** ••••</span>
-                      <span class="tc-card-amount">$0,00</span>
+                    <button class="finset-arrow-btn" id="dash-tc-ver-consumos" title="Ver detalle en módulo Tarjetas">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </div>
+
+                  <!-- Interactive Plastic Card Carousel -->
+                  <div class="bc-preview-wrap" style="padding: 10px 0 6px;">
+                    <div class="dash-tc-carousel">
+                      <button class="dash-tc-arrow" id="dash-tc-prev" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+                      <div class="dash-tc-visual" id="dash-tc-visual"></div>
+                      <button class="dash-tc-arrow" id="dash-tc-next" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="bc-footer" id="dash-tc-subtotal" style="font-size:0.78rem;font-weight:600;color:var(--texto-2);margin-top:4px;">Subtotal: —</div>
+                </div>
+
+                <!-- 2. Gastos Compartidos (Cuentas Claras) -->
+                <div class="finset-submodule-card" id="dash-card-cc">
+                  <div class="fsc-header">
+                    <div class="fsc-tag-wrap">
+                      <div class="bc-icon icon-purple" style="width:28px;height:28px;border-radius:8px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      </div>
+                      <div>
+                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Gastos Compartidos</div>
+                        <div style="font-size:0.72rem;color:var(--texto-3);">Saldo neto a liquidar</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span class="bc-value" id="dash-cc-saldo" style="font-size:1.05rem;font-weight:800;">—</span>
+                      <button class="finset-arrow-btn" id="dash-cc-detail" title="Ver detalle de gastos compartidos">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
                     </div>
                   </div>
                 </div>
-                <button class="dash-tc-arrow" id="dash-tc-next" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+
+                <!-- 3. Chanchito (Alcancías / Ahorro) -->
+                <div class="finset-submodule-card" id="dash-card-ahorro">
+                  <div class="fsc-header">
+                    <div class="fsc-tag-wrap">
+                      <div class="bc-icon icon-yellow" style="width:28px;height:28px;border-radius:8px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                      </div>
+                      <div>
+                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Chanchito (Ahorro)</div>
+                        <div style="font-size:0.72rem;color:var(--texto-3);">Fondo en alcancías para metas</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span class="bc-value positivo" id="dash-ahorro-total" style="font-size:1.05rem;font-weight:800;">—</span>
+                      <button class="finset-arrow-btn" id="dash-ahorro-detail" title="Ver alcancías de ahorro">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 4. Inversiones -->
+                <div class="finset-submodule-card" id="dash-card-inversiones">
+                  <div class="fsc-header">
+                    <div class="fsc-tag-wrap">
+                      <div class="bc-icon icon-cyan" style="width:28px;height:28px;border-radius:8px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                      </div>
+                      <div>
+                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Inversiones</div>
+                        <div style="font-size:0.72rem;color:var(--texto-3);">Cartera viva de activos</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span class="bc-value" id="dash-inversiones-valor" style="font-size:1.05rem;font-weight:800;">—</span>
+                      <button class="finset-arrow-btn" id="dash-inversiones-detail" title="Ver portafolio de inversiones">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
-            <div class="bc-footer" id="dash-tc-subtotal">Subtotal: —</div>
+
           </div>
 
-          <!-- 2. Gastos Compartidos -->
-          <div class="bento-card bento-card-cc" id="dash-card-cc">
-            <div class="bc-top">
-              <div class="bc-icon icon-purple">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <!-- ═══ EXPANDABLE FULL DRILLDOWN CONSOLE ═══ -->
+          <div class="dash-hero-drilldown" id="dash-hero-drilldown" style="display: none;">
+            <div class="dh-drilldown-header">
+              <div class="dh-drilldown-left">
+                <div class="dh-drilldown-badge" id="drilldown-badge">
+                  <span class="dh-badge-dot"></span>
+                  <span class="dh-badge-title" id="drilldown-title">Consola de Movimientos</span>
+                </div>
+                <div class="dh-drilldown-summary" id="drilldown-summary">—</div>
               </div>
-              <span class="bc-tag">Gastos Compartidos</span>
-              <button class="bc-arrow-btn" id="dash-cc-detail" title="Ver detalle de gastos compartidos">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </div>
-            <div class="bc-main">
-              <span class="bc-label">Saldo neto a liquidar</span>
-              <span class="bc-value" id="dash-cc-saldo">—</span>
-            </div>
-            <div class="bc-desc-box">
-              <span class="bc-desc-text">Balance consolidado de deudas y créditos con convivientes.</span>
-            </div>
-          </div>
 
-          <!-- 3. Chanchito (Ahorros) -->
-          <div class="bento-card bento-card-ahorro" id="dash-card-ahorro">
-            <div class="bc-top">
-              <div class="bc-icon icon-yellow">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+              <div class="dh-drilldown-center">
+                <div class="dh-filter-tabs">
+                  <button class="dh-tab-btn active" data-filter="ALL" id="drilldown-tab-all">Todos</button>
+                  <button class="dh-tab-btn" data-filter="INGRESO" id="drilldown-tab-ing">Ingresos</button>
+                  <button class="dh-tab-btn" data-filter="EGRESO" id="drilldown-tab-egr">Gastos</button>
+                </div>
               </div>
-              <span class="bc-tag">Chanchito</span>
-              <button class="bc-arrow-btn" id="dash-ahorro-detail" title="Ver alcancías de ahorro">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </div>
-            <div class="bc-main">
-              <span class="bc-label">Fondo de reserva acumulado</span>
-              <span class="bc-value positivo" id="dash-ahorro-total">—</span>
-            </div>
-            <div class="bc-desc-box">
-              <span class="bc-desc-text">Ahorro líquido separado en alcancías para metas programadas.</span>
-            </div>
-          </div>
 
-          <!-- 4. Inversiones -->
-          <div class="bento-card bento-card-inversiones" id="dash-card-inversiones">
-            <div class="bc-top">
-              <div class="bc-icon icon-cyan">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <div class="dh-drilldown-right">
+                <div class="dh-search-box">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input type="text" id="drilldown-search-input" placeholder="Buscar concepto o categoría..." autocomplete="off">
+                </div>
+                <button class="dh-close-btn" id="drilldown-close-btn" title="Cerrar consola de movimientos" aria-label="Cerrar">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </div>
-              <span class="bc-tag">Inversiones</span>
-              <button class="bc-arrow-btn" id="dash-inversiones-detail" title="Ver portafolio de inversiones">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
             </div>
-            <div class="bc-main">
-              <span class="bc-label">Valuación de cartera viva</span>
-              <span class="bc-value" id="dash-inversiones-valor">—</span>
-            </div>
-            <div class="bc-desc-box">
-              <span class="bc-desc-text">Rendimiento en LECAPs, ONs en dólares y CEDEARs.</span>
+
+            <!-- Layout Side-by-Side: Grilla a la izquierda + Analítica a la derecha -->
+            <div class="analytics-side-layout dh-side-layout">
+              <div class="analytics-main-col dh-side-main">
+                <div class="dh-drilldown-body dh-drilldown-list" id="drilldown-body-container"></div>
+              </div>
+              <div class="analytics-side-col dh-side-analytics">
+                <div class="table-card fintech-card" id="dash-drill-donut-wrap"></div>
+                <div class="table-card fintech-card" id="dash-drill-evolucion-wrap"></div>
+              </div>
             </div>
           </div>
 
@@ -567,6 +723,48 @@ export class DashboardModule extends BaseModule {
       }
     });
 
+    // KPI Expand Buttons
+    document.getElementById('btn-expand-balance')?.addEventListener('click', () => this.#openDrilldown('ALL'));
+    document.getElementById('btn-expand-ingresos')?.addEventListener('click', () => this.#openDrilldown('INGRESO'));
+    document.getElementById('btn-expand-gastos')?.addEventListener('click', () => this.#openDrilldown('EGRESO'));
+    document.getElementById('btn-expand-ahorro')?.addEventListener('click', () => {
+      document.querySelector('[data-vista="vista-ahorro"]')?.click();
+    });
+
+    // Money Flow switch
+    document.getElementById('dash-moneyflow-switch')?.querySelectorAll('.fintech-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#dash-moneyflow-switch .fintech-pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.#evolucionMode = btn.dataset.mode;
+        this.#renderMoneyFlowChart();
+      });
+    });
+
+    // Top Categories switch
+    document.getElementById('dash-categories-switch')?.querySelectorAll('.fintech-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#dash-categories-switch .fintech-pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.#donutMetric = btn.dataset.metric;
+        this.#renderTopCategoriesWidget();
+      });
+    });
+
+    // Recent Transactions Filters & Search
+    document.getElementById('dash-recents-tab-all')?.addEventListener('click', () => this.#setRecentsFilter('ALL'));
+    document.getElementById('dash-recents-tab-ing')?.addEventListener('click', () => this.#setRecentsFilter('INGRESO'));
+    document.getElementById('dash-recents-tab-egr')?.addEventListener('click', () => this.#setRecentsFilter('EGRESO'));
+
+    document.getElementById('dash-recents-search')?.addEventListener('input', (e) => {
+      this.#recentsSearch = e.target.value;
+      this.#renderRecentTransactions();
+    });
+
+    document.getElementById('dash-recents-expand-btn')?.addEventListener('click', () => {
+      this.#toggleDrilldown(this.#recentsFilter);
+    });
+
     // Tarjetas carousel
     document.getElementById('dash-tc-prev')?.addEventListener('click', (e) => { e.stopPropagation(); this.#navigateTc(-1); });
     document.getElementById('dash-tc-next')?.addEventListener('click', (e) => { e.stopPropagation(); this.#navigateTc(1); });
@@ -588,19 +786,6 @@ export class DashboardModule extends BaseModule {
     document.getElementById('dash-inversiones-detail')?.addEventListener('click', () => {
       document.querySelector('[data-vista="vista-inversiones"]')?.click();
     });
-
-    // Drilldown Hero Breakdown Toggle (single click handler)
-    document.getElementById('dash-breakdown-toggle')?.addEventListener('click', () => this.#toggleDrilldown());
-
-    const handleKeyEnter = (el, fn) => {
-      el?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          fn();
-        }
-      });
-    };
-    handleKeyEnter(document.getElementById('dash-breakdown-toggle'), () => this.#toggleDrilldown());
 
     // Drilldown Controls
     document.getElementById('drilldown-close-btn')?.addEventListener('click', () => this.#closeDrilldown());
@@ -997,12 +1182,20 @@ export class DashboardModule extends BaseModule {
 
   // --- SECCIÓN 8: AHORRO ---
 
+  #updateAhorroKpi() {
+    const el = document.getElementById('dash-ahorro-kpi-val');
+    const total = (this.#ahorroTotal || 0) + (this.#inversionesTotal || 0);
+    if (el) el.textContent = App.Utils.formatearMoneda(total);
+  }
+
   async #loadAhorro(cuenta, fechaInicio, fechaFin) {
     const applyAhorro = (data) => {
       this._ahorroData = data;
       const total = (data.kpis?.arsTotal || 0);
+      this.#ahorroTotal = total;
       const el = document.getElementById('dash-ahorro-total');
       if (el) el.textContent = App.Utils.formatearMoneda(total);
+      this.#updateAhorroKpi();
     };
     try {
       const resp = await App.API.swr(
@@ -1019,8 +1212,10 @@ export class DashboardModule extends BaseModule {
     const applyInversiones = (data) => {
       this._inversionesData = data;
       const valorActual = (data.kpis?.valorActual || 0);
+      this.#inversionesTotal = valorActual;
       const el = document.getElementById('dash-inversiones-valor');
       if (el) el.textContent = App.Utils.formatearMoneda(valorActual);
+      this.#updateAhorroKpi();
     };
     try {
       const resp = await App.API.swr(
@@ -1029,6 +1224,312 @@ export class DashboardModule extends BaseModule {
       );
       if (resp.data?.success) applyInversiones(resp.data);
     } catch (e) { App.error('Dashboard', '#loadInversiones', e.message, e); }
+  }
+
+  // --- SECCIÓN 8B-2: FINSET WIDGETS RENDERING ---
+
+  #setRecentsFilter(tipo) {
+    this.#recentsFilter = tipo;
+    ['all', 'ing', 'egr'].forEach(k => {
+      const btn = document.getElementById(`dash-recents-tab-${k}`);
+      if (btn) {
+        const isAct = (k === 'all' && tipo === 'ALL') ||
+                      (k === 'ing' && tipo === 'INGRESO') ||
+                      (k === 'egr' && tipo === 'EGRESO');
+        btn.classList.toggle('active', isAct);
+      }
+    });
+    this.#renderRecentTransactions();
+  }
+
+  #renderMoneyFlowChart() {
+    const canvas = document.getElementById('dash-moneyflow-canvas');
+    if (!canvas) return;
+    const hist = this.#evolucionMensual || [];
+    if (!hist.length) return;
+
+    this.#moneyFlowChartInstance?.destroy();
+    const ctx = canvas.getContext('2d');
+    const isIngVsGas = this.#evolucionMode === 'ingresos_vs_gastos';
+    const labels = hist.map(e => App.Utils.formatearMes(e.mes));
+
+    let datasets = [];
+    if (isIngVsGas) {
+      datasets = [
+        {
+          label: 'Ingresos',
+          data: hist.map(e => Math.round(e.ingresos || 0)),
+          backgroundColor: '#10B981',
+          borderRadius: 6,
+          barPercentage: 0.65,
+          categoryPercentage: 0.8
+        },
+        {
+          label: 'Gastos',
+          data: hist.map(e => Math.round(e.egresos || 0)),
+          backgroundColor: '#1D195D',
+          borderRadius: 6,
+          barPercentage: 0.65,
+          categoryPercentage: 0.8
+        }
+      ];
+    } else {
+      datasets = [
+        {
+          label: 'Balance Neto',
+          data: hist.map(e => Math.round(e.balance || 0)),
+          backgroundColor: hist.map(e => (e.balance || 0) >= 0 ? '#10B981' : '#EF4444'),
+          borderRadius: 6,
+          barPercentage: 0.65,
+          categoryPercentage: 0.85
+        }
+      ];
+    }
+
+    this.#moneyFlowChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: isIngVsGas,
+            position: 'top',
+            align: 'end',
+            labels: {
+              boxWidth: 8,
+              boxHeight: 8,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              font: { size: 11, family: 'Inter, sans-serif', weight: '600' },
+              color: '#4B5563'
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => ` ${context.dataset.label || ''}: $ ${context.parsed.y.toLocaleString('es-AR')}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: '#9CA3AF' }
+          },
+          y: {
+            grid: { color: 'rgba(0,0,0,0.04)' },
+            ticks: {
+              font: { size: 10, family: 'Inter, sans-serif' },
+              color: '#9CA3AF',
+              callback: (v) => '$ ' + (Math.abs(v) >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : (v / 1000).toFixed(0) + 'k')
+            }
+          }
+        }
+      }
+    });
+
+    // Update summary text
+    const summaryEl = document.getElementById('dash-moneyflow-summary');
+    if (summaryEl) {
+      const avgIng = hist.reduce((a, b) => a + (b.ingresos || 0), 0) / hist.length;
+      const avgGas = hist.reduce((a, b) => a + (b.egresos || 0), 0) / hist.length;
+      summaryEl.innerHTML = `
+        <span>Promedio mensual: Ingresos <strong>${App.Utils.formatearMoneda(avgIng)}</strong> • Gastos <strong>${App.Utils.formatearMoneda(avgGas)}</strong></span>
+      `;
+    }
+  }
+
+  #renderTopCategoriesWidget() {
+    const isIngresos = this.#donutMetric === 'ingresos';
+    const targetType = isIngresos ? 'INGRESO' : 'EGRESO';
+    const canvas = document.getElementById('dash-categories-donut-canvas');
+    const legendEl = document.getElementById('dash-categories-legend');
+    const subEl = document.getElementById('dash-categories-subtitle');
+    const centerValEl = document.getElementById('dash-donut-center-val');
+    const centerLblEl = document.getElementById('dash-donut-center-label');
+
+    if (subEl) subEl.textContent = isIngresos ? 'Distribución de ingresos' : 'Distribución de gastos';
+    if (centerLblEl) centerLblEl.textContent = isIngresos ? 'Total Ingresos' : 'Total Gastos';
+
+    const pool = (this.#movData || []).filter(m => m.tipo_mov === targetType);
+    const totalMetric = pool.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+
+    if (centerValEl) {
+      centerValEl.textContent = App.Utils.formatearMoneda(totalMetric);
+      centerValEl.className = 'fintech-donut-center-val ' + (isIngresos ? 'positivo' : 'negativo');
+    }
+
+    if (!pool.length || totalMetric <= 0) {
+      this.#categoriesDonutInstance?.destroy();
+      if (legendEl) {
+        legendEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--texto-3);font-size:0.85rem;">No hay registros en este período</div>`;
+      }
+      return;
+    }
+
+    const catMap = {};
+    pool.forEach(m => {
+      const cat = m.categoria_nombre || (isIngresos ? 'Ingreso' : 'General');
+      const imp = Math.abs(Number(m.importe || 0));
+      if (!catMap[cat]) catMap[cat] = { total: 0, count: 0 };
+      catMap[cat].total += imp;
+      catMap[cat].count += 1;
+    });
+
+    const sortedCats = Object.entries(catMap)
+      .map(([name, d]) => ({
+        name,
+        total: d.total,
+        count: d.count,
+        pct: (d.total / totalMetric) * 100
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const palette = [
+      '#1D195D', '#2563EB', '#0EA5E9', '#10B981', '#8B5CF6',
+      '#F59E0B', '#EF4444', '#4F46E5', '#64748B'
+    ];
+
+    if (legendEl) {
+      const top5 = sortedCats.slice(0, 5);
+      legendEl.innerHTML = top5.map((cat, idx) => {
+        const color = palette[idx % palette.length];
+        return `
+          <div class="fintech-legend-item">
+            <div class="fintech-legend-left" title="${App.Utils.escapeHtml(cat.name)}">
+              <span class="fintech-legend-dot" style="background:${color};"></span>
+              <span style="color:var(--texto);">${App.Utils.escapeHtml(cat.name)}</span>
+            </div>
+            <div class="fintech-legend-right">
+              <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${cat.pct.toFixed(1)}%</span>
+              <span class="${isIngresos ? 'positivo' : 'negativo'}" style="font-size:0.82rem;">${App.Utils.formatearMoneda(cat.total)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    if (canvas) {
+      this.#categoriesDonutInstance?.destroy();
+      const ctx = canvas.getContext('2d');
+      this.#categoriesDonutInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: sortedCats.map(c => c.name),
+          datasets: [{
+            data: sortedCats.map(c => Math.round(c.total)),
+            backgroundColor: sortedCats.map((_, i) => palette[i % palette.length]),
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            hoverOffset: 5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '74%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const val = context.parsed || 0;
+                  const pct = ((val / totalMetric) * 100).toFixed(1);
+                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  #renderRecentTransactions() {
+    const bodyEl = document.getElementById('dash-recents-body');
+    if (!bodyEl) return;
+
+    let list = this.#movData || [];
+    if (this.#recentsFilter === 'INGRESO') {
+      list = list.filter(m => m.tipo_mov === 'INGRESO');
+    } else if (this.#recentsFilter === 'EGRESO') {
+      list = list.filter(m => m.tipo_mov === 'EGRESO');
+    }
+
+    if (this.#recentsSearch.trim()) {
+      const q = this.#recentsSearch.toLowerCase().trim();
+      list = list.filter(m => {
+        const desc = (m.descripcion || '').toLowerCase();
+        const cat = (m.categoria_nombre || '').toLowerCase();
+        const medio = (m.medio_pago || '').toLowerCase();
+        return desc.includes(q) || cat.includes(q) || medio.includes(q);
+      });
+    }
+
+    if (!list.length) {
+      bodyEl.innerHTML = `
+        <div style="padding: 28px 16px; text-align: center; color: var(--texto-3); font-size: 0.85rem;">
+          No hay movimientos recientes registrados
+        </div>
+      `;
+      return;
+    }
+
+    // Take top 6
+    const recents = list.slice(0, 6);
+
+    const getCategoryIconSvg = (catName, tipo) => {
+      const cat = (catName || '').toLowerCase();
+      if (tipo === 'INGRESO') {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+      }
+      if (cat.includes('super') || cat.includes('alimen') || cat.includes('comida')) {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
+      }
+      if (cat.includes('serv') || cat.includes('luz') || cat.includes('gas') || cat.includes('internet')) {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+      }
+      if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+      }
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
+    };
+
+    bodyEl.innerHTML = recents.map(r => {
+      const esIngreso = r.tipo_mov === 'INGRESO';
+      const iconClass = esIngreso ? 'icon-green' : 'icon-subtle';
+      const sign = esIngreso ? '+' : '-';
+      const valClass = esIngreso ? 'positivo' : 'negativo';
+      const catName = r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General');
+      const desc = r.descripcion || catName;
+      const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
+
+      return `
+        <div class="finset-recents-row" data-id="${r.id_movimiento || r.id}">
+          <div class="finset-recents-icon ${iconClass}">
+            ${getCategoryIconSvg(catName, r.tipo_mov)}
+          </div>
+          <div class="finset-recents-info">
+            <span class="finset-recents-desc">${App.Utils.escapeHtml(desc)}</span>
+            <span class="finset-recents-date">${fechaStr}</span>
+          </div>
+          <span class="finset-recents-cat">${App.Utils.escapeHtml(catName)}</span>
+          <span class="finset-recents-amount ${valClass}">${sign} ${App.Utils.formatearMoneda(r.importe)}</span>
+          <button class="finset-arrow-btn" style="width:24px;height:24px;border:none;" title="Ver detalle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    bodyEl.querySelectorAll('.finset-recents-row').forEach(rowEl => {
+      rowEl.addEventListener('click', () => {
+        const id = rowEl.dataset.id;
+        const row = this.#movData.find(m => (m.id_movimiento || m.id) == id);
+        if (row) this.#abrirModalDetalleMov(row);
+      });
+    });
   }
 
   // --- SECCIÓN 8C: DRILL-DOWN DE MOVIMIENTOS EN VIVO ---

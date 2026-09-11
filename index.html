@@ -76,7 +76,7 @@
     <aside class="sidebar" id="app-sidebar">
 
       <!-- Brand -->
-      <div class="sidebar-brand" style="justify-content:center;padding:20px 16px 16px">
+      <div class="sidebar-brand" id="app-header-logo" style="justify-content:center;padding:20px 16px 16px;cursor:pointer;" title="Volver al Dashboard">
         <img src="https://i.imgur.com/zbLZveO.png" alt="Fluxo" style="width:170px;height:auto;object-fit:contain">
       </div>
 
@@ -151,38 +151,56 @@
          ══════════════════════════════════════════════════════════ -->
     <div class="main-wrapper">
 
-      <!-- ── APP HEADER ────────────────────────────────────────── -->
+      <!-- ── APP HEADER (FinSet Layout) ────────────────────────── -->
       <header class="app-header">
-        <div style="display:flex;align-items:center;gap:14px">
-          <div class="app-header-logo" id="app-header-logo" style="cursor:pointer;" title="Volver al inicio">
-            <img src="https://i.imgur.com/zbLZveO.png" alt="Fluxo">
+        <div class="app-header-left">
+          <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menú" title="Abrir menú">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div class="topbar-greeting" id="topbar-greeting">
+            <h2 class="topbar-greeting-title">¡Hola, <span id="topbar-user-name">Gaston</span>!</h2>
+            <span class="topbar-greeting-sub">Gestión financiera inteligente & patrimonio</span>
+          </div>
+
+          <!-- Selectors: Month, Currency, Account -->
+          <div class="topbar-selectors-group">
+            <!-- Month Selector -->
+            <div class="welcome-select-wrap" id="month-select-ui">
+              <svg class="ws-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <input type="month" id="selector-mes" aria-label="Seleccionar mes">
+            </div>
+
+            <!-- Currency Pills -->
+            <div class="currency-pills" id="currency-pills" role="group" aria-label="Moneda">
+              <button class="currency-pill active" id="pill-ars" data-currency="ARS">ARS</button>
+              <button class="currency-pill" id="pill-usd" data-currency="USD">USD</button>
+            </div>
+
+            <!-- Account Selector (Dropdown) -->
+            <div class="welcome-select-wrap" id="account-select-ui" style="display:flex;">
+              <select id="selector-cuenta" aria-label="Seleccionar cuenta"></select>
+              <svg class="ws-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
           </div>
         </div>
+
         <div class="app-header-actions">
-          <!-- Account Selector (Dropdown) -->
-          <div class="welcome-select-wrap" id="account-select-ui" style="display:flex;">
-            <select id="selector-cuenta" aria-label="Seleccionar cuenta"></select>
-            <svg class="ws-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-
-          <!-- Month Selector -->
-          <div class="welcome-select-wrap" id="month-select-ui">
-            <svg class="ws-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            <input type="month" id="selector-mes" aria-label="Seleccionar mes">
-          </div>
-
-          <!-- Currency Pills -->
-          <div class="currency-pills" id="currency-pills" role="group" aria-label="Moneda">
-            <button class="currency-pill active" id="pill-ars" data-currency="ARS">ARS</button>
-            <button class="currency-pill" id="pill-usd" data-currency="USD">USD</button>
-          </div>
+          <!-- Quick Add Button -->
+          <button class="btn btn-primary btn-sm topbar-quick-add" id="topbar-btn-nuevo" onclick="App.Modules.movimientos?.abrirAlta('EGRESO')" title="Registrar nuevo gasto o ingreso">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>Nuevo</span>
+          </button>
 
           <!-- Gemini AI Advisor Button (Top Bar Header) -->
           <button id="btn-header-gemini" class="btn-icon-sm btn-gemini-header" title="FluxoAI - Asesor Inteligente" aria-label="Abrir FluxoAI">
