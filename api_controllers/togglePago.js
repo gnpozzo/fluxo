@@ -108,23 +108,13 @@ export default async function handler(req, res) {
         tcIds = (consumos || []).map(c => c.id_consumo_tarjeta);
       }
 
-      // Obtener detalles de la tarjeta y cuentas para crear los movimientos contables
-      let cardAccountId = null;
-      let cardNombre = 'Tarjeta';
-      let cardVto = null;
-      if (idTarjeta) {
-        const { data: tc } = await supabase
-          .from('tarjetas')
-          .select('id_tarjeta, nombre, id_cuenta_principal, fecha_vencimiento_actual')
-          .eq('id_tarjeta', idTarjeta)
-          .eq('user_id', userId)
-          .maybeSingle();
-        if (tc) {
-          cardAccountId = tc.id_cuenta_principal;
-          cardNombre = tc.nombre || 'Tarjeta de Crédito';
-          cardVto = tc.fecha_vencimiento_actual;
-        }
-      }
+      // Obtener todas las tarjetas activas del usuario para mapear consumos a sus respectivas cuentas
+      const { data: allTarjetas } = await supabase
+        .from('tarjetas')
+        .select('id_tarjeta, nombre, id_cuenta_principal, fecha_vencimiento_actual, total_resumen_ars')
+        .eq('user_id', userId);
+
+      const tarjetaMap = new Map((allTarjetas || []).map(t => [t.id_tarjeta, t]));
 
       // Obtener cuenta Hogar
       const { data: allCuentas } = await supabase
@@ -134,19 +124,15 @@ export default async function handler(req, res) {
       const hogarCuenta = (allCuentas || []).find(c => c.nombre.toLowerCase().includes('hogar'));
       const hogarId = hogarCuenta?.id_cuenta_principal || null;
 
-      // Obtener los consumos completos para calcular el total a pagar
-      let totalAPagar = 0;
+      // Obtener consumos completos con id_tarjeta e importe
+      let consumosList = [];
       if (tcIds.length > 0) {
         const { data: cData } = await supabase
           .from('consumos_tc')
-          .select('importe, moneda')
+          .select('id_consumo_tarjeta, id_tarjeta, importe, moneda, fecha')
           .in('id_consumo_tarjeta', tcIds)
           .eq('user_id', userId);
-        (cData || []).forEach(c => {
-          if (c.moneda !== 'USD') {
-            totalAPagar += Number(c.importe || 0);
-          }
-        });
+        consumosList = cData || [];
       }
 
       // Obtener movimientos asociados a estos consumos
@@ -160,51 +146,66 @@ export default async function handler(req, res) {
         movsVinculados = movs || [];
       }
 
-      const paymentDate = todayStr || cardVto || new Date().toISOString().split('T')[0];
+      const paymentDate = todayStr || new Date().toISOString().split('T')[0];
 
-      // 1. Débito del total del resumen en la cuenta titular de la tarjeta (Personal)
-      if (cardAccountId && totalAPagar > 0) {
-        const descPago = `Pago Resumen: ${cardNombre}`;
-        // Verificar si ya existe el movimiento de pago para evitar duplicados
-        const { data: existingPayment } = await supabase
-          .from('movimientos')
-          .select('id_movimiento')
-          .eq('id_cuenta_principal', cardAccountId)
-          .eq('tipo_mov', 'EGRESO')
-          .eq('descripcion', descPago)
-          .gte('fecha', paymentDate.substring(0, 7) + '-01')
-          .lte('fecha', paymentDate.substring(0, 7) + '-31')
-          .eq('user_id', userId);
+      // Determinar qué tarjetas procesar: individual o todas (consolidado)
+      const targetTarjetas = idTarjeta
+        ? (allTarjetas || []).filter(t => t.id_tarjeta === idTarjeta)
+        : (allTarjetas || []).filter(t => consumosList.some(c => c.id_tarjeta === t.id_tarjeta));
 
-        let paymentMovId = existingPayment?.[0]?.id_movimiento;
+      for (const tc of targetTarjetas) {
+        const cardConsumos = consumosList.filter(c => c.id_tarjeta === tc.id_tarjeta);
+        const cardSumConsumos = cardConsumos.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
 
-        if (!paymentMovId) {
-          const newPaymentMov = {
-            id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: cardAccountId,
-            user_id: userId,
-            fecha: paymentDate,
-            id_categoria: 'CAT_SERVICIOS',
-            tipo_mov: 'EGRESO',
-            descripcion: descPago,
-            importe: Math.round(totalAPagar * 100) / 100,
-            moneda: 'ARS',
-            medio_pago: 'Débito Automático'
-          };
-          const { data: insertedMov } = await supabase
+        // Si la tarjeta tiene total_resumen_ars para este mes, usarlo; sino la suma de consumos
+        const cardTotal = (tc.total_resumen_ars && Number(tc.total_resumen_ars) > 0)
+          ? Number(tc.total_resumen_ars)
+          : cardSumConsumos;
+
+        if (tc.id_cuenta_principal && cardTotal > 0) {
+          const descPago = `Pago Resumen: ${tc.nombre}`;
+          const { data: existingPayment } = await supabase
             .from('movimientos')
-            .insert([newPaymentMov])
-            .select('id_movimiento');
-          paymentMovId = insertedMov?.[0]?.id_movimiento;
+            .select('id_movimiento')
+            .eq('id_cuenta_principal', tc.id_cuenta_principal)
+            .eq('tipo_mov', 'EGRESO')
+            .eq('descripcion', descPago)
+            .gte('fecha', paymentDate.substring(0, 7) + '-01')
+            .lte('fecha', paymentDate.substring(0, 7) + '-31')
+            .eq('user_id', userId);
+
+          let paymentMovId = existingPayment?.[0]?.id_movimiento;
+          if (!paymentMovId) {
+            const newPaymentMov = {
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: tc.id_cuenta_principal,
+              user_id: userId,
+              fecha: paymentDate,
+              id_categoria: 'CAT_SERVICIOS',
+              tipo_mov: 'EGRESO',
+              descripcion: descPago,
+              importe: Math.round(cardTotal * 100) / 100,
+              moneda: 'ARS',
+              medio_pago: 'Débito Automático'
+            };
+            const { data: insertedMov } = await supabase
+              .from('movimientos')
+              .insert([newPaymentMov])
+              .select('id_movimiento');
+            paymentMovId = insertedMov?.[0]?.id_movimiento;
+          }
+
+          if (paymentMovId) {
+            pagosMap[paymentMovId] = { pagado: true, fecha_pago: paymentDate, tipo: 'PAGO_TC' };
+          }
         }
 
-        if (paymentMovId) {
-          pagosMap[paymentMovId] = { pagado: true, fecha_pago: paymentDate, tipo: 'PAGO_TC' };
+        if (mes) {
+          pagosMap[`RESUMEN_${tc.id_tarjeta}_${mes}`] = { pagado: true, fecha_pago: paymentDate };
         }
       }
 
-      // 2. Si los egresos de Hogar estaban fechados en el mes de compra anterior,
-      // sincronizar su fecha al mes del pago/vencimiento para que figuren en Hogar en el período de pago
+      // 2. Si los egresos de Hogar estaban fechados en el mes anterior, sincronizar su fecha
       if (hogarId) {
         const hogarMovsToAlign = movsVinculados.filter(m => m.id_cuenta_principal === hogarId && m.tipo_mov === 'EGRESO' && m.fecha < paymentDate.substring(0, 7) + '-01');
         for (const hm of hogarMovsToAlign) {
@@ -226,9 +227,6 @@ export default async function handler(req, res) {
         pagosMap[m.id_movimiento] = { pagado: true, fecha_pago: paymentDate, tipo: 'MOV' };
       });
 
-      if (idTarjeta && mes) {
-        pagosMap[`RESUMEN_${idTarjeta}_${mes}`] = { pagado: true, fecha_pago: paymentDate };
-      }
       lastStatus = true;
     }
 

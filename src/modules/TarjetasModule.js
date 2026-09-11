@@ -276,16 +276,23 @@ export class TarjetasModule extends BaseModule {
         <div class="selector-vista-container">
           <button id="tc-btn-mes" class="btn btn-primary btn-vista active">Consumos del Mes</button>
           <button id="tc-btn-proy" class="btn btn-ghost btn-vista">Proyecciones</button>
-          <button id="tc-btn-graficos" class="btn btn-ghost btn-vista">Gráficos</button>
           <button id="tc-btn-pagar-resumen" class="btn btn-secondary btn-sm" style="margin-left:8px;display:inline-flex;align-items:center;gap:6px;" title="Liquidar resumen y marcar consumos como saldados">💳 Pagar Resumen</button>
         </div>
       </div>
-      <div class="table-card" id="tc-tabla-wrap"></div>
-      <div id="tc-taxes-wrap" style="margin-top:var(--space-3)"></div>
-      <div class="table-card hidden" id="tc-proy-wrap">
-         <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando proyecciones...</div>
+
+      <!-- Layout 2 Columnas Side-by-Side: Grilla a la izquierda + Analítica Lateral a la derecha -->
+      <div class="analytics-side-layout">
+        <div class="analytics-main-col">
+          <div class="table-card" id="tc-tabla-wrap"></div>
+          <div id="tc-taxes-wrap" style="margin-top:var(--space-3)"></div>
+          <div class="table-card hidden" id="tc-proy-wrap">
+             <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando proyecciones...</div>
+          </div>
+        </div>
+        <div class="analytics-side-col">
+          <div class="table-card fintech-card" id="tc-graficos-wrap"></div>
+        </div>
       </div>
-      <div class="table-card hidden" id="tc-graficos-wrap"></div>
     `;
 
     const grid = document.getElementById('tc-kpi-grid');
@@ -662,48 +669,24 @@ export class TarjetasModule extends BaseModule {
           this.#currentView = 'mes';
           const btnMes = document.getElementById('tc-btn-mes');
           const btnProy = document.getElementById('tc-btn-proy');
-          const btnGraf = document.getElementById('tc-btn-graficos');
           btnMes?.classList.add('active', 'btn-primary');
           btnMes?.classList.remove('btn-ghost');
           btnProy?.classList.remove('active', 'btn-primary');
           btnProy?.classList.add('btn-ghost');
-          btnGraf?.classList.remove('active', 'btn-primary');
-          btnGraf?.classList.add('btn-ghost');
           document.getElementById('tc-tabla-wrap')?.classList.remove('hidden');
           document.getElementById('tc-taxes-wrap')?.classList.remove('hidden');
           document.getElementById('tc-proy-wrap')?.classList.add('hidden');
-          document.getElementById('tc-graficos-wrap')?.classList.add('hidden');
         } else if (btn.id === 'tc-btn-proy') {
           this.#currentView = 'proy';
           const btnMes = document.getElementById('tc-btn-mes');
           const btnProy = document.getElementById('tc-btn-proy');
-          const btnGraf = document.getElementById('tc-btn-graficos');
           btnProy?.classList.add('active', 'btn-primary');
           btnProy?.classList.remove('btn-ghost');
           btnMes?.classList.remove('active', 'btn-primary');
           btnMes?.classList.add('btn-ghost');
-          btnGraf?.classList.remove('active', 'btn-primary');
-          btnGraf?.classList.add('btn-ghost');
           document.getElementById('tc-proy-wrap')?.classList.remove('hidden');
           document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
           document.getElementById('tc-taxes-wrap')?.classList.add('hidden');
-          document.getElementById('tc-graficos-wrap')?.classList.add('hidden');
-        } else if (btn.id === 'tc-btn-graficos') {
-          this.#currentView = 'graficos';
-          const btnMes = document.getElementById('tc-btn-mes');
-          const btnProy = document.getElementById('tc-btn-proy');
-          const btnGraf = document.getElementById('tc-btn-graficos');
-          btnGraf?.classList.add('active', 'btn-primary');
-          btnGraf?.classList.remove('btn-ghost');
-          btnMes?.classList.remove('active', 'btn-primary');
-          btnMes?.classList.add('btn-ghost');
-          btnProy?.classList.remove('active', 'btn-primary');
-          btnProy?.classList.add('btn-ghost');
-          document.getElementById('tc-graficos-wrap')?.classList.remove('hidden');
-          document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
-          document.getElementById('tc-taxes-wrap')?.classList.add('hidden');
-          document.getElementById('tc-proy-wrap')?.classList.add('hidden');
-          this.#renderGraficos();
         } else if (btn.id === 'tc-btn-pagar-resumen') {
           this.#confirmarPagarResumen();
         } else if (btn.dataset.togglePagoTc) {
@@ -994,6 +977,19 @@ export class TarjetasModule extends BaseModule {
 
     wrap.innerHTML = allPill + pills;
 
+    // Actualizar texto del botón Pagar Resumen según tarjeta seleccionada o Consolidado
+    const btnPagar = document.getElementById('tc-btn-pagar-resumen');
+    if (btnPagar) {
+      if (this.#selectedTcId) {
+        const activeCard = this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId);
+        btnPagar.innerHTML = `💳 Pagar Resumen (${App.Utils.escapeHtml(activeCard?.nombre || 'Tarjeta')})`;
+        btnPagar.title = `Liquidar resumen de ${App.Utils.escapeHtml(activeCard?.nombre || 'Tarjeta')} y marcar consumos como saldados`;
+      } else {
+        btnPagar.innerHTML = '💳 Pagar Resumen (Consolidado)';
+        btnPagar.title = 'Liquidar resúmenes de todas las tarjetas y marcar consumos como saldados';
+      }
+    }
+
     // Bind click events
     wrap.querySelectorAll('[data-tc-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1049,6 +1045,7 @@ export class TarjetasModule extends BaseModule {
       this.#table?.load(regularConsumos);
     }
     this.#renderImpuestosAccordion(taxConsumos);
+    this.#renderGraficos();
 
     // Restaurar ubicación de pantalla y resaltar consumo modificado
     if (this.#savedViewPosition) {
@@ -1152,8 +1149,19 @@ export class TarjetasModule extends BaseModule {
 
     const totalConsumos = filtered.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
 
+    const activeCardName = this.#selectedTcId
+      ? (this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId)?.nombre || 'Tarjeta')
+      : 'Consolidado';
+
     if (filtered.length === 0 || totalConsumos <= 0) {
-      wrap.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.875rem;">No hay consumos en este período para graficar.</div>`;
+      wrap.innerHTML = `
+        <div class="fintech-card-header">
+          <h3 class="fintech-card-title">Top Categorías</h3>
+          <span class="fintech-pill-btn">${App.Utils.escapeHtml(activeCardName)}</span>
+        </div>
+        <div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.85rem;">
+          No hay consumos en este período.
+        </div>`;
       return;
     }
 
@@ -1181,69 +1189,45 @@ export class TarjetasModule extends BaseModule {
       .sort((a, b) => b.total - a.total);
 
     const palette = [
-      '#4361EE', '#7209B7', '#F72585', '#4CC9F0', '#2EC4B6',
-      '#FF9F1C', '#E71D36', '#06D6A0', '#118AB2', '#8338EC'
+      '#06b6d4', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899',
+      '#f59e0b', '#f43f5e', '#059669', '#6366f1', '#e11d48'
     ];
 
     const labels = sortedCats.map(c => c.name);
     const dataValues = sortedCats.map(c => Math.round(c.total));
     const bgColors = sortedCats.map((_, i) => palette[i % palette.length]);
 
-    const activeCardName = this.#selectedTcId
-      ? (this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId)?.nombre || 'Tarjeta Seleccionada')
-      : 'Consolidado Todas las Tarjetas';
-
     wrap.innerHTML = `
-      <div style="padding:20px 24px;border-bottom:1px solid var(--borde);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div class="fintech-card-header">
         <div>
-          <h3 style="margin:0 0 4px 0;font-size:1.05rem;color:var(--texto);font-weight:700;">Distribución de Consumos — ${App.Utils.escapeHtml(activeCardName)}</h3>
-          <p style="margin:0;font-size:0.82rem;color:var(--texto-2);">
-            Desglose de consumos del resumen por categoría e incidencia personal vs externa.
-          </p>
+          <h3 class="fintech-card-title">Top Categorías</h3>
+          <div style="font-size:0.75rem;color:var(--texto-3);margin-top:2px;">
+            Total: <strong>${App.Utils.formatearMoneda(totalConsumos)}</strong>
+          </div>
         </div>
-        <div>
-          <span style="font-size:0.8rem;background:var(--primary-tint);color:var(--primary);padding:4px 10px;border-radius:var(--r-full);font-weight:600;">
-            Total: ${App.Utils.formatearMoneda(totalConsumos)}
-          </span>
-        </div>
+        <span class="fintech-pill-btn active">${App.Utils.escapeHtml(activeCardName)}</span>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:24px;padding:24px;align-items:center;">
-        <div style="position:relative;max-width:360px;margin:0 auto;width:100%;height:320px;display:flex;align-items:center;justify-content:center;">
-          <canvas id="tc-chart-canvas"></canvas>
-        </div>
+      <div style="position:relative;width:100%;height:185px;display:flex;align-items:center;justify-content:center;margin:6px 0;">
+        <canvas id="tc-chart-canvas"></canvas>
+      </div>
 
-        <div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;padding-right:6px;">
-          ${sortedCats.map((cat, idx) => {
-            const color = bgColors[idx];
-            return `
-              <div style="background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r);padding:10px 14px;display:flex;flex-direction:column;gap:6px;">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
-                    <strong style="color:var(--texto);font-size:0.85rem;">${App.Utils.escapeHtml(cat.name)}</strong>
-                    <span style="font-size:0.75rem;color:var(--texto-3);">(${cat.count})</span>
-                  </div>
-                  <strong class="negativo" style="font-size:0.9rem;">${App.Utils.formatearMoneda(cat.total)}</strong>
-                </div>
-
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:0.78rem;">
-                  <div style="flex:1;display:flex;align-items:center;gap:6px;">
-                    <div style="flex:1;height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden;">
-                      <div style="width:${cat.pct.toFixed(1)}%;height:100%;background:${color};"></div>
-                    </div>
-                    <strong style="min-width:42px;text-align:right;color:var(--texto);">${cat.pct.toFixed(1)}%</strong>
-                  </div>
-                  ${cat.externa > 0 ? `
-                    <span style="font-size:0.72rem;color:var(--kpi-amber);background:var(--bg-2);padding:2px 6px;border-radius:4px;" title="Incidencia externa">
-                      🏛️ ${App.Utils.formatearMoneda(cat.externa)}
-                    </span>
-                  ` : ''}
-                </div>
+      <div class="fintech-legend-list">
+        ${sortedCats.map((cat, idx) => {
+          const color = bgColors[idx];
+          return `
+            <div class="fintech-legend-item">
+              <div class="fintech-legend-left" title="${App.Utils.escapeHtml(cat.name)}">
+                <span class="fintech-legend-dot" style="background:${color};"></span>
+                <span style="color:var(--texto);">${App.Utils.escapeHtml(cat.name)}</span>
               </div>
-            `;
-          }).join('')}
-        </div>
+              <div class="fintech-legend-right">
+                <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${cat.pct.toFixed(1)}%</span>
+                <span class="negativo" style="font-size:0.82rem;">${App.Utils.formatearMoneda(cat.total)}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
 
@@ -1260,13 +1244,13 @@ export class TarjetasModule extends BaseModule {
             backgroundColor: bgColors,
             borderColor: 'var(--superficie)',
             borderWidth: 2,
-            hoverOffset: 6
+            hoverOffset: 5
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '68%',
+          cutout: '72%',
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -1294,11 +1278,22 @@ export class TarjetasModule extends BaseModule {
       ? (this.#allConsumos || []).filter(c => c.id_tarjeta === this.#selectedTcId)
       : (this.#allConsumos || []);
 
-    const totalAPagar = consumosAPagar.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+    let totalAPagar = 0;
+    if (activeCard) {
+      totalAPagar = (activeCard.total_resumen_ars && Number(activeCard.total_resumen_ars) > 0)
+        ? Number(activeCard.total_resumen_ars)
+        : consumosAPagar.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+    } else {
+      this.#tarjetas.forEach(tc => {
+        const cardConsumos = (this.#allConsumos || []).filter(c => c.id_tarjeta === tc.id_tarjeta);
+        const cardSum = cardConsumos.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+        totalAPagar += (tc.total_resumen_ars && Number(tc.total_resumen_ars) > 0) ? Number(tc.total_resumen_ars) : cardSum;
+      });
+    }
 
     const modal = new App.Modal('modal-tc-pagar-resumen');
     modal.open({
-      titulo: 'Confirmar Pago de Resumen',
+      titulo: activeCard ? `Confirmar Pago: ${activeCard.nombre}` : 'Confirmar Pago de Resumen (Consolidado)',
       icono: 'credit_card',
       body: `
         <div style="text-align:center;padding:12px 0;">
@@ -1309,7 +1304,7 @@ export class TarjetasModule extends BaseModule {
             ${App.Utils.formatearMoneda(totalAPagar)}
           </div>
           <p style="font-size:0.82rem;color:var(--texto-2);line-height:1.4;margin:0;">
-            Se marcarán como <strong>Saldados</strong> los ${consumosAPagar.length} consumos del período actual.
+            Se marcarán como <strong>Saldados</strong> los ${consumosAPagar.length} consumos del período actual${activeCard ? ' de ' + App.Utils.escapeHtml(activeCard.nombre) : ' de todas las tarjetas'}.
           </p>
         </div>
       `,

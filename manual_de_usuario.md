@@ -1,128 +1,168 @@
-# Sistema de Gestión Financiera — Manual de Usuario
+# Fluxo — Manual de Usuario Completo y Actualizado
 
-Este manual incluye de manera detallada todas las principales funcionalidades de la aplicación de Gestión Financiera, pensada para administrar cuentas, egresos, tarjetas, inversiones, ahorros y cuentas corrientes personales. 
-
-Se encuentra dividida en módulos accesibles desde la **barra lateral principal**.
+**Fluxo** es una plataforma integral de gestión financiera personal y familiar, diseñada con arquitectura multi-tenant, soporte bimonetario nativo (ARS / USD) y asistencia financiera inteligente impulsada por IA (FluxoAI / Gemini).
 
 ---
 
-## 1. Menú Principal (Navegación Lateral)
+## 1. Visión General y Filosofía de Diseño
 
-El menú principal a la izquierda te permite navegar fácilmente entre las grandes áreas de la aplicación. 
-
-### 1.1 Movimientos
-Es el libro contable diario de la aplicación.
-*   **Listado de Movimientos:** Visualiza todos los ingresos y egresos registrados en el mes seleccionado. Muestra la fecha, concepto, categoría, importe y tipo de movimiento.
-*   **Tipos de Gasto:** Puedes asentar tres tipos estandarizados de consumos: *Al contado* (impactan solo este mes), *En Cuotas* (con indicador de progreso cuota X/Y, finalizan automáticamente) y *Recurrentes* (suscripciones, seguros, alquileres; se repiten todos los meses hasta su baja).
-*   **Añadir Nuevo:** Puedes registrar "Nuevos Ingresos" o "Nuevos Egresos". Esto incluye también el soporte para **Ingresos Distribuidos Multi-Cuenta (Split %)**: al percibir un salario, podrás dividir dinámicamente un % hacia el Presupuesto Familiar y otro % hacia tu ahorros u otras cuentas, validado para no superar el 100%. 
-*   **Gestión en Lote (CRUD avanzado):** Al editar o borrar un movimiento que forma parte de una serie (Cuotas o Recurrente), el sistema te permitirá elegir entre modificar "Solo este movimiento" o "Toda la serie a futuro".
-
-### 1.2 Tarjetas (de Crédito)
-Módulo dedicado a visualizar los futuros compromisos de pago en tus tarjetas, tratándolas como un **medio de pago transversal** a todas tus cuentas.
-*   **Visión Neteada y Real:** Visualiza tu deuda total de tarjeta, pero con la capacidad de aislar qué porcentaje pertenece a la cuenta actual (ej., cuánto gastaste vos) y cuánto es deuda contraída pagando gastos de otros presupuestos (ej. familiar).
-*   **Detalle por Tarjeta:** Despliega cuotas, compras de ciclo único, débitos automáticos y consumos asociados a la tarjeta para evaluar cuánto hay que pagar antes del vencimiento.
-
-### 1.3 Gastos Compartidos (Cuentas Corrientes)
-Organiza los saldos (deudas o créditos) que tienes con terceros (ej: Contacto Bichi, familiares, amigos).
-*   **Saldos por Persona:** Resumen por cada 'Contacto' listando quién debe a quién y el balance actual (saldo a tu favor o saldo a pagar).
-*   **Distribución Proporcional (% de Split):** Al registrar un gasto directo en Movimientos o en este módulo, puedes indicar qué porcentaje asumís vos y qué porcentaje pagó, o se le imputará como deuda, a ese contacto. Un poderoso motor de *clearing* interno.
-
-### 1.4 Ahorro (Chanchito Bimonetario)
-Módulo para el control de fondos apartados y patrimonio líquido. 
-*   **Subcuentas / Bóvedas:** Puedes dividir tus ahorros en distintas bolsas definiendo en qué moneda transaccionan (ARS vs USD) y dónde se alojan físicamente (Liquidez, Broker X, Billetera Y, Efectivo Bajo Colchón).
-*   **Valorización Dinámica:** Visualiza la consolidación de tus ahorros bimonetarios con una referencia del equivalente en moneda original integrando el concepto de "Posición Neta".
-
-### 1.5 Inversiones
-Permite seguir el rendimiento de distintas herramientas de inversión o instrumentos bursátiles.
-*   **Portfolio (Tickers y Activos):** Muestra los tickers, cantidad y su valorización actual.
-*   **Cargas/Retiros:** En esta sección puedes asentar si sumaste capital (compraste) a una inversión o si hiciste un retiro, actualizando las curvas de rendimiento.
-*   **Monitor Global de Mercados:** Vista integrada con datos en tiempo real (caché de 10 min) que agrupa cinco categorías de instrumentos financieros:
-    *   **🌎 Mundo:** Indicadores globales agrupados por sector (Índices, Tasas UST, Energía, Metales, Agro, Crypto, Monedas). Incluye S&P 500, Nasdaq 100, Dow Jones, WTI, Oro, Bitcoin, EUR/USD y más. Fuente: Yahoo Finance vía rendimientos.co.
-    *   **🏛️ Bonos Soberanos USD:** Tabla con tickers de bonos argentinos en dólares (AL29, AL30, GD30, GD35, etc.), precio USD, bid/ask, variación % y volumen. Fuente: data912.
-    *   **📜 LECAPs / BONCAPs:** Tarjetas con los principales instrumentos de renta fija en pesos (Letras Capitalizables y Bonos Capitalizables), mostrando ticker, precio, tipo y spread bid/ask. Fuente: data912.
-    *   **🏢 Obligaciones Negociables (ONs):** Tabla de ONs corporativas en USD con precio, bid/ask y variación %. Fuente: data912.
-    *   **📊 CEDEARs:** Los 40 CEDEARs más operados del día ordenados por volumen, con precio ARS, variación %, volumen y spread. Fuente: data912.
-*   **Cotizaciones del Dólar:** En la cabecera del módulo se muestran cuatro indicadores clave: Dólar MEP, Dólar CCL, Dólar Blue y Riesgo País, actualizados automáticamente.
+Fluxo organiza las finanzas a través de tres pilares fundamentales:
+1. **Entornos Presupuestarios (Multi-Cuenta)**: Permite separar la contabilidad en cuentas lógicas independientes (ej. `Personal`, `Hogar`, `Negocio`) manteniendo trazabilidad completa en operaciones cruzadas (clearing y reintegros).
+2. **Criterio de Devengamiento vs. Pago Diferido**:
+   - Los gastos en efectivo o transferencia se imputan al día de la transacción.
+   - **Regla de Oro en Tarjetas de Crédito**: Los consumos realizados con tarjeta de crédito se imputan **siempre a la fecha de vencimiento del resumen** (`stVto`), difiriendo el egreso de liquidez al período en que efectivamente se produce la salida de fondos.
+3. **Control Dual de Pagos (Saldados vs. Pendientes)**: Visión clara entre los compromisos devengados y aquellos que ya fueron efectivamente cancelados en el mes.
 
 ---
 
-## 2. Barra Superior (Topbar)
+## 2. Barra Superior (Topbar Global)
 
-Siempre presente en la parte superior, provee acceso a configuraciones transversales al sistema:
-
-*   **Selector de Meses:** Dado que los reportes son periódicos, te permite avanzar o retroceder de mes calendario. Todos los movimientos y reportes se actualizarán al mes escogido.
-*   **Selector de Entorno Presupuestario (Multi-Cuenta):** El núcleo duro del sistema te permite saltar ágilmente entre, por ejemplo, los tableros del "Presupuesto Personal", "Presupuesto Familiar" o "Negocio Propio". Todo el contenido del resto de módulos se regenera apuntando al entorno selecto sin perder trazabilidad intercompany (cruces entres presupuestos).
-*   **Switch ARS / USD (Bimonetario Global):** Un interruptor de moneda que convierte todos los importes de la aplicación entre Pesos Argentinos y Dólares en tiempo real, utilizando la cotización del Dólar MEP obtenida de rendimientos.co al inicio de la sesión. Al activarse, todos los KPIs, tablas y reportes se re-renderizan automáticamente con los importes convertidos.
-*   **🔔 Centro de Notificaciones:** Icono de campana con badge indicador. Muestra alertas mensuales relevantes tales como:
-    *   Última cuota de un consumo en tarjeta de crédito (el sistema detecta automáticamente cuándo una serie de cuotas finaliza en el mes actual).
-    *   Nuevo consumo que impacta al mes siguiente (primeros vencimientos de compras recientes).
-*   **🌙 Modo Claro / Oscuro:** Botón de tema para alternar la paleta de colores de la aplicación.
-*   **Configuración (⚙️ Ícono del Panel de Configuración):** Abre las opciones maestras (abm de administraciones) para el comportamiento estático de la app.
+Accesible desde cualquier sección de la app:
+- **Selector de Cuenta / Entorno**: Alterna entre cuentas principales (ej. `Personal`, `Hogar`). Todo el dashboard, movimientos, gráficos y KPIs se reconfiguran en tiempo real para la cuenta seleccionada.
+- **Selector de Mes / Período**: Navega hacia meses pasados o proyecciones futuras (formato `Mes de AAAA`).
+- **Switch Bimonetario (ARS / USD)**: Convierte todos los valores visibles de la aplicación utilizando la cotización del Dólar MEP en tiempo real (vía APIs de mercado).
+- **Botón FluxoAI (`✨ FluxoAI` / `✦ FluxoAI`)**: Despliega el panel lateral de asistencia inteligente estilo WhatsApp.
+- **Centro de Notificaciones (`🔔` con badge)**: Alertas automáticas de vencimientos de resúmenes de tarjeta, fechas de cierre y finalización de cuotas.
+- **Acceso Rápido a Configuración (`⚙️` / `Ajustes` en header)**: Abre el panel de administración maestra del sistema.
 
 ---
 
-## 3. Panel de Configuración (Administrador)
+## 3. Módulo Dashboard (Inicio)
 
-Al hacer clic en la tuerca ⚙️ (arriba a la derecha), se abre un panel flotante de uso indispensable para setear por primera vez la app y luego mantener el sistema:
-
-### 3.1 Cuentas (Movimientos)
-*   *Qué hace:* Define las "billeteras" reales o bancos en donde descansa el dinero. (Ej: Efectivo, BBVA, Macro, MercadoPago).
-*   *Acciones:* Crear, editar y establecer en qué monedas opera cada cuenta, o si requiere ajuste por diferencia de tipo de cambio.
-
-### 3.2 Tarjetas
-*   *Qué hace:* Actúa como creador/editor de tus plásticos.
-*   *Acciones:* Vincular cada tarjeta a una cuenta origen; asignar banco emisor, últimos 4 números para identificarlas, especificar los días típicos de cierre de resumen y cuándo cae el vencimiento, así como marcarlas "Inactivas" en caso de baja o extravío.
-
-### 3.3 Categorías
-*   *Qué hace:* Tu "diccionario" propio de gastos. (Ej: Sueldo, Supermercado, Alquiler, Salidas).
-*   *Acciones:* Crear nuevas categorías y etiquetarlas explícitamente como "Ingreso" o "Egreso".
-
-### 3.4 Subcuentas Ahorro
-*   *Qué hace:* Configura las distintas "alcancías" para el módulo ahorro. (Ej. Ahorros Pesos, Ahorros USD).
-*   *Acciones:* Crear estas cajas o eliminarlas según la estructura de ahorros actualizadas.
-
-### 3.5 Contactos (Gastos Compartidos)
-*   *Qué hace:* Registra el listado de tus contactos o terceros habituales con los que compartes contabilidad (ej. esposa).
-*   *Acciones:* Agregar personas a las cuales frecuentemente les cobras, les debes o con quienes divides gastos frecuentemente.
-
+Pantalla de inicio que consolida el estado patrimonial del mes seleccionado:
+- **Tarjetas de Métricas Vitales (KPIs)**:
+  - **Ingresos Totales**: Suma de sueldos, aportes y otros créditos del mes.
+  - **Gastos Totales**: Suma de egresos, desagregados visualmente en **Saldados** y **Pendientes**.
+  - **Balance / Resultado Neto**: Diferencia entre ingresos y gastos (`Ingresos - Gastos`).
+- **Carrusel de Mercados en Vivo**: Cotizaciones instantáneas de Dólar MEP, CCL, Blue, Riesgo País e instrumentos financieros.
+- **Accesos Rápidos a Módulos**: Botones directos a Tarjetas, Movimientos, Gastos Compartidos, Ahorro e Inversiones.
 
 ---
 
-## 4. Tablero Principal (Dashboard y KPIs)
+## 4. Módulo de Movimientos (Libro Diario)
 
-Al ingresar o encontrarse en el inicio de la aplicación, serás recibido por el **Tablero Principal**, diseñado para darte un resumen visual e interpretativo del estado de tus finanzas en el mes actual.
+Es el registro contable detallado de todos los ingresos y gastos de la cuenta activa.
 
-### 4.1 Tarjetas de Indicadores (KPIs)
-En la parte superior, se visualizan las métricas vitales del mes en curso:
-*   **Balance Mensual:** Refleja el resultado operativo (Total Ingresos menos Total Egresos del entorno presupuestario seleccionado).
-*   **Total de Ingresos y Egresos:** Sumatoria rápida que te ayuda a mantener el margen controlado.
-*   **Ahorro Generado:** Indicador rápido de qué parte de tu capital se ha resguardado en el mes vigente.
-*   **Compromisos de Tarjeta:** Estimación rápida o consolidada del pago a enfrentar en el próximo cierre.
+### 4.1 Barra de Control de Pagos
+En la parte superior se visualiza:
+- **Gastos Saldados (Abonados)**: Importe total y porcentaje (`X%`) en verde.
+- **Gastos Pendientes de Pago**: Importe total y porcentaje (`Y%`) en ámbar.
+- **Barra de Progreso Visual**: Representación proporcional de la liquidez ya comprometida vs. pendiente.
 
-### 4.2 Gráficos y Reportes
-*   **Evolución:** Gráficos intuitivos para comprender la distribución de las finanzas y el ritmo o tendencia de los gastos frente a tus ingresos.
+### 4.2 Carga de Movimientos (Modal de Alta)
+- **Tipo de Movimiento**:
+  - `Ingreso`: Ingreso de dinero. Admite **Split Multi-Cuenta (%)** para distribuir un salario entre Personal y Hogar de manera automática.
+  - `Gasto`: Salida de fondos.
+- **Modalidad de Cálculo de Monto**:
+  - **Monto Fijo**: Carga tradicional de importe en moneda seleccionada.
+  - **% sobre Ingresos de la Cuenta**: Calcula dinámicamente el monto en función de los ingresos percibidos en el mes de la cuenta destino.
+    - Botones predeterminados:
+      - `25% (Super)`: Presupuesto para supermercado (25% de los ingresos de la cuenta).
+      - `÷ 5.5 (Verdu)`: Presupuesto para verdulería (supermercado / 5.5 = 4.55% de los ingresos).
+      - `1%`, `5%`, `10%` y campo numérico libre para cualquier porcentaje.
+    - Muestra en tiempo real el total de ingresos de la cuenta y el monto exacto calculado antes de guardar.
+- **Frecuencia / Tipo de Egresos**:
+  - `Simple / Contado`: Impacta exclusivamente en la fecha indicada.
+  - `En Cuotas`: Solicita número de cuota actual y cuotas totales (ej. 1/6), proyectando automáticamente los meses subsiguientes.
+  - `Recurrente`: Gastos fijos continuos (servicios, alquiler, cuotas de colegios) que se replican mensualmente.
+
+### 4.3 Tabla de Movimientos y Acciones
+- **Columna "Estado Pago"**: Badge interactivo que permite alternar con un solo clic entre:
+  - `✓ Saldado`: Gasto ya cancelado o debitado.
+  - `⏳ Pendiente`: Gasto previsto pendiente de pago.
+- **Memoria de Navegación**: Al editar o eliminar un movimiento desde la página 2, 3 o posterior de la grilla, la tabla conserva la página activa y restaura el scroll exacto de la pantalla, resaltando suavemente la fila editada.
+
+### 4.4 Vista "Análisis Gráfico" (No Invasiva)
+Mediante el selector `[ 📋 Movimientos | 📊 Análisis Gráfico ]`:
+- **Gráfico Doughnut (Chart.js)**: Distribución de gastos por categoría.
+- **Doble Métrica Analítica por Categoría**:
+  - **% sobre Gastos Totales**: Proporción que representa la categoría dentro del total de egresos.
+  - **% sobre Ingresos Percibidos**: Impacto de la categoría sobre el dinero total que ingresó en el mes (útil para evaluar reglas como 50/30/20).
 
 ---
 
-## 5. Fuentes de Datos Externos
+## 5. Módulo de Tarjetas de Crédito
 
-La aplicación se integra con las siguientes fuentes de datos financieros en tiempo real:
+Administra plásticos bancarios y compras financiadas como medio de pago transversal.
 
-| Fuente | Datos | Uso |
-|---|---|---|
-| **rendimientos.co** | Indicadores globales, LECAPs, ONs, Bonos Soberanos, CEDEARs | Monitor Global de Inversiones |
-| **dolarapi.com** | Cotizaciones Dólar (oficial, MEP, CCL, Blue) | Cabecera de Inversiones + Switch Bimonetario |
-| **data912.com** | Precios en tiempo real de instrumentos argentinos | Backend de rendimientos.co |
-| **Yahoo Finance** | S&P 500, Nasdaq, commodities, crypto, FX | Backend de rendimientos.co |
+### 5.1 Bento Cards de Plásticos
+- Despliegue visual de cada tarjeta (ej. Visa Santander, Amex) con estética de plástico bancario, últimos 4 dígitos, saldo en ARS y saldo en USD.
+- Opción `CONSOLIDADO` para ver la deuda acumulada de todas las tarjetas.
+- **KPIs del Resumen**: Deuda Total, Incidencia Personal (lo que gastaste vos) e Incidencia Externa (gastos imputados a otras cuentas como Hogar).
+
+### 5.2 Regla de Imputación al Vencimiento
+- Al cargar o importar consumos de tarjeta, la fecha del consumo se establece en la **fecha de vencimiento del resumen** (`stVto`), difiriendo el gasto al período en que efectivamente se liquida.
+
+### 5.3 Botón "💳 Pagar Resumen"
+- Cuando el resumen cuenta con saldo pendiente, se habilita el botón de pago.
+- Al confirmar:
+  1. Registra un **EGRESO** en la cuenta de la tarjeta (Personal) por el total liquidado (`Pago Resumen: Visa Santander`).
+  2. Confirma los **INGRESOS** por reintegros provenientes de Hogar por consumos familiares pagados con la tarjeta.
+  3. Asegura en Hogar los **EGRESOS** correspondientes a esos consumos imputados.
+  4. Marca todos los consumos del período como **Saldados ✓**.
+
+### 5.4 Importación Inteligente de Resúmenes en PDF
+- Permite subir el archivo PDF oficial emitido por el banco (ej. Visa Santander).
+- El motor de IA extrae automáticamente:
+  - Fechas de cierre y vencimiento.
+  - Saldo en ARS y USD, y pago mínimo.
+  - Lista completa de consumos discriminando cuotas (X/Y), compras en un pago, impuestos asociados (IVA, Sellos, Percepciones) y débitos automáticos.
+  - Recuerda reglas de imputación aprendidas (ej. seguros, combustible, streaming).
+
+### 5.5 Gráficos por Categoría en Tarjetas
+- Switch `[ Gráficos ]` que despliega el gráfico Doughnut de consumos por rubro y el desglose de incidencia personal vs externa.
 
 ---
 
-## 6. Flujo de Trabajo Sugerido (Día a Día)
+## 6. Módulo de Gastos Compartidos (Cuentas Corrientes)
 
-Para sacar el máximo provecho de la herramienta, se recomienda la siguiente rutina de uso:
+Controla los saldos a favor o en contra con terceros (pareja, familiares, socios):
+- **Listado de Contactos**: Balance neto con cada persona (verde = te debe, rojo = le debés).
+- **Registro de Consumos Compartidos**: Permite dividir gastos indicando porcentajes o montos directos.
+- **Liquidación / Clearing**: Opción para saldar deudas registrando movimientos de compensación en cuenta.
 
-1.  **Día de Cobro (Ingresos):** Registra tu sueldo o ingresos extras desde la sección *Movimientos -> Añadir*. Utiliza la función de **Carga Multi-Cuenta (Split)** si necesitas por ejemplo, enviar un porcentaje automático al Presupuesto Familiar y el saldo retenerlo en el Presupuesto Personal.
-2.  **Registrar Consumos (Egresos):** Carga todas tus compras. En caso de usar financiación, no olvides seleccionar "En Cuotas" especificando la cantidad de pagos. La herramienta se encargará de proyectar dicho gasto en los meses futuros automáticamente.
-3.  **Gastos Compartidos (Cuentas Corrientes):** Cuando pagues algo por otra persona (o paguen algo por ti), crea un ingreso/egreso proporcional asintiendo qué contacto está involucrado y qué porcentaje asume cada uno. Luego dirígete al módulo *Gastos Compartidos* para liquidar y compensar los saldos ("Clearing").
-4.  **Consultar Mercados:** Ingresa al módulo *Inversiones → Monitor Global* para revisar cotizaciones de bonos, CEDEARs, LECAPs y mercados internacionales antes de tomar decisiones.
-5.  **Revisión y Ajuste (Fin de mes):** Acude a tu *Dashboard* para observar el Balance Mensual. Revisa las 🔔 notificaciones para enterarte de cuotas que finalizan. Dirígete al módulo *Ahorro* y/o *Inversiones* para actualizar las diferencias de cambio o rendimientos generados por tus ahorros capitalizados.
+---
+
+## 7. Módulo de Ahorro (Chanchito Bimonetario)
+
+Gestión de fondos de reserva y patrimonio líquido:
+- **Bóvedas / Subcuentas**: Creación de alcancías en ARS o USD (ej. Fondo de Emergencia, Vacaciones, Ahorro Inmobiliario).
+- **Ingreso y Retiro de Fondos**: Transferencia de saldos entre la cuenta principal y el chanchito.
+
+---
+
+## 8. Módulo de Inversiones
+
+Seguimiento de cartera y cotizaciones financieras:
+- **Cartera de Activos**: Tickers de acciones, CEDEARs, Bonos Soberanos, LECAPs y Obligaciones Negociables.
+- **Monitor Global de Mercados**:
+  - Dólar MEP, CCL, Blue y Riesgo País actualizados.
+  - Cotizaciones en vivo de bonos argentinos (AL30, GD30, etc.), tasas de LECAPs y rendimientos de ONs en dólares.
+  - Índices globales y commodities (S&P 500, Nasdaq, Petróleo, Oro, Cripto).
+
+---
+
+## 9. Asistente Inteligente (FluxoAI)
+
+Chatbot financiero inteligente integrado en panel lateral:
+- **Experiencia de Conversación Progresiva (Estilo WhatsApp)**:
+  - Al abrirse, la ventana se posiciona directamente en el último mensaje de la conversación.
+  - Al deslizar hacia arriba (`scrollTop <= 40px`), carga de 10 en 10 los mensajes anteriores manteniendo fija la posición de pantalla.
+- **Asesoría Financiera Personalizada**:
+  - Analiza la salud financiera con la regla 50/30/20 evaluando los porcentajes de cada categoría sobre gastos y sobre ingresos.
+  - Alertas sobre compromisos pendientes de pago antes de los vencimientos.
+- **Extracción de Movimientos desde Archivos**:
+  - Al adjuntar facturas, tickets o resúmenes bancarios (PDF/imágenes), extrae las transacciones y ofrece un botón directo para incorporar todos los movimientos a la cuenta en 1 clic.
+- **Notificaciones Proactivas y Bot de Telegram**: Envío automático de alertas de cierres y vencimientos de resúmenes de tarjeta.
+
+---
+
+## 10. Panel de Configuración y Administración (⚙️)
+
+Accesible desde el ícono de engranaje:
+1. **Cuentas Principales**: Alta, edición y configuración de módulos activos por cuenta.
+2. **Tarjetas de Crédito**: Gestión de plásticos, límites, fechas de cierre/vencimiento y cuenta vinculada.
+3. **Categorías**: Catálogo personalizado de ingresos y gastos.
+4. **Subcuentas de Ahorro**: Gestión de bolsas del chanchito.
+5. **Contactos**: Directorio para cuentas corrientes compartidas.
+6. **Recordatorios**: Configuración de alertas automáticas para Telegram y Web.

@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Fluxo — Manual For Dummies</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  @page {
+    size: A4;
+    margin: 16mm 14mm 16mm 14mm;
+    @bottom-right {
+      content: counter(page);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 8pt;
+      color: #94a3b8;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #1e293b;
+    background-color: #ffffff;
+    line-height: 1.55;
+    font-size: 9.5pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  .cover-page {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    page-break-after: always;
+    padding: 30mm 15mm 20mm 15mm;
+    background: linear-gradient(145deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
+    color: #ffffff;
+    border-radius: 12px;
+  }
+
+  .cover-badge {
+    display: inline-block;
+    background: rgba(99, 102, 241, 0.25);
+    border: 1px solid rgba(165, 180, 252, 0.4);
+    color: #c7d2fe;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 8.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .cover-title {
+    font-size: 34pt;
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 20px 0 10px 0;
+    background: linear-gradient(90deg, #ffffff 0%, #a5b4fc 50%, #f472b6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .cover-subtitle {
+    font-size: 14pt;
+    font-weight: 400;
+    color: #cbd5e1;
+    max-width: 90%;
+    line-height: 1.4;
+  }
+
+  .cover-dummies-badge {
+    background: #f59e0b;
+    color: #0f172a;
+    font-size: 13pt;
+    font-weight: 800;
+    display: inline-block;
+    padding: 6px 18px;
+    border-radius: 8px;
+    transform: rotate(-2deg);
+    margin-top: 15px;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+  }
+
+  .cover-features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 30px;
+  }
+
+  .cover-feature-item {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+
+  .cover-feature-item strong {
+    color: #a5b4fc;
+    display: block;
+    font-size: 9pt;
+  }
+  .cover-feature-item span {
+    color: #94a3b8;
+    font-size: 8pt;
+  }
+
+  .cover-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    padding-top: 15px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8pt;
+    color: #94a3b8;
+  }
+
+  /* CONTENT STYLES */
+  h1 {
+    font-size: 16pt;
+    font-weight: 800;
+    color: #0f172a;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 5px;
+    margin-top: 24px;
+    margin-bottom: 12px;
+    page-break-after: avoid;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  h1 .ch-num {
+    background: #6366f1;
+    color: white;
+    font-size: 9pt;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+  }
+
+  h2 {
+    font-size: 12pt;
+    font-weight: 700;
+    color: #334155;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    page-break-after: avoid;
+  }
+
+  h3 {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #475569;
+    margin-top: 12px;
+    margin-bottom: 6px;
+    page-break-after: avoid;
+  }
+
+  p {
+    margin: 0 0 8px 0;
+    text-align: justify;
+  }
+
+  /* CALLOUT BOXES FOR DUMMIES */
+  .box {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    page-break-inside: avoid;
+    font-size: 9pt;
+  }
+
+  .box-tip {
+    background: #ecfdf5;
+    border-left: 4px solid #10b981;
+    color: #065f46;
+  }
+  .box-tip strong { color: #047857; }
+
+  .box-warning {
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    color: #92400e;
+  }
+  .box-warning strong { color: #b45309; }
+
+  .box-info {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    color: #1e40af;
+  }
+  .box-info strong { color: #1d4ed8; }
+
+  .box-ninja {
+    background: #faf5ff;
+    border-left: 4px solid #a855f7;
+    color: #581c87;
+  }
+  .box-ninja strong { color: #7e22ce; }
+
+  /* STEPS */
+  .step-list {
+    counter-reset: step-counter;
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+  }
+  .step-list li {
+    counter-increment: step-counter;
+    position: relative;
+    padding-left: 32px;
+    margin-bottom: 8px;
+  }
+  .step-list li::before {
+    content: counter(step-counter);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    background: #6366f1;
+    color: white;
+    font-size: 8pt;
+    font-weight: 700;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* TABLES */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+
+  th {
+    background: #f1f5f9;
+    color: #334155;
+    text-align: left;
+    padding: 7px 10px;
+    font-weight: 700;
+    border-bottom: 2px solid #cbd5e1;
+  }
+
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+  }
+
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  /* BADGES */
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .badge-green { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .badge-amber { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+  .badge-blue { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .badge-purple { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+
+  /* UI SIMULATOR CARDS */
+  .ui-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    page-break-inside: avoid;
+  }
+  .ui-card-header {
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 9pt;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 4px;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .page-break {
+    page-break-after: always;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: #f1f5f9;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 8pt;
+    color: #4338ca;
+  }
+
+  .footer-note {
+    text-align: center;
+    font-size: 8pt;
+    color: #94a3b8;
+    margin-top: 30px;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- PORTADA -->
+<div class="cover-page">
+  <div>
+    <div class="cover-badge">Manual de Usuario Oficial</div>
+    <div class="cover-title">FLUXO</div>
+    <div class="cover-subtitle">El control inteligente, bimonetario y definitivo de tus finanzas personales y del hogar.</div>
+    <div class="cover-dummies-badge">EDICIÓN FOR DUMMIES — SIN VUELTAS</div>
+  </div>
+
+  <div>
+    <p style="color: #cbd5e1; font-size: 9pt; line-height: 1.5; margin-bottom: 15px;">
+      ¿Cansado de no saber en qué se te fue la plata a fin de mes? ¿Te da miedo abrir el resumen de la tarjeta de crédito? ¿No sabés cómo repartir los gastos de tu casa sin discutir? <strong>Este manual está hecho para vos:</strong> sin tecnicismos contables, con ejemplos de la vida real y paso a paso para dominar cada botón de la app.
+    </p>
+
+    <div class="cover-features">
+      <div class="cover-feature-item">
+        <strong>🏠 Multi-Cuenta Personal & Hogar</strong>
+        <span>Separá tu sueldo de los gastos de la casa en un clic.</span>
+      </div>
+      <div class="cover-feature-item">
+        <strong>💳 Tarjetas con Imputación al Vto</strong>
+        <span>Nunca más una sorpresa: los gastos impactan cuando se pagan.</span>
+      </div>
+      <div class="cover-feature-item">
+        <strong>🛒 Gastos por % Dinámico</strong>
+        <span>Supermercado al 25% y verdulería calculada automáticamente.</span>
+      </div>
+      <div class="cover-feature-item">
+        <strong>✨ Asistente IA FluxoAI</strong>
+        <span>Chat progresivo estilo WhatsApp y lectura de tickets en 1 toque.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cover-footer">
+    <span>Versión 2.5 — Bimonetaria (ARS / USD)</span>
+    <span>Septiembre 2026 • Desarrollado con ❤️ para simplificar tu vida</span>
+  </div>
+</div>
+
+<!-- ÍNDICE -->
+<h1><span class="ch-num">ÍNDICE</span> ¿Qué hay adentro de esta guía?</h1>
+<table style="margin-top: 15px;">
+  <thead>
+    <tr>
+      <th style="width: 15%;">Capítulo</th>
+      <th>Tema</th>
+      <th style="width: 30%;">¿De qué me sirve aprender esto?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Capítulo 1</strong></td>
+      <td><strong>La Filosofía Fluxo</strong></td>
+      <td>Entender las 2 cuentas (Personal vs Hogar) y la Regla de Oro de las tarjetas.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 2</strong></td>
+      <td><strong>La Barra Superior (El Tablero de Mandos)</strong></td>
+      <td>Cambiar de cuenta, de mes, pasar a dólares y encontrar todas las alertas.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 3</strong></td>
+      <td><strong>El Dashboard (Inicio)</strong></td>
+      <td>Leer tus finanzas en 5 segundos: Sueldo, Gastos, Balance y Dólar MEP.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 4</strong></td>
+      <td><strong>Movimientos (Tu Libro Diario)</strong></td>
+      <td>Cargar gastos, porcentajes dinámicos, cuotas, el semáforo y los nuevos gráficos.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 5</strong></td>
+      <td><strong>Tarjetas de Crédito Sin Estrés</strong></td>
+      <td>Subir el PDF del banco, saber quién paga qué y el botón mágico "Pagar Resumen".</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 6</strong></td>
+      <td><strong>Gastos Compartidos (Amigos y Pareja)</strong></td>
+      <td>Llevar la cuenta clara de quién le debe a quién sin planillas de Excel.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 7</strong></td>
+      <td><strong>El Chanchito de Ahorros</strong></td>
+      <td>Armar fondos de reserva en pesos y dólares sin mezclarlos con el día a día.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 8</strong></td>
+      <td><strong>Inversiones y Mercados en Vivo</strong></td>
+      <td>Seguir tus CEDEARs, bonos, LECAPs y ver el Dólar Blue y MEP al instante.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 9</strong></td>
+      <td><strong>FluxoAI y Telegram</strong></td>
+      <td>Tu asistente que te lee tickets, responde por WhatsApp y te avisa vencimientos.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 10</strong></td>
+      <td><strong>Configuración (⚙️ La Cocina de Fluxo)</strong></td>
+      <td>Crear tarjetas, agregar categorías y ajustar tus cuentas maestras.</td>
+    </tr>
+    <tr>
+      <td><strong>Capítulo 11</strong></td>
+      <td><strong>Chuleta Rápida "For Dummies"</strong></td>
+      <td>Resumen relámpago de "¿Qué quiero hacer y dónde toco?".</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="box box-ninja">
+  <strong>💡 Consejo Ninja For Dummies:</strong> No necesitás leer todo este manual de un tirón. Tenelo a mano y leé el capítulo que necesites cuando estés frente a la app. Si tenés dudas, ¡el botón ✨ <strong>FluxoAI</strong> en la app te responde exactamente lo mismo en lenguaje cotidiano!
+</div>
+
+<div class="page-break"></div>
+
+<!-- CAPÍTULO 1 -->
+<h1><span class="ch-num">01</span> La Filosofía Fluxo: Las 2 Reglas Sagradas</h1>
+<p>Antes de apretar botones, necesitás entender las dos ideas clave que hacen que Fluxo sea diferente a cualquier app de finanzas que hayas probado antes.</p>
+
+<h2>Regla Sagrada 1: Tus Cuentas Separadas (Personal vs. Hogar)</h2>
+<p>La mayoría de la gente mezcla todo: el sueldo, la compra del súper, la cuota del gimnasio, el colegio de los chicos y la salida con amigos. Al final del mes nadie sabe si la plata no alcanzó porque la casa es cara o porque gastaste de más en salidas.</p>
+<div class="grid-2">
+  <div class="ui-card">
+    <div class="ui-card-header">👤 Cuenta PERSONAL</div>
+    <p style="font-size: 8pt; color: #475569; margin: 0;">
+      Es <strong>tu mundo</strong>: tu sueldo íntegro, tus gustos, tu ropa, tus salidas personales, tus tarjetas de crédito bancarias y tus ahorros individuales.
+    </p>
+  </div>
+  <div class="ui-card">
+    <div class="ui-card-header">🏠 Cuenta HOGAR</div>
+    <p style="font-size: 8pt; color: #475569; margin: 0;">
+      Es la <strong>economía familiar</strong>: el supermercado, el alquiler, las expensas, luz, gas, internet, el colegio y los gastos de los chicos.
+    </p>
+  </div>
+</div>
+
+<h2>Regla Sagrada 2: Las Tarjetas se Imputan al VENCIMIENTO</h2>
+<div class="box box-warning">
+  <strong>⚠️ ¡Ojo al Piojo con este concepto!:</strong> Cuando vas a comprar zapatillas el 10 de Agosto con tarjeta de crédito en 1 pago, <em>tu cuenta bancaria no pierde un solo peso el 10 de Agosto</em>. La plata te la van a sacar recién el <strong>5 de Septiembre</strong>, cuando venza el resumen del banco.
+</div>
+<p>Por eso, en Fluxo, <strong>todos los consumos de tarjeta se anotan directamente en el mes en que vence el resumen</strong>. Si comprás en Agosto pero vence en Septiembre, el gasto aparecerá en Septiembre. ¿Por qué? Porque en Septiembre es cuando tenés que tener el dinero listo en la cuenta para pagarlo.</p>
+
+<h2>Regla Sagrada 3: El Semáforo de Pagos (Saldado vs. Pendiente)</h2>
+<p>Ver que tenés $400.000 de gastos en el mes no te dice si te vas a quedar sin plata mañana. Lo que necesitás saber es: <strong>¿cuánto de eso ya pagué y cuánto todavía tengo que pagar?</strong></p>
+<ul>
+  <li><span class="badge badge-green">✓ Saldado</span>: La plata ya salió de tu banco o bolsillo (ej. pagaste la luz ayer, o pagaste el resumen).</li>
+  <li><span class="badge badge-amber">⏳ Pendiente</span>: Es un gasto que sabés que tenés en el mes pero todavía no se debitó (ej. el alquiler que vence el 10).</li>
+</ul>
+
+<div class="page-break"></div>
+
+<!-- CAPÍTULO 2 -->
+<h1><span class="ch-num">02</span> La Barra Superior (Tu Tablero de Mandos)</h1>
+<p>Arriba de todo en la pantalla tenés la barra de navegación permanente. No importa dónde estés, estos botones siempre están disponibles:</p>
+
+<table style="margin-top: 10px;">
+  <thead>
+    <tr>
+      <th style="width: 25%;">Control / Botón</th>
+      <th style="width: 20%;">¿Dónde está?</th>
+      <th>¿Para qué sirve? (En criollo)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Selector de Cuenta</strong></td>
+      <td>Arriba a la izquierda</td>
+      <td>Hacé clic para cambiar entre <strong>Personal</strong> y <strong>Hogar</strong>. Toda la pantalla se adapta al instante.</td>
+    </tr>
+    <tr>
+      <td><strong>Selector de Mes</strong></td>
+      <td>Al lado de la cuenta</td>
+      <td>Te permite viajar en el tiempo: andá para atrás para ver meses viejos o andá para adelante para ver qué cuotas te esperan.</td>
+    </tr>
+    <tr>
+      <td><strong>Switch ARS / USD</strong></td>
+      <td>Centro / Derecha</td>
+      <td>Tocalo y todos los números pasan de Pesos a Dólares calculados con el <strong>Dólar MEP en vivo</strong>. Ideal para saber cuánto valen tus gastos en plata dura.</td>
+    </tr>
+    <tr>
+      <td><strong>✨ FluxoAI</strong></td>
+      <td>Botón violeta brillante</td>
+      <td>Abre tu copiloto financiero inteligente. Podés chatear, mandarle fotos de tickets o pedirle consejos de ahorro.</td>
+    </tr>
+    <tr>
+      <td><strong>Campanita 🔔</strong></td>
+      <td>Extremo derecho</td>
+      <td>Si tiene un circulito rojo, ¡atención!: te avisa que una tarjeta está por vencer o cerrar.</td>
+    </tr>
+    <tr>
+      <td><strong>Ruedita ⚙️</strong></td>
+      <td>Extremo derecho</td>
+      <td>Abre el panel de administración maestra para crear tarjetas, categorías y cuentas.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- CAPÍTULO 3 -->
+<h1><span class="ch-num">03</span> El Dashboard (Inicio): La Foto de tu Mes en 5 Segundos</h1>
+<p>Al entrar a Fluxo te recibe el Dashboard. Está diseñado para que en un vistazo sepas si estás en verde o en rojo.</p>
+
+<div class="ui-card">
+  <div class="ui-card-header">📊 LAS 3 TARJETAS PRINCIPALES (KPIs)</div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 6px;">
+    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+      <div style="font-size: 7.5pt; color: #64748b; font-weight: 700;">INGRESOS TOTALES</div>
+      <div style="font-size: 11pt; color: #16a34a; font-weight: 800;">$ 1.500.000</div>
+      <div style="font-size: 7.5pt; color: #94a3b8;">Tu sueldo y aportes del mes</div>
+    </div>
+    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+      <div style="font-size: 7.5pt; color: #64748b; font-weight: 700;">GASTOS DEL MES</div>
+      <div style="font-size: 11pt; color: #dc2626; font-weight: 800;">$ 950.000</div>
+      <div style="font-size: 7.5pt; color: #94a3b8;">Saldados: $600k | Pendientes: $350k</div>
+    </div>
+    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+      <div style="font-size: 7.5pt; color: #64748b; font-weight: 700;">BALANCE NETO</div>
+      <div style="font-size: 11pt; color: #2563eb; font-weight: 800;">+ $ 550.000</div>
+      <div style="font-size: 7.5pt; color: #94a3b8;">Lo que te queda libre a fin de mes</div>
+    </div>
+  </div>
+</div>
+
+<h2>El Carrusel de Mercados en Vivo</h2>
+<p>Debajo de las tarjetas tenés una cinta que corre con los valores financieros del día en Argentina: <strong>Dólar MEP, Dólar CCL, Dólar Blue y el Riesgo País</strong>. Si tenés ahorros en dólares o querés cambiar plata, tenés el precio exacto sin entrar a páginas de noticias.</p>
+
+<div class="page-break"></div>
+
+<!-- CAPÍTULO 4 -->
+<h1><span class="ch-num">04</span> Movimientos: Tu Libro Diario Sin Dolores de Cabeza</h1>
+<p>En la sección <strong>Movimientos</strong> es donde vive la verdad de tu dinero. Acá vas a cargar todo lo que entra y todo lo que sale.</p>
+
+<h2>4.1 La Barra de Control de Pagos (Arriba de la Tabla)</h2>
+<p>Antes de ver la lista, mirá la barrita de progreso superior:</p>
+<div class="ui-card">
+  <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 8.5pt; margin-bottom: 4px;">
+    <span style="color: #16a34a;">✓ Abonado: $ 600.000 (63%)</span>
+    <span style="color: #d97706;">⏳ Por Pagar: $ 350.000 (37%)</span>
+  </div>
+  <div style="width: 100%; height: 10px; background: #fde68a; border-radius: 5px; overflow: hidden; display: flex;">
+    <div style="width: 63%; height: 100%; background: #22c55e;"></div>
+  </div>
+</div>
+<p>Si la barra verde va creciendo, significa que vas al día con tus pagos. Si termina el mes y la barra naranja sigue alta, ¡revisá qué cuentas te faltan pagar!</p>
+
+<h2>4.2 ¿Cómo Cargar un Ingreso y Repartirlo con el Hogar?</h2>
+<ol class="step-list">
+  <li>Hacé clic en el botón <strong>"+ Nuevo Movimiento"</strong>.</li>
+  <li>Elegí <strong>Tipo: Ingreso</strong> y poné la fecha y descripción (ej. <em>Sueldo Septiembre</em>).</li>
+  <li><strong>¡El Superpoder del Split!</strong> Si querés que el 60% vaya al Hogar y el 40% quede en tu cuenta Personal, activá <em>"Dividir con Hogar (%)"</em> y poné 60%. ¡Fluxo crea los dos movimientos automáticamente en cada cuenta!</li>
+</ol>
+
+<h2>4.3 ¿Cómo Cargar un Gasto? (Monto Fijo vs. Porcentaje Dinámico)</h2>
+<p>Acá es donde Fluxo te ahorra horas con la calculadora. Cuando abrís el modal para cargar un gasto, tenés dos formas de definir el monto:</p>
+
+<div class="grid-2">
+  <div class="ui-card">
+    <div class="ui-card-header">💵 Opción A: Monto Fijo</div>
+    <p style="font-size: 8pt; color: #475569;">
+      La clásica. Pagaste $15.000 de internet, escribís <code>15000</code> y listo.
+    </p>
+  </div>
+  <div class="ui-card">
+    <div class="ui-card-header">⚡ Opción B: % sobre Ingresos (¡NUEVO!)</div>
+    <p style="font-size: 8pt; color: #475569;">
+      Ideal para <strong>Supermercado y Verdulería</strong>. No cargues un número fijo: calculalo como un porcentaje del sueldo que entró a la cuenta.
+    </p>
+  </div>
+</div>
+
+<div class="box box-ninja">
+  <strong>🛒 Presets Rápidos de Porcentaje:</strong>
+  <ul>
+    <li><strong>Botón <code>25% (Super)</code></strong>: Si al Hogar le ingresaron $1.000.000, al tocar este botón te calcula solito <strong>$250.000</strong> de presupuesto de supermercado.</li>
+    <li><strong>Botón <code>÷ 5.5 (Verdu)</code></strong>: La regla mágica de verdulería. Toma el presupuesto de supermercado y lo divide por 5.5 (representa el <strong>4.55%</strong> de los ingresos). Si ingresó $1.000.000, te asigna <strong>$45.454</strong> sin que hagas cuentas.</li>
+    <li><strong>Botones <code>1%</code>, <code>5%</code>, <code>10%</code></strong> o campo libre para poner el porcentaje que quieras.</li>
+  </ul>
+</div>
+
+<h2>4.4 El Semáforo de Pagos en la Tabla</h2>
+<p>En cada fila de la lista de gastos vas a ver una etiqueta que dice <span class="badge badge-green">✓ Saldado</span> o <span class="badge badge-amber">⏳ Pendiente</span>. <strong>Haciendo clic directamente sobre la etiqueta, cambia de estado al instante</strong>. ¡No tenés que entrar a editar nada!</p>
+
+<div class="page-break"></div>
+
+<h2>4.5 Vista "Análisis Gráfico" (Doble Métrica)</h2>
+<p>Arriba a la derecha de la tabla tenés el selector: <code>[ 📋 Movimientos | 📊 Análisis Gráfico ]</code>. Tocalo y vas a ver el gráfico de torta de tus gastos:</p>
+<ul>
+  <li><strong>% sobre Gastos</strong>: Te dice qué porción de tu torta de gastos se llevó cada rubro (ej. <em>Supermercado fue el 40% de mis gastos</em>).</li>
+  <li><strong>% sobre Ingresos</strong>: Te dice cuánto te comió de tu sueldo total (ej. <em>Supermercado se comió el 25% de mi sueldo</em>). ¡Así sabés si estás gastando de más!</li>
+</ul>
+
+<!-- CAPÍTULO 5 -->
+<h1><span class="ch-num">05</span> Tarjetas de Crédito: ¡Basta de Sufrir con los Resúmenes!</h1>
+<p>La tarjeta de crédito es una gran herramienta si sabés controlarla, o una trampa si no sabés cuánto debés. Fluxo te da control total.</p>
+
+<h2>5.1 Las Bento Cards (Tus Plásticos en Pantalla)</h2>
+<p>En la pantalla de Tarjetas vas a ver una tarjeta gráfica por cada plástico (ej. <em>Visa Santander</em>, <em>Amex</em>). Te muestra:</p>
+<ul>
+  <li>Los últimos 4 dígitos y banco.</li>
+  <li>La deuda acumulada en <strong>Pesos ($)</strong> y en <strong>Dólares (USD)</strong>.</li>
+  <li>La fecha de <strong>Cierre</strong> (hasta cuándo podés comprar) y de <strong>Vencimiento</strong> (cuándo hay que pagar).</li>
+  <li>Un botón <strong>"CONSOLIDADO"</strong> para ver la suma de todas tus tarjetas juntas.</li>
+</ul>
+
+<h2>5.2 Subir el PDF Oficial del Banco (Magia con IA)</h2>
+<p>Olvidate de tipear 40 consumos a mano. Cuando tu banco te manda el mail con el resumen:</p>
+<ol class="step-list">
+  <li>Descargá el archivo PDF oficial del banco.</li>
+  <li>En Fluxo, andá a Tarjetas y hacé clic en <strong>"Subir Resumen PDF"</strong>.</li>
+  <li>La IA lee todo: consumos, cuotas (ej. 2/6), débitos automáticos, IVA, Sellos e Impuesto PAIS.</li>
+  <li>Revisás la lista en un segundo y confirmás. ¡Listo! Todo cargado con fecha de vencimiento.</li>
+</ol>
+
+<h2>5.3 Gastos Personales vs. Gastos del Hogar con Tarjeta</h2>
+<div class="box box-info">
+  <strong>🤔 ¿Qué pasa si pagué el supermercado con mi tarjeta personal?</strong><br>
+  En el resumen, al consumo de supermercado le ponés <em>Imputar a: <strong>Hogar</strong></em>. De esa manera:
+  <ul>
+    <li>En tu tarjeta Personal queda anotado que hay que pagarle al banco.</li>
+    <li>Pero el gasto contable se anota en la cuenta <strong>Hogar</strong>.</li>
+    <li>Y el Hogar te reconoce a vos que te debe esa plata. ¡Cuentas clarísimas!</li>
+  </ul>
+</div>
+
+<div class="page-break"></div>
+
+<h2>5.4 El Botón Mágico: "💳 Pagar Resumen"</h2>
+<p>Llegó el día del vencimiento. Entraste al home banking y pagaste la tarjeta. ¿Y ahora en Fluxo qué hacés? <strong>Solo un clic:</strong></p>
+<div class="ui-card" style="border-left: 4px solid #6366f1;">
+  <div class="ui-card-header" style="color: #4338ca;">¿Qué hace el botón "💳 Pagar Resumen" por detrás?</div>
+  <p style="margin-bottom: 4px;">Al apretar el botón en la tarjeta:</p>
+  <ul style="margin: 0; padding-left: 18px; font-size: 8.5pt;">
+    <li>Crea un <strong>EGRESO</strong> en tu cuenta Personal por el monto total pagado.</li>
+    <li>Genera un <strong>INGRESO</strong> por reintegro desde la cuenta Hogar por los consumos familiares que pagaste vos.</li>
+    <li>Crea el <strong>EGRESO</strong> correspondiente en Hogar.</li>
+    <li>Marca todos los consumos del mes como <span class="badge badge-green">✓ Saldados</span>.</li>
+  </ul>
+</div>
+
+<!-- CAPÍTULO 6 -->
+<h1><span class="ch-num">06</span> Gastos Compartidos: Cuentas Claras Conservan la Amistad</h1>
+<p>Si te fuiste de viaje con amigos, pagaste un asado o compartís gastos con tu pareja, este módulo es tu salvación.</p>
+<ul>
+  <li><strong>Directorio de Contactos</strong>: Agregás a tus amigos o familiares.</li>
+  <li><strong>El Semáforo de Saldos</strong>:
+    <ul>
+      <li><span class="badge badge-green">Te debe $ 25.000</span>: Pusiste plata de más y te la tienen que devolver.</li>
+      <li><span class="badge badge-amber">Le debés $ 12.000</span>: Te pagaron algo y tenés que transferirles.</li>
+    </ul>
+  </li>
+  <li><strong>Botón "Liquidar / Saldar"</strong>: Cuando te hacen la transferencia, apretás saldar y la deuda vuelve a cero registrando el movimiento en tu cuenta.</li>
+</ul>
+
+<!-- CAPÍTULO 7 -->
+<h1><span class="ch-num">07</span> El Chanchito de Ahorros: Tus Metas Protegidas</h1>
+<p>Si dejás la plata de ahorro en la misma cuenta donde pagás el supermercado, ¡te la vas a gastar! Para eso está el <strong>Chanchito</strong>.</p>
+<ul>
+  <li><strong>Bóvedas a Medida</strong>: Creá alcancías como <em>"Fondo de Emergencia"</em>, <em>"Vacaciones 2027"</em> o <em>"Cambio de Auto"</em>.</li>
+  <li><strong>Bimonetario</strong>: Podés guardar en <strong>Pesos ($)</strong> o en <strong>Dólares (USD)</strong>.</li>
+  <li><strong>Meter y Sacar Fondos</strong>: Transferí plata de tu cuenta disponible al chanchito. Desaparece de tu saldo para gastar, pero sigue sumando a tu patrimonio neto total.</li>
+</ul>
+
+<!-- CAPÍTULO 8 -->
+<h1><span class="ch-num">08</span> Inversiones y Mercados en Vivo</h1>
+<p>Para que la inflación no se coma tus ahorros, Fluxo incluye un monitor financiero profesional en tiempo real.</p>
+<div class="grid-2">
+  <div class="ui-card">
+    <div class="ui-card-header">📈 Cartera de Inversiones</div>
+    <p style="font-size: 8pt; color: #475569;">
+      Cargá tus acciones, CEDEARs (Apple, Google, Mercado Libre), Bonos Soberanos (AL30, GD30) y Obligaciones Negociables (ONs). Te muestra la ganancia o pérdida total al día.
+    </p>
+  </div>
+  <div class="ui-card">
+    <div class="ui-card-header">🌐 Monitor de Mercados</div>
+    <p style="font-size: 8pt; color: #475569;">
+      Cotizaciones actualizadas del Dólar MEP, CCL, Blue, Tasas de LECAPs, curva de bonos argentinos e índices mundiales (S&P 500, Nasdaq).
+    </p>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- CAPÍTULO 9 -->
+<h1><span class="ch-num">09</span> FluxoAI: Tu Copiloto Financiero con IA</h1>
+<p>Fluxo tiene integrado un cerebro artificial (Gemini) que te ayuda en cualquier momento desde el botón ✨ <strong>FluxoAI</strong>.</p>
+
+<h2>9.1 Experiencia Estilo WhatsApp (Progresiva)</h2>
+<p>Al abrir el chat lateral de FluxoAI:</p>
+<ul>
+  <li>Se abre <strong>directamente en el último mensaje</strong> de la charla (no tenés que scrollear 200 mensajes para escribir).</li>
+  <li>Si querés ver lo que hablaron días atrás, simplemente <strong>deslizás hacia arriba</strong> y va cargando de 10 en 10 sin saltos bruscos.</li>
+</ul>
+
+<h2>9.2 Subir Tickets y Facturas</h2>
+<p>¿Fuiste a la farmacia o cargaste nafta? Sacale una foto al ticket o adjuntá la factura PDF en el chat. FluxoAI te va a decir:</p>
+<div class="box box-info" style="font-family: monospace; font-size: 8.5pt;">
+  🤖 <em>"Encontré un consumo de <strong>$18.450</strong> en <strong>YPF</strong> del día 10/09. ¿Querés que lo cargue como combustible en la cuenta Personal?"</em><br>
+  👉 [ Botón: Confirmar y Guardar en 1 Clic ]
+</div>
+
+<h2>9.3 Bot de Telegram</h2>
+<p>Conectá tu cuenta con Telegram y FluxoAI te mandará un mensaje proactivo a tu teléfono 3 días antes de que cierre o venza tu tarjeta para que nunca pagues intereses punitorios.</p>
+
+<!-- CAPÍTULO 10 -->
+<h1><span class="ch-num">10</span> Configuración (⚙️ La Cocina de la App)</h1>
+<p>Desde el engranaje superior podés ajustar todo a tu medida:</p>
+<table style="margin-top: 8px;">
+  <thead>
+    <tr>
+      <th style="width: 25%;">Sección</th>
+      <th>¿Qué podés hacer acá?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Cuentas</strong></td>
+      <td>Editar nombres de cuentas (Personal, Hogar), cambiarles el ícono o definir cuál es la predeterminada.</td>
+    </tr>
+    <tr>
+      <td><strong>Tarjetas</strong></td>
+      <td>Dar de alta un plástico nuevo, indicar los últimos 4 dígitos, el banco emisor y los días habituales de cierre/vto.</td>
+    </tr>
+    <tr>
+      <td><strong>Categorías</strong></td>
+      <td>Personalizar los rubros de ingresos y gastos (ej. delivery, gimnasio, colegios, salud) con colores distintivos.</td>
+    </tr>
+    <tr>
+      <td><strong>Contactos</strong></td>
+      <td>Crear y editar las personas para el módulo de Gastos Compartidos.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<!-- CAPÍTULO 11 -->
+<h1><span class="ch-num">11</span> La "Chuleta Rápida" For Dummies (Guía de Supervivencia)</h1>
+<p>¿Tenés una duda rápida? Buscá lo que querés hacer en esta tabla y mirá la solución:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width: 35%;">¿Qué querés hacer?</th>
+      <th style="width: 30%;">¿Dónde hacés clic?</th>
+      <th>¿Cuál es el secreto?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Cobré el sueldo y quiero repartirlo con mi casa</strong></td>
+      <td>Movimientos ➔ <code>+ Nuevo</code> ➔ Ingreso</td>
+      <td>Activá <em>"Dividir con Hogar (%)"</em> y poné 60%. Se crean los dos movimientos al instante.</td>
+    </tr>
+    <tr>
+      <td><strong>Quiero cargar el gasto mensual de supermercado</strong></td>
+      <td>Estando en cuenta <strong>Hogar</strong> ➔ <code>+ Nuevo</code></td>
+      <td>Elegí <em>% sobre ingresos</em> y tocá el botón <code>25% (Super)</code>. ¡Te calcula el monto exacto!</td>
+    </tr>
+    <tr>
+      <td><strong>Quiero cargar la verdulería del mes</strong></td>
+      <td>Estando en cuenta <strong>Hogar</strong> ➔ <code>+ Nuevo</code></td>
+      <td>Tocá el botón <code>÷ 5.5 (Verdu)</code>. Te aplica el 4.55% de los ingresos de la casa.</td>
+    </tr>
+    <tr>
+      <td><strong>Compré algo con tarjeta de crédito hoy</strong></td>
+      <td>Tarjetas o Movimientos</td>
+      <td><strong>No le pongas la fecha de hoy</strong>. La app le pone automáticamente la fecha de vencimiento del resumen.</td>
+    </tr>
+    <tr>
+      <td><strong>Pagué una factura de servicio</strong></td>
+      <td>En la tabla de Movimientos</td>
+      <td>Tocá directamente el badge <span class="badge badge-amber">⏳ Pendiente</span> y pasará a <span class="badge badge-green">✓ Saldado</span>.</td>
+    </tr>
+    <tr>
+      <td><strong>Pagué el total de la tarjeta en el banco</strong></td>
+      <td>Módulo Tarjetas de Crédito</td>
+      <td>Hacé clic en <strong>"💳 Pagar Resumen"</strong>. Liquida la deuda, devuelve los reintegros del hogar y salda todo.</td>
+    </tr>
+    <tr>
+      <td><strong>Quiero ver cuánto gasto en dólares MEP</strong></td>
+      <td>Barra superior</td>
+      <td>Tocá el switch <strong>ARS / USD</strong> y toda la app se recalcula al dólar de mercado.</td>
+    </tr>
+    <tr>
+      <td><strong>Tengo un ticket en papel y me da fiaca tipear</strong></td>
+      <td>Botón ✨ <strong>FluxoAI</strong></td>
+      <td>Subí la foto en el chat y dale a "Confirmar" cuando la IA te lea los datos.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footer-note">
+  <strong>Fluxo Financial OS</strong> — Manual Oficial de Usuario • Generado en Septiembre 2026<br>
+  Si necesitás soporte adicional o querés consultar tus números en lenguaje natural, abrí <strong>✨ FluxoAI</strong> en la aplicación.
+</div>
+
+</body>
+</html>

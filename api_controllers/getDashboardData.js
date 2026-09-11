@@ -81,6 +81,43 @@ export default async function handler(req, res) {
 
     const totalEgrAbs = Math.abs(egresos);
 
+    // Consulta histórica para evolución temporal (últimos 6 meses)
+    const dHist = new Date(fechaInicio + 'T00:00:00Z');
+    dHist.setUTCMonth(dHist.getUTCMonth() - 5);
+    const sixMonthsAgo = `${dHist.getUTCFullYear()}-${String(dHist.getUTCMonth() + 1).padStart(2, '0')}-01`;
+
+    const { data: histMovs } = await supabase
+      .from('movimientos')
+      .select('fecha, tipo_mov, importe')
+      .eq('id_cuenta_principal', cuenta)
+      .eq('user_id', userId)
+      .gte('fecha', sixMonthsAgo)
+      .lte('fecha', fechaFin);
+
+    const mesesBuckets = {};
+    for (let i = 5; i >= 0; i--) {
+      const bDate = new Date(fechaInicio + 'T00:00:00Z');
+      bDate.setUTCMonth(bDate.getUTCMonth() - i);
+      const key = `${bDate.getUTCFullYear()}-${String(bDate.getUTCMonth() + 1).padStart(2, '0')}`;
+      mesesBuckets[key] = { mes: key, ingresos: 0, egresos: 0, balance: 0 };
+    }
+
+    (histMovs || []).forEach(hm => {
+      const mKey = (hm.fecha || '').substring(0, 7);
+      if (mesesBuckets[mKey]) {
+        const amt = Math.abs(Number(hm.importe || 0));
+        if (hm.tipo_mov === 'INGRESO') mesesBuckets[mKey].ingresos += amt;
+        if (hm.tipo_mov === 'EGRESO') mesesBuckets[mKey].egresos += amt;
+      }
+    });
+
+    const evolucionMensual = Object.values(mesesBuckets).map(b => ({
+      mes: b.mes,
+      ingresos: b.ingresos,
+      egresos: b.egresos,
+      balance: b.ingresos - b.egresos
+    }));
+
     return res.status(200).json({
       success: true,
       kpis: {
@@ -92,7 +129,8 @@ export default async function handler(req, res) {
         pctSaldado: totalEgrAbs > 0 ? Math.round((egresosSaldados / totalEgrAbs) * 100) : 0,
         pctPendiente: totalEgrAbs > 0 ? Math.round((egresosPendientes / totalEgrAbs) * 100) : 0
       },
-      movimientos: movimientos || []
+      movimientos: movimientos || [],
+      evolucionMensual
     });
 
 

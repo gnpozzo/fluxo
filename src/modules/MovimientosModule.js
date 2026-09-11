@@ -31,8 +31,10 @@ export class MovimientosModule extends BaseModule {
   #cacheIngresos = {};
   #savedViewPosition = null;
   #currentData = null;
-  #currentView = 'tabla';
-  #chartInstance = null;
+  #donutChartInstance = null;
+  #evolucionChartInstance = null;
+  #evolucionMode = 'ingresos_vs_gastos'; // 'ingresos_vs_gastos' | 'balance'
+  #donutMetric = 'gastos'; // 'gastos' | 'ingresos'
 
   preserveViewOnUpdate(id) {
     const scrollEl = document.querySelector('.main-content');
@@ -121,10 +123,9 @@ export class MovimientosModule extends BaseModule {
       this.#table?.load(movimientos || []);
     }
 
-    // Si la vista de gráficos está activa, actualizarla
-    if (this.#currentView === 'graficos') {
-      this.#renderGraficos(movimientos || [], kpis);
-    }
+    // Renderizado de analítica lateral continua (side-by-side)
+    this.#renderDonutChart(movimientos || [], kpis);
+    this.#renderEvolucionChart(data?.evolucionMensual || []);
 
     App.log('MovimientosModule', '_render', `${(movimientos || []).length} movimientos`);
 
@@ -164,11 +165,13 @@ export class MovimientosModule extends BaseModule {
       <!-- Barra de Control de Pagos -->
       <div id="mov-pagos-bar-wrap" style="margin-bottom:var(--space-3)"></div>
 
-      <!-- Selector de Vista y Buscador -->
+      <!-- Acciones y Buscador -->
       <div class="section-header" style="margin-bottom:var(--space-3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div class="selector-vista-container">
-          <button id="mov-btn-tabla" class="btn-vista active" type="button">Movimientos</button>
-          <button id="mov-btn-graficos" class="btn-vista" type="button">Análisis Gráfico</button>
+        <div class="acciones-container">
+          <button id="mov-btn-nuevo" class="btn btn-primary btn-sm" type="button" style="display:inline-flex;align-items:center;gap:6px;">
+            ${App.Icons.get('plus', 'icon-sm')}
+            <span>Nuevo Movimiento</span>
+          </button>
         </div>
         <div class="dt-search" id="mov-search-wrap">
           ${App.Icons.get('search', 'icon-sm')}
@@ -177,11 +180,18 @@ export class MovimientosModule extends BaseModule {
         </div>
       </div>
 
-      <!-- Tabla -->
-      <div class="table-card" id="mov-tabla-wrap"></div>
-
-      <!-- Vista Gráficos (inicialmente oculta) -->
-      <div class="table-card hidden" id="mov-graficos-wrap"></div>
+      <!-- Layout 2 Columnas Side-by-Side: Grilla a la izquierda + Analítica Lateral a la derecha -->
+      <div class="analytics-side-layout">
+        <div class="analytics-main-col">
+          <div class="table-card" id="mov-tabla-wrap"></div>
+        </div>
+        <div class="analytics-side-col">
+          <!-- Card 1: Top Categorías Donut -->
+          <div class="table-card fintech-card" id="mov-donut-wrap"></div>
+          <!-- Card 2: Evolución Mensual Time-Series -->
+          <div class="table-card fintech-card" id="mov-evolucion-wrap"></div>
+        </div>
+      </div>
     `;
 
     // KPI Cards
@@ -976,8 +986,8 @@ export class MovimientosModule extends BaseModule {
     `;
   }
 
-  #renderGraficos(movimientos, kpis) {
-    const wrap = document.getElementById('mov-graficos-wrap');
+  #renderDonutChart(movimientos, kpis) {
+    const wrap = document.getElementById('mov-donut-wrap');
     if (!wrap) return;
 
     // Solo egresos para el análisis de distribución
@@ -986,7 +996,13 @@ export class MovimientosModule extends BaseModule {
     const totalIngresos = Number(kpis?.ingresos || 0);
 
     if (egresos.length === 0 || totalGastos <= 0) {
-      wrap.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.875rem;">No hay gastos registrados en este período para analizar.</div>`;
+      wrap.innerHTML = `
+        <div class="fintech-card-header">
+          <h3 class="fintech-card-title">Top Categorías</h3>
+        </div>
+        <div style="padding:2rem 1rem;text-align:center;color:var(--texto-3);font-size:0.85rem;">
+          No hay gastos en este período.
+        </div>`;
       return;
     }
 
@@ -1005,99 +1021,70 @@ export class MovimientosModule extends BaseModule {
         name,
         total: data.total,
         count: data.count,
-        pctGastos: ((data.total / totalGastos) * 100),
-        pctIngresos: totalIngresos > 0 ? ((data.total / totalIngresos) * 100) : 0
+        pctGastos: (data.total / totalGastos) * 100,
+        pctIngresos: totalIngresos > 0 ? (data.total / totalIngresos) * 100 : 0
       }))
       .sort((a, b) => b.total - a.total);
 
     const palette = [
-      '#4361EE', '#3A0CA3', '#7209B7', '#F72585', '#4CC9F0',
-      '#2EC4B6', '#FF9F1C', '#E71D36', '#06D6A0', '#118AB2',
-      '#8338EC', '#3F37C9', '#FB8500', '#023047', '#219EBC'
+      '#06b6d4', '#10b981', '#3b82f6', '#8b5cf6',
+      '#ec4899', '#f59e0b', '#6366f1', '#14b8a6',
+      '#f97316', '#a855f7', '#64748b'
     ];
 
-    const labels = sortedCats.map(c => c.name);
-    const dataValues = sortedCats.map(c => Math.round(c.total));
-    const bgColors = sortedCats.map((_, i) => palette[i % palette.length]);
-
-    const tasaGastoSobreIngreso = totalIngresos > 0 ? ((totalGastos / totalIngresos) * 100).toFixed(1) : null;
+    const isPctGastos = this.#donutMetric === 'gastos';
 
     wrap.innerHTML = `
-      <div style="padding:20px 24px;border-bottom:1px solid var(--borde);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h3 style="margin:0 0 4px 0;font-size:1.05rem;color:var(--texto);font-weight:700;">Distribución de Gastos por Categoría</h3>
-          <p style="margin:0;font-size:0.82rem;color:var(--texto-2);">
-            Doble métrica: <strong>% sobre Gastos Totales</strong> y <strong>% sobre Ingresos Percibidos</strong>.
-          </p>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:0.8rem;background:var(--primary-tint);color:var(--primary);padding:4px 10px;border-radius:var(--r-full);font-weight:600;">
-            ${sortedCats.length} categorías
-          </span>
-          ${tasaGastoSobreIngreso ? `
-            <span style="font-size:0.8rem;background:${Number(tasaGastoSobreIngreso) > 80 ? 'var(--rojo-tint)' : 'var(--verde-tint)'};color:${Number(tasaGastoSobreIngreso) > 80 ? 'var(--rojo)' : 'var(--verde)'};padding:4px 10px;border-radius:var(--r-full);font-weight:600;">
-              Total: ${tasaGastoSobreIngreso}% de tus ingresos
-            </span>
-          ` : ''}
+      <div class="fintech-card-header">
+        <h3 class="fintech-card-title">Top Categorías</h3>
+        <div class="fintech-pill-switch" id="mov-donut-switch">
+          <button class="fintech-pill-btn ${isPctGastos ? 'active' : ''}" data-metric="gastos" title="Porcentaje sobre el total de egresos">% Gastos</button>
+          <button class="fintech-pill-btn ${!isPctGastos ? 'active' : ''}" data-metric="ingresos" title="Porcentaje sobre ingresos percibidos">% Ingresos</button>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:24px;padding:24px;align-items:center;">
-        <!-- Gráfico Doughnut -->
-        <div style="position:relative;max-width:360px;margin:0 auto;width:100%;height:320px;display:flex;align-items:center;justify-content:center;">
-          <canvas id="mov-chart-canvas"></canvas>
-        </div>
+      <div style="position:relative;width:100%;height:180px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;">
+        <canvas id="mov-donut-canvas"></canvas>
+      </div>
 
-        <!-- Desglose con doble métrica -->
-        <div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;padding-right:6px;">
-          ${sortedCats.map((cat, idx) => {
-            const color = bgColors[idx];
-            return `
-              <div style="background:var(--superficie);border:1px solid var(--borde);border-radius:var(--r);padding:10px 14px;display:flex;flex-direction:column;gap:6px;transition:transform .15s ease;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
-                    <strong style="color:var(--texto);font-size:0.85rem;">${App.Utils.escapeHtml(cat.name)}</strong>
-                    <span style="font-size:0.75rem;color:var(--texto-3);">(${cat.count})</span>
-                  </div>
-                  <strong class="negativo" style="font-size:0.9rem;">${App.Utils.formatearMoneda(cat.total)}</strong>
-                </div>
-
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:0.78rem;">
-                  <div style="flex:1;display:flex;align-items:center;gap:6px;">
-                    <span style="color:var(--texto-2);min-width:68px;">s/ Gastos:</span>
-                    <div style="flex:1;height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden;">
-                      <div style="width:${cat.pctGastos.toFixed(1)}%;height:100%;background:${color};"></div>
-                    </div>
-                    <strong style="min-width:42px;text-align:right;color:var(--texto);">${cat.pctGastos.toFixed(1)}%</strong>
-                  </div>
-
-                  <div style="min-width:120px;text-align:right;">
-                    <span style="color:var(--texto-3);margin-right:4px;">s/ Ingresos:</span>
-                    <span style="font-weight:700;color:${cat.pctIngresos > 25 ? 'var(--rojo)' : (cat.pctIngresos > 15 ? 'var(--kpi-amber)' : 'var(--texto)')};background:var(--bg-2);padding:2px 6px;border-radius:4px;">
-                      ${totalIngresos > 0 ? cat.pctIngresos.toFixed(1) + '%' : '—'}
-                    </span>
-                  </div>
-                </div>
+      <div class="fintech-legend-list">
+        ${sortedCats.map((cat, idx) => {
+          const color = palette[idx % palette.length];
+          const pct = isPctGastos ? cat.pctGastos : cat.pctIngresos;
+          return `
+            <div class="fintech-legend-item">
+              <div class="fintech-legend-left">
+                <span class="fintech-legend-dot" style="background:${color}"></span>
+                <span title="${App.Utils.escapeHtml(cat.name)}">${App.Utils.escapeHtml(cat.name)}</span>
               </div>
-            `;
-          }).join('')}
-        </div>
+              <div class="fintech-legend-right">
+                <span style="font-size:0.75rem;color:var(--texto-3);">${pct.toFixed(1)}%</span>
+                <span class="negativo">${App.Utils.formatearMoneda(cat.total)}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
 
-    // Instanciar Chart.js
-    const canvas = document.getElementById('mov-chart-canvas');
+    wrap.querySelectorAll('#mov-donut-switch .fintech-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.#donutMetric = btn.dataset.metric;
+        this.#renderDonutChart(movimientos, kpis);
+      });
+    });
+
+    const canvas = document.getElementById('mov-donut-canvas');
     if (canvas) {
-      this.#chartInstance?.destroy();
+      this.#donutChartInstance?.destroy();
       const ctx = canvas.getContext('2d');
-      this.#chartInstance = new Chart(ctx, {
+      this.#donutChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: labels,
+          labels: sortedCats.map(c => c.name),
           datasets: [{
-            data: dataValues,
-            backgroundColor: bgColors,
+            data: sortedCats.map(c => Math.round(c.total)),
+            backgroundColor: sortedCats.map((_, i) => palette[i % palette.length]),
             borderColor: 'var(--superficie)',
             borderWidth: 2,
             hoverOffset: 6
@@ -1106,7 +1093,7 @@ export class MovimientosModule extends BaseModule {
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '68%',
+          cutout: '72%',
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -1125,6 +1112,139 @@ export class MovimientosModule extends BaseModule {
     }
   }
 
+  #renderEvolucionChart(evolucionMensual) {
+    const wrap = document.getElementById('mov-evolucion-wrap');
+    if (!wrap) return;
+
+    if (!evolucionMensual || evolucionMensual.length === 0) {
+      wrap.innerHTML = `
+        <div class="fintech-card-header">
+          <h3 class="fintech-card-title">Evolución Mensual</h3>
+        </div>
+        <div style="padding:2rem 1rem;text-align:center;color:var(--texto-3);font-size:0.85rem;">
+          No hay datos históricos suficientes.
+        </div>`;
+      return;
+    }
+
+    const isIngVsGas = this.#evolucionMode === 'ingresos_vs_gastos';
+
+    wrap.innerHTML = `
+      <div class="fintech-card-header">
+        <h3 class="fintech-card-title">Evolución Mensual</h3>
+        <div class="fintech-pill-switch" id="mov-evol-switch">
+          <button class="fintech-pill-btn ${isIngVsGas ? 'active' : ''}" data-mode="ingresos_vs_gastos" title="Comparativa de Ingresos vs Gastos">Ingresos vs Gastos</button>
+          <button class="fintech-pill-btn ${!isIngVsGas ? 'active' : ''}" data-mode="balance" title="Balance mensual neto">Balance</button>
+        </div>
+      </div>
+
+      <div style="position:relative;width:100%;height:190px;display:flex;align-items:center;justify-content:center;">
+        <canvas id="mov-evolucion-canvas"></canvas>
+      </div>
+    `;
+
+    wrap.querySelectorAll('#mov-evol-switch .fintech-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.#evolucionMode = btn.dataset.mode;
+        this.#renderEvolucionChart(evolucionMensual);
+      });
+    });
+
+    const canvas = document.getElementById('mov-evolucion-canvas');
+    if (!canvas) return;
+
+    this.#evolucionChartInstance?.destroy();
+    const ctx = canvas.getContext('2d');
+
+    const labels = evolucionMensual.map(e => App.Utils.formatearMes(e.mes));
+
+    let datasets = [];
+    if (isIngVsGas) {
+      datasets = [
+        {
+          label: 'Ingresos',
+          data: evolucionMensual.map(e => Math.round(e.ingresos || 0)),
+          backgroundColor: '#10b981',
+          borderRadius: 4,
+          barPercentage: 0.7,
+          categoryPercentage: 0.8
+        },
+        {
+          label: 'Gastos',
+          data: evolucionMensual.map(e => Math.round(e.egresos || 0)),
+          backgroundColor: '#f43f5e',
+          borderRadius: 4,
+          barPercentage: 0.7,
+          categoryPercentage: 0.8
+        }
+      ];
+    } else {
+      datasets = [
+        {
+          label: 'Balance Neto',
+          data: evolucionMensual.map(e => Math.round(e.balance || 0)),
+          backgroundColor: evolucionMensual.map(e => (e.balance || 0) >= 0 ? '#10b981' : '#f43f5e'),
+          borderRadius: 4,
+          barPercentage: 0.75,
+          categoryPercentage: 0.85
+        }
+      ];
+    }
+
+    this.#evolucionChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: isIngVsGas,
+            position: 'top',
+            align: 'end',
+            labels: {
+              boxWidth: 8,
+              boxHeight: 8,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              font: { size: 10, family: 'Inter, sans-serif' },
+              color: 'var(--texto-2)'
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const val = context.parsed.y || 0;
+                return ` ${context.dataset.label || ''}: $ ${val.toLocaleString('es-AR')}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.05)', borderDash: [3, 3] },
+            ticks: {
+              font: { size: 9, family: 'Inter, sans-serif' },
+              color: 'var(--texto-3)',
+              callback: (val) => {
+                if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+                if (Math.abs(val) >= 1000) return (val / 1000).toFixed(0) + 'k';
+                return val;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   // --- SECCIÓN 6: LISTENERS ---
 
   _bindListeners() {
@@ -1135,30 +1255,9 @@ export class MovimientosModule extends BaseModule {
       }, 250));
     }
 
-    // Switch de vista: Tabla vs Análisis Gráfico
-    const btnTabla = document.getElementById('mov-btn-tabla');
-    const btnGraficos = document.getElementById('mov-btn-graficos');
-    const tablaWrap = document.getElementById('mov-tabla-wrap');
-    const graficosWrap = document.getElementById('mov-graficos-wrap');
-    const searchWrap = document.getElementById('mov-search-wrap');
-
-    btnTabla?.addEventListener('click', () => {
-      this.#currentView = 'tabla';
-      btnTabla.classList.add('active');
-      btnGraficos?.classList.remove('active');
-      tablaWrap?.classList.remove('hidden');
-      searchWrap?.classList.remove('hidden');
-      graficosWrap?.classList.add('hidden');
-    });
-
-    btnGraficos?.addEventListener('click', () => {
-      this.#currentView = 'graficos';
-      btnGraficos.classList.add('active');
-      btnTabla?.classList.remove('active');
-      tablaWrap?.classList.add('hidden');
-      searchWrap?.classList.add('hidden');
-      graficosWrap?.classList.remove('hidden');
-      this.#renderGraficos(this.#currentData?.movimientos || [], this.#currentData?.kpis || {});
+    const btnNuevo = document.getElementById('mov-btn-nuevo');
+    btnNuevo?.addEventListener('click', () => {
+      this.abrirAlta('EGRESO');
     });
 
     // Delegación para botón toggle pago en movimientos

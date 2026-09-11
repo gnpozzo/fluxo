@@ -686,16 +686,15 @@ export default async function handler(req, res) {
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Support canceling, restarting or help command session reset
-    const isResetCommand = messageText && ['cancelar', 'reiniciar', '/cancel', '/ayuda', '/help', '/start', 'ayuda', 'help', 'tutorial'].includes(messageText.toLowerCase().trim());
+    // Support canceling or restarting session explicitly
+    const isResetCommand = messageText && ['cancelar', 'reiniciar', '/cancel', '/reset', '/limpiar', '/start'].includes(messageText.toLowerCase().trim());
     if (isResetCommand) {
       try {
         await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
       } catch (err) {}
       
-      // If it's a cancel/reset command, send reset message. If it's help/tutorial, let Gemini process it state-free!
-      if (messageText.toLowerCase() === 'cancelar' || messageText.toLowerCase() === 'reiniciar' || messageText.toLowerCase() === '/cancel') {
-        await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar?', messageId, { remove_keyboard: true });
+      if (['cancelar', 'reiniciar', '/cancel', '/reset', '/limpiar'].includes(messageText.toLowerCase().trim())) {
+        await sendTelegramMessage(botToken, chatId, '🔄 Conversación reiniciada. ¿Qué quieres registrar o consultar?', messageId, { remove_keyboard: true });
         return res.status(200).json({ success: true, message: 'Session reset' });
       }
     }
@@ -708,15 +707,11 @@ export default async function handler(req, res) {
       supabase.from('ahorro_subcuentas').select('id_subcuenta,nombre,moneda,id_cuenta_principal')
     ]);
 
-    if (cuentasRes.error || categoriasRes.error || tarjetasRes.error || contactosRes.error) {
-      throw new Error('Error al consultar tablas maestras en Supabase.');
-    }
-
     const cuentas = cuentasRes.data || [];
     const categorias = categoriasRes.data || [];
     const tarjetas = tarjetasRes.data || [];
     const contactos = contactosRes.data || [];
-    const subcuentas = subcuentasRes?.data || [];
+    const subcuentas = subcuentasRes.data || [];
 
     const todayStr = new Date().toISOString().split('T')[0];
     const host = req.headers.host || 'fluxo-delta.vercel.app';
@@ -736,8 +731,8 @@ export default async function handler(req, res) {
       if (!sErr && sessionData) {
         const lastUpdate = new Date(sessionData.updated_at);
         const diffMs = new Date() - lastUpdate;
-        // Inactivity timeout: 20 minutes
-        if (diffMs < 20 * 60 * 1000) {
+        // Inactivity timeout: 4 hours
+        if (diffMs < 4 * 60 * 60 * 1000) {
           history = sessionData.history || [];
         }
       }
@@ -1040,28 +1035,32 @@ ${JSON.stringify(subcuentas.map(s => ({ id: s.id_subcuenta, nombre: s.nombre, mo
 
 Fecha de referencia: ${todayStr} (Año-Mes-Día)
 
-TUTORIAL Y PREGUNTAS SOBRE LA APP (MANUAL DE USUARIO):
-Si el usuario escribe "/ayuda", "/help", "tutorial", "ayuda", o hace preguntas generales sobre el funcionamiento de la aplicación, debes actuar como un experto en el manual de usuario de Fluxo.
-Responde de manera conversacional, muy estructurada y amigable (tipo_registro: "conversational").
-Aquí está el resumen del manual de usuario para responder preguntas:
-1. Módulo Movimientos: Es el libro contable mensual. Soporta gastos comunes (efectivo/débito/transferencia), gastos en cuotas (se proyectan a futuro de forma automática y finalizan solas) y recurrentes (suscripciones que se repiten mes a mes). Permite carga distribuida (Split) de ingresos entre cuentas con un porcentaje (ej. 70% personal, 30% familiar) sumando máximo 100%. Soporta modificar/eliminar "Solo este movimiento" o "Toda la serie a futuro" al editar series.
-2. Módulo Tarjetas: Permite ver la deuda total de tarjetas de crédito. Aísla qué parte te pertenece a vos y qué parte es de otros presupuestos. Muestra cuotas, débitos y consumos por tarjeta antes del cierre y vencimiento.
-3. Módulo Gastos Compartidos (Cuentas Corrientes/Clearing): Organiza saldos con contactos (ej. "Bichi"). Si pagas algo por otro, indicas el Split (porcentaje) para que el clearing determine quién le debe a quién y saldar la deuda.
-4. Módulo Ahorro (Chanchitos): Subcuentas o bóvedas en pesos (ARS) o dólares (USD) ubicadas físicamente en bancos, brokers o efectivo. Consolida el valor bimonetario neto.
-5. Módulo Inversiones: Sigue el rendimiento del portfolio. Incluye carga de compras/ventas de activos (tickers) y un Monitor Global en tiempo real (Yahoo Finance / data912) que agrupa: Mundo (Índices, UST, Crypto, Commodities), Bonos Soberanos USD (AL30, GD30, etc.), Renta Fija Pesos (LECAPs, BONCAPs), Obligaciones Negociables (ONs), y CEDEARs más operados. También muestra cotizaciones del Dólar MEP, CCL, Blue y Riesgo País.
-6. Barra Superior: Contiene el Selector de Mes, Selector de Entorno Presupuestario (Multi-cuenta: Personal, Familiar, Negocios), switch ARS/USD (conversión bimonetaria global en tiempo real usando el MEP), modo claro/oscuro, campana de notificaciones (alertas de cuotas finales, nuevos consumos y recordatorios activos), y el Panel de Ajustes (ABM de cuentas, tarjetas, categorías, subcuentas y contactos).
-7. Integraciones externas: Dólar y mercados en tiempo real desde dolarapi.com y rendimientos.co (Yahoo Finance + data912).
-8. Comandos y ejemplos del Bot de Telegram:
-   - Registrar Gasto/Ingreso: "gasto de 5000 en super con debito", "ingreso de 120000 sueldo", "gasto mensual de 8000 en netflix", "consumo visa de 30000 en 3 cuotas".
-   - Split de Ingresos: "ingreso de 100000 split 70% cuenta personal y 30% cuenta hogar".
-   - Gastos Compartidos: "gasto de 6000 pagado por mi para Bichi al 50%" o "gasto de 8000 pagado por Juan al 50%".
-   - Ahorros: "depósito de 100 usd en chanchito Viaje desde cuenta personal" o "extracción de 20000 ars de chanchito emergencias".
-   - Inversiones: "compra de 10 nominales de AL30 a 55 usd en broker" o "venta de 5 nominales de GGAL a 3200 ars".
-   - Recordatorios/Alertas: "Todos los meses el 5to dia habil recordame pagar la escuela por telegram y app", "Mostrame mis recordatorios" o "Eliminá el recordatorio [ID_CORTO]".
-   - Consultas de datos: "cuánto gasté este mes en supermercado?", "mostrame últimos movimientos", "saldo de mis chanchitos", "cartera de inversiones", "proyección de la tarjeta".
-   - Modificación/Borrado: "modificá el último gasto de super y poné 4500", "eliminá el de recién".
+NORMAS DE COMUNICACIÓN, TONO Y BREVEDAD (OBLIGATORIO):
+1. **BREVEDAD Y CONCISIÓN ABSOLUTA**: Eres un asistente financiero ejecutivo. Tus respuestas conversacionales y de asesoramiento deben ser CORTAS, DIRECTAS Y PRECISAS (máximo 1 a 2 párrafos concisos, menos de 90 palabras). PROHIBIDO escribir ensayos teóricos, introducciones con relleno ("¡Excelente consulta! Las compras son momentos importantes...") o repetir listas enteras de opciones que no se solicitaron.
+2. **SALUDOS SIMPLES**: Si el usuario dice "Hola", "Buenas", "Buen día", responde ÚNICAMENTE un saludo cordial y breve de una línea: "¡Hola! ¿Qué registramos o consultamos hoy?". NUNCA envíes el manual ni enlaces a menos que el usuario escriba "/ayuda" o pregunte explícitamente cómo usar la app.
+3. **ASESORAMIENTO FINANCIERO / EVALUACIÓN DE COMPRAS (tipo_registro: "query", intent: "consejo_financiero")**:
+   Si el usuario pide consejo sobre una compra o decisión financiera (ej: "el mes que viene quiero comprar una mesa para el patio... cuesta 120.000 en 3 cuotas o 90000 al contado. ¿Qué me aconsejás?"):
+   - Clasifícalo SIEMPRE como tipo_registro: "query" con intent: "consejo_financiero".
+   - En el payload incluye:
+     - "mes": Mes objetivo de la compra en formato "YYYY-MM" (si dice "el mes que viene" o "el próximo mes", calcula el mes siguiente a la fecha de referencia ${todayStr}; ej: si hoy es septiembre 2026, el mes objetivo es 2026-10).
+     - "consulta_monto_contado": número (monto al contado, ej 90000),
+     - "consulta_monto_cuotas": número (monto financiado total, ej 120000),
+     - "consulta_cuotas": número de cuotas (ej 3),
+     - "consulta_item": descripción del bien (ej "mesa para el patio").
+   - El backend consultará los datos reales de liquidez, compromisos agendados y cuotas de tarjetas para formular la recomendación cuantitativa precisa.
 
-Si el usuario pide ayuda explícitamente, responde con un tutorial estructurado mostrando los comandos principales y agregando un enlace a la app usando la etiqueta HTML: <a href="${appUrl}"><b>Ir a la App</b></a>. No uses bloques de código markdown, responde directamente en formato de texto enriquecido HTML.
+REGLAS DE NEGOCIO Y CATEGORIZACIÓN (OBLIGATORIAS):
+1. **Seguro "La Segunda"**:
+   - Si se imputa a cuenta "Hogar" (familiar): La categoría DEBE ser "Vivienda" (seguro del hogar).
+   - Si se imputa a cuenta "Personal": La categoría DEBE ser "Transporte" (seguro automotor).
+2. **Presupuesto dinámico en %**:
+   - Supermercado: 25% de los ingresos de la cuenta correspondiente.
+   - Verdulería: Se calcula como el presupuesto de Supermercado / 5.5.
+3. **Tarjetas de Crédito**:
+   - Todo consumo de tarjeta de crédito se imputa siempre al mes de vencimiento del resumen (no a la fecha de realización de la compra).
+
+TUTORIAL Y PREGUNTAS SOBRE LA APP (MANUAL DE USUARIO):
+ÚNICAMENTE si el usuario escribe explícitamente "/ayuda", "/help", "tutorial", o pregunta "¿cómo funciona la app?", responde con un resumen conciso y el enlace HTML: <a href="${appUrl}"><b>Ir a Fluxo</b></a>. En cualquier otro caso, ve directo a lo que el usuario pidió.
 
 VOCABULARIO Y CLASIFICACIÓN CLAVE (MUY IMPORTANTE):
 - "gasto" o "gastos": Se refiere a gastos comunes / movimientos de cuentas principales (medio de pago: efectivo, débito o transferencia). Se clasifica como tipo_registro: "movimiento".
@@ -1194,10 +1193,14 @@ Estructura de "payload" por "tipo_registro":
   }
 - Si tipo_registro es "query":
   {
-    "intent": "resumen_mes" | "gastos_categoria" | "ultimos_movimientos" | "info_tarjetas" | "proyeccion" | "inversiones" | "ahorros",
+    "intent": "resumen_mes" | "gastos_categoria" | "ultimos_movimientos" | "info_tarjetas" | "proyeccion" | "inversiones" | "ahorros" | "consejo_financiero",
     "idCuenta": "UUID de la cuenta (opcional)",
     "idCategoria": "UUID de la categoría (opcional)",
-    "mes": "YYYY-MM" (opcional)
+    "mes": "YYYY-MM" (opcional, usar mes objetivo si es consejo_financiero o consulta a futuro),
+    "consulta_monto_contado": número (opcional),
+    "consulta_monto_cuotas": número (opcional),
+    "consulta_cuotas": número (opcional),
+    "consulta_item": "descripción del producto o compra (opcional)"
   }
 - Si tipo_registro es "update":
   {
@@ -1230,48 +1233,51 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       return res.status(200).json({ success: false, error: 'JSON parse error' });
     }
 
+    const saveSessionTurn = async (responseText) => {
+      if (!hasSessionTable || !responseText) return;
+      history.push({
+        role: 'model',
+        parts: [{ text: responseText }]
+      });
+      const cleanHistory = history.filter(h => h.role !== 'system_metadata').slice(-12);
+      try {
+        await supabase.from('bot_sessions').upsert({
+          chat_id: String(chatId),
+          history: cleanHistory,
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {
+        console.error('[telegramWebhook saveSessionTurn error]', e.message);
+      }
+    };
+
+    const getTargetMonth = (explicitMonth, text) => {
+      const lower = (text || '').toLowerCase();
+      if (lower.includes('mes que viene') || lower.includes('proximo mes') || lower.includes('próximo mes') || lower.includes('en octubre')) {
+        const parts = todayStr.substring(0, 7).split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const nextM = m === 12 ? 1 : m + 1;
+        const nextY = m === 12 ? y + 1 : y;
+        return `${nextY}-${String(nextM).padStart(2, '0')}`;
+      }
+      return explicitMonth || todayStr.substring(0, 7);
+    };
+
     // Handle conversational replies (saving state)
     if (parsedResult.tipo_registro === 'conversational') {
-      const reply = parsedResult.reply_message || 'Hola, ¿en qué te puedo ayudar hoy?';
+      const reply = parsedResult.reply_message || 'Entendido.';
       let replyMarkup = null;
-      if (Array.isArray(parsedResult.buttons) && parsedResult.buttons.length > 0) {
+      if (parsedResult.buttons && Array.isArray(parsedResult.buttons) && parsedResult.buttons.length > 0) {
         replyMarkup = {
-          keyboard: parsedResult.buttons.map(row => {
-            if (Array.isArray(row)) {
-              return row.map(btn => ({ text: String(btn) }));
-            } else {
-              return [{ text: String(row) }];
-            }
-          }),
+          keyboard: parsedResult.buttons.map(row => (Array.isArray(row) ? row : [row]).map(btn => ({ text: String(btn) }))),
           resize_keyboard: true,
           one_time_keyboard: true
         };
       }
       await sendTelegramMessage(botToken, chatId, reply, messageId, replyMarkup);
-      
-      if (hasSessionTable) {
-        history.push({
-          role: 'model',
-          parts: [{ text: contentText }]
-        });
-        try {
-          await supabase.from('bot_sessions').upsert({
-            chat_id: String(chatId),
-            history: history,
-            updated_at: new Date().toISOString()
-          });
-        } catch (e) {
-          console.error('[telegramWebhook session save error]', e.message);
-        }
-      }
+      await saveSessionTurn(contentText);
       return res.status(200).json({ success: true, type: 'conversational' });
-    }
-
-    // Clear session on successful transactional load, update or query
-    if (hasSessionTable) {
-      try {
-        await supabase.from('bot_sessions').delete().eq('chat_id', String(chatId));
-      } catch (err) {}
     }
 
     // Handle user queries (ida y vuelta / pass info of the app)
@@ -1279,9 +1285,12 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
       const payload = parsedResult.payload || parsedResult;
       const intent = payload.intent || 'resumen_mes';
       let fetchedDataContext = '';
+      let targetMonth = getTargetMonth(payload.mes, messageText);
+      let pctRecargo = null;
+      let totalComprometidoTargetMonth = 0;
       
       if (intent === 'resumen_mes') {
-        const month = payload.mes || todayStr.substring(0, 7);
+        const month = targetMonth;
         const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
         
         const parts = month.split('-');
@@ -1520,23 +1529,109 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
         fetchedDataContext = `Saldos actuales de tus chanchitos de ahorro en la cuenta "${cuentas.find(c => c.id_cuenta_principal === accountId)?.nombre || 'Principal'}":
 - Detalle de ahorros por subcuenta: ${JSON.stringify(balances)}`;
 
+      } else if (intent === 'consejo_financiero') {
+        const accountId = payload.idCuenta || cuentas.find(c => c.es_predeterminada)?.id_cuenta_principal || cuentas[0]?.id_cuenta_principal;
+        const accountName = cuentas.find(c => c.id_cuenta_principal === accountId)?.nombre || 'Principal';
+        const currentMonthStr = todayStr.substring(0, 7);
+
+        // 1. Balance y liquidez del mes actual
+        const { data: currentMovs } = await supabase
+          .from('movimientos')
+          .select('importe, tipo_mov')
+          .eq('id_cuenta_principal', accountId)
+          .gte('fecha', `${currentMonthStr}-01`);
+
+        let currentIngresos = 0, currentEgresos = 0;
+        (currentMovs || []).forEach(m => {
+          const val = Math.abs(Number(m.importe || 0));
+          if (m.tipo_mov === 'INGRESO') currentIngresos += val;
+          if (m.tipo_mov === 'EGRESO') currentEgresos += val;
+        });
+        const currentBalance = currentIngresos - currentEgresos;
+
+        // 2. Compromisos agendados para el mes objetivo (targetMonth)
+        const partsTarget = targetMonth.split('-');
+        const ty = parseInt(partsTarget[0], 10);
+        const tm = parseInt(partsTarget[1], 10);
+        const tNextM = tm === 12 ? 1 : tm + 1;
+        const tNextY = tm === 12 ? ty + 1 : ty;
+        const targetNextLimit = `${tNextY}-${String(tNextM).padStart(2, '0')}-01`;
+
+        const [movsFuturosRes, tarjetasFuturasRes] = await Promise.all([
+          supabase.from('movimientos')
+            .select('importe, descripcion, categorias(nombre)')
+            .eq('id_cuenta_principal', accountId)
+            .eq('tipo_mov', 'EGRESO')
+            .gte('fecha', `${targetMonth}-01`)
+            .lt('fecha', targetNextLimit),
+          supabase.from('consumos_tc')
+            .select('importe, descripcion, cuota_actual, cuota_total, tarjetas(nombre)')
+            .eq('id_cuenta_imputada', accountId)
+            .gte('fecha', `${targetMonth}-01`)
+            .lt('fecha', targetNextLimit)
+        ]);
+
+        const movsFuturos = movsFuturosRes.data || [];
+        const consumosFuturos = tarjetasFuturasRes.data || [];
+
+        const totalEgresosComprometidos = movsFuturos.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+        const totalCuotasTarjetas = consumosFuturos.reduce((acc, c) => acc + Math.abs(Number(c.importe || 0)), 0);
+        totalComprometidoTargetMonth = totalEgresosComprometidos + totalCuotasTarjetas;
+
+        // Cálculos de la compra
+        const montoContado = Number(payload.consulta_monto_contado || 0);
+        const montoCuotas = Number(payload.consulta_monto_cuotas || 0);
+        const cuotasCount = Number(payload.consulta_cuotas || 1);
+        const cuotaMensual = cuotasCount > 0 ? (montoCuotas / cuotasCount) : montoCuotas;
+        const recargoTotal = montoCuotas > montoContado ? (montoCuotas - montoContado) : 0;
+        pctRecargo = montoContado > 0 ? ((recargoTotal / montoContado) * 100).toFixed(1) : 0;
+
+        fetchedDataContext = `DATOS FINANCIEROS REALES DEL USUARIO PARA ASESORAR LA COMPRA:
+- Compra: "${payload.consulta_item || 'Bien/Servicio'}"
+- Mes de compra evaluado: ${targetMonth} (mes en curso actual es ${currentMonthStr})
+- Cuenta: ${accountName}
+- Liquidez actual estimada (${currentMonthStr}): Balance neto $${currentBalance} (Ingresos: $${currentIngresos}, Gastos: $${currentEgresos})
+- Compromisos y gastos ya agendados para el mes de la compra (${targetMonth}):
+  * Cuotas de tarjetas de crédito fijadas para ${targetMonth}: $${totalCuotasTarjetas} (${consumosFuturos.length} cuotas agendadas)
+  * Egresos y gastos fijos registrados para ${targetMonth}: $${totalEgresosComprometidos}
+  * TOTAL COMPROMETIDO PREVIO para ${targetMonth}: $${totalComprometidoTargetMonth}
+- Análisis financiero de la operación:
+  * Precio contado: $${montoContado}
+  * Financiado: ${cuotasCount} cuotas de $${Math.round(cuotaMensual)} (Total: $${montoCuotas})
+  * Costo financiero total / Recargo: $${recargoTotal} (+${pctRecargo}%)
+  * Tasa de recargo implícita: ~${(Number(pctRecargo) / cuotasCount).toFixed(1)}% mensual (compárala contra el rendimiento de billeteras virtuales / plazo fijo de ~3% mensual: un 10% mensual es sumamente costoso).`;
+
       } else {
         fetchedDataContext = `No se pudo determinar el tipo de consulta.`;
       }
       
+      const cleanHistory = history.filter(h => h.role !== 'system_metadata').slice(-8);
+      
+      const queryPromptText = `Consulta del usuario: "${messageText}".\n\nDatos reales extraídos de la base de datos de Fluxo:\n${fetchedDataContext}\n\nNORMAS OBLIGATORIAS DE RESPUESTA:
+1. Sé ultra-conciso, directo y riguroso. Máximo 2 párrafos cortos (menos de 90 palabras).
+2. Sin introducciones de relleno ("¡Excelente consulta!", "Vamos a analizar..."). Ve directo a la respuesta.
+3. Si es consejo de compra (contado vs cuotas):
+   - En la primera línea da el veredicto explícito: ej "Te conviene pagar de contado" o "Te conviene financiar en cuotas".
+   - Demuestra con números: el recargo (+${pctRecargo || 0}%) supera o no la tasa de mercado (~3% mensual), y cómo impacta en sus compromisos ya agendados de ${targetMonth} ($${totalComprometidoTargetMonth}).
+4. Usa formato HTML de Telegram (<b>negrita</b>, <code>$monto</code>). No uses bloques de código ni asteriscos de markdown.`;
+
+      const queryMessages = [
+        ...cleanHistory,
+        {
+          role: 'user',
+          parts: [{ text: queryPromptText }]
+        }
+      ];
+
       const answerText = await callGemini(
         geminiKey, 
         modelName, 
         null, 
-        [{
-          role: 'user',
-          parts: [{
-            text: `El usuario de Telegram preguntó: "${messageText}".\n\nAquí tienes la información real extraída de la base de datos de Supabase:\n\n${fetchedDataContext}\n\nResponde directamente al usuario de manera clara, amigable y resumida en español. Utiliza viñetas y etiquetas HTML (como <b> para negritas y <code> para montos de dinero o fechas) para formatear tu respuesta. No uses bloques de código markdown.`
-          }]
-        }]
+        queryMessages
       );
       
       await sendTelegramMessage(botToken, chatId, answerText, messageId);
+      await saveSessionTurn(answerText);
       return res.status(200).json({ success: true, type: 'query_answered' });
     }
 
@@ -1961,6 +2056,7 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
     if (responseStatus === 200 && responseData?.success) {
       const successMsg = `✅ <b>Cargado con éxito</b>\n\n${detailText}`;
       await sendTelegramMessage(botToken, chatId, successMsg, messageId, { remove_keyboard: true });
+      await saveSessionTurn(successMsg);
       return res.status(200).json({ success: true, data: responseData });
     } else {
       const errMsg = responseData?.error || 'Error desconocido al insertar en base de datos.';

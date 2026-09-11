@@ -28,5 +28,6 @@ Thumbs.db
 .vercel
 .env*
 *.pdf
+!Manual_de_Usuario_Fluxo_For_Dummies.pdf
 *.xlsx
 *.csv

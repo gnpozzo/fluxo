@@ -76,30 +76,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Include statement consumptions for any card whose vencimiento or cierre falls in [fechaInicio, fechaFin]
-    for (const tc of (tarjetas || [])) {
-      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual >= fechaInicio && tc.fecha_vencimiento_actual <= fechaFin) ||
-                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual >= fechaInicio && tc.fecha_cierre_actual <= fechaFin);
-      if (isDueInMonth) {
-        let qStmt = supabase.from('consumos_tc')
-          .select('*, categorias (nombre)')
-          .eq('id_tarjeta', tc.id_tarjeta)
-          .eq('user_id', userId);
-        if (tc.fecha_cierre_actual) {
-          qStmt = qStmt.lte('fecha', tc.fecha_cierre_actual);
-        }
-        const { data: stmtData } = await qStmt;
-        (stmtData || []).forEach(c => {
-          if (!consumosMap.has(c.id_consumo_tarjeta)) {
-            consumosMap.set(c.id_consumo_tarjeta, {
-              ...c,
-              tarjeta_nombre: tc.nombre,
-              categoria_nombre: c.categorias?.nombre || 'General'
-            });
-          }
-        });
-      }
-    }
+
 
     consumos = Array.from(consumosMap.values());
 
