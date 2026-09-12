@@ -1,9 +1,11 @@
 'use strict';
 /* ============================================================
-   module-inversiones.html — v5.0.0
-   Módulo Portfolio de Inversiones.
+   module-inversiones.js — v6.0.0 (FinSet 3-Row Architecture)
+   Módulo Portfolio de Inversiones & Monitor Global.
    Extiende BaseModule. Sin filtro de mes (portfolio global).
    ============================================================ */
+
+import Chart from 'chart.js/auto';
 
 // --- SECCIÓN 0: CLASE InversionesModule ---
 
@@ -14,13 +16,15 @@ export class InversionesModule extends BaseModule {
 
   get _createEndpoint() { return 'api_createInversion'; }
 
-  #table     = null;
-  #kpiValor  = null;
-  #kpiCosto  = null;
-  #kpiResult = null;
-  #modal     = null;
-  #editData  = null;
-  #cotizDolar = null;
+  #modal              = null;
+  #editData           = null;
+  #cotizDolar         = null;
+  #portfolioData      = null;
+  #flowPeriod         = '6M'; // '6M' | '12M' | 'YTD'
+  #tipoFiltro         = 'ALL'; // 'ALL' | 'COMPRA' | 'VENTA'
+  #busqueda           = '';
+  #chartInstance      = null;
+  #donutChartInstance = null;
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -29,7 +33,19 @@ export class InversionesModule extends BaseModule {
     this._buildVista();
     this._bindListeners();
     this._subscribeEvents();
-    App.log('InversionesModule', 'init', 'Módulo inversiones iniciado');
+    App.log('InversionesModule', 'init', 'Módulo inversiones iniciado (FinSet)');
+  }
+
+  destruir() {
+    if (this.#chartInstance) {
+      this.#chartInstance.destroy();
+      this.#chartInstance = null;
+    }
+    if (this.#donutChartInstance) {
+      this.#donutChartInstance.destroy();
+      this.#donutChartInstance = null;
+    }
+    super.destruir();
   }
 
   /** Inversiones no usa filtro de mes, solo de cuenta */
@@ -39,7 +55,6 @@ export class InversionesModule extends BaseModule {
     if (!cuenta) return;
 
     this.#mostrarKpiSkeletons();
-    this.#table?.showSkeleton(5);
 
     try {
       const [portfolioData, dolarData, marketData] = await Promise.all([
@@ -59,6 +74,65 @@ export class InversionesModule extends BaseModule {
   }
 
   // --- SECCIÓN 2: RENDER ---
+
+  _render(data) {
+    if (!data || !data.success) {
+      App.Toast.error(data?.error || 'Error al obtener portfolio.');
+      return;
+    }
+
+    this.#portfolioData = data;
+    const { kpis, portfolio } = data;
+
+    // Scorecard 1: Valor actual
+    const valValorEl = document.getElementById('inv-kpi-val-valor');
+    const subValorEl = document.getElementById('inv-kpi-sub-valor');
+    if (valValorEl) valValorEl.textContent = App.Utils.formatearMoneda(kpis.valorActual);
+    if (subValorEl) subValorEl.textContent = `Costo invertido: ${App.Utils.formatearMoneda(kpis.costoTotal)}`;
+
+    // Scorecard 2: Costo Total
+    const valCostoEl = document.getElementById('inv-kpi-val-costo');
+    if (valCostoEl) valCostoEl.textContent = App.Utils.formatearMoneda(kpis.costoTotal);
+
+    // Scorecard 3: Ganancia P&L
+    const valResultEl = document.getElementById('inv-kpi-val-result');
+    const pillResultEl = document.getElementById('inv-kpi-pill-result');
+    const subResultEl = document.getElementById('inv-kpi-sub-result');
+    const ganancia = Number(kpis.gananciaTotal || 0);
+    const rend = Number(kpis.rendimientoPorc || 0);
+
+    if (valResultEl) {
+      valResultEl.textContent = App.Utils.formatearMoneda(ganancia);
+      valResultEl.style.color = ganancia > 0 ? 'var(--verde)' : (ganancia < 0 ? 'var(--rojo)' : 'var(--texto)');
+    }
+    if (pillResultEl) {
+      pillResultEl.className = 'finset-trend-pill ' + (ganancia >= 0 ? 'trend-up' : 'trend-down');
+      pillResultEl.innerHTML = `<span>${ganancia >= 0 ? '+' : ''}${rend.toFixed(2)}%</span>`;
+    }
+    if (subResultEl) {
+      subResultEl.textContent = ganancia >= 0 ? 'Rendimiento positivo acumulado' : 'Rendimiento negativo acumulado';
+    }
+
+    // Scorecard 4: Rendimiento Global %
+    const valRendEl = document.getElementById('inv-kpi-val-rend');
+    const fillRendEl = document.getElementById('inv-rend-progress-fill');
+    if (valRendEl) {
+      valRendEl.textContent = `${rend >= 0 ? '+' : ''}${rend.toFixed(2)}%`;
+      valRendEl.style.color = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
+    }
+    if (fillRendEl) {
+      const pctWidth = Math.min(100, Math.max(10, Math.abs(rend) * 2));
+      fillRendEl.style.width = `${pctWidth}%`;
+      fillRendEl.style.background = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
+    }
+
+    // Renderizar Gráficos y Lista
+    this.#renderMoneyFlowChart();
+    this.#renderDonutChart();
+    this.#filterAndRenderOperaciones();
+
+    App.log('InversionesModule', '_render', `${(portfolio || []).length} posiciones cargadas`);
+  }
 
   _renderTickerCarousel(md, dl) {
     const infoDiv = document.getElementById('inv-dolar-info');
@@ -135,7 +209,6 @@ export class InversionesModule extends BaseModule {
     const btnPause = document.getElementById('ticker-btn-pause');
 
     if (wrapper) {
-      // Navegación con bucle infinito / circular wrap
       btnLeft?.addEventListener('click', () => {
         if (wrapper.scrollLeft <= 5) {
           wrapper.scrollTo({ left: wrapper.scrollWidth - wrapper.clientWidth, behavior: 'smooth' });
@@ -152,7 +225,6 @@ export class InversionesModule extends BaseModule {
         }
       });
 
-      // Click en instrumento para consultar con FluxoAI
       wrapper.querySelectorAll('.ticker-card').forEach(card => {
         card.addEventListener('click', () => {
           const sym = card.dataset.symbol;
@@ -189,18 +261,11 @@ export class InversionesModule extends BaseModule {
     }
   }
 
-  _renderDolarInfo(dl) {
-    // Deprecated in favor of _renderTickerCarousel
-    this._renderTickerCarousel(null, dl);
-  }
-
-
   _renderMarketData(md) {
     if (!md || !md.success) return;
     const wrap = document.getElementById('inv-mercados-wrap');
     if (!wrap) return;
 
-    // Sub-tabs para cada categoría de instrumentos
     const TABS = [
       { id: 'mundo',     label: 'Mundo',     icon: '🌎' },
       { id: 'soberanos', label: 'Bonos Sober.', icon: '🏛️' },
@@ -222,38 +287,18 @@ export class InversionesModule extends BaseModule {
     ).join('');
 
     let html = `
-      <div style="padding:20px 24px 4px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--borde);">
+      <div style="padding:16px 20px 4px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--borde);">
         ${tabsHtml}
       </div>
-      <div id="monitor-panels" style="padding:20px 24px 24px;">
+      <div id="monitor-panels" style="padding:18px 20px 20px;">
     `;
 
-    // --- PANEL: MUNDO ---
-    html += `<div class="monitor-panel" data-monitor-panel="mundo">`;
-    html += this.#buildMundoPanel(md.mundo || []);
+    html += `<div class="monitor-panel" data-monitor-panel="mundo">${this.#buildMundoPanel(md.mundo || [])}</div>`;
+    html += `<div class="monitor-panel hidden" data-monitor-panel="soberanos">${this.#buildSoberanosPanel(md.soberanos || [])}</div>`;
+    html += `<div class="monitor-panel hidden" data-monitor-panel="lecaps">${this.#buildLecapsPanel(md.lecaps || [])}</div>`;
+    html += `<div class="monitor-panel hidden" data-monitor-panel="ons">${this.#buildOnsPanel(md.ons || [])}</div>`;
+    html += `<div class="monitor-panel hidden" data-monitor-panel="cedears">${this.#buildCedearsPanel(md.cedears || [])}</div>`;
     html += `</div>`;
-
-    // --- PANEL: SOBERANOS ---
-    html += `<div class="monitor-panel hidden" data-monitor-panel="soberanos">`;
-    html += this.#buildSoberanosPanel(md.soberanos || []);
-    html += `</div>`;
-
-    // --- PANEL: LECAPS ---
-    html += `<div class="monitor-panel hidden" data-monitor-panel="lecaps">`;
-    html += this.#buildLecapsPanel(md.lecaps || []);
-    html += `</div>`;
-
-    // --- PANEL: ONs ---
-    html += `<div class="monitor-panel hidden" data-monitor-panel="ons">`;
-    html += this.#buildOnsPanel(md.ons || []);
-    html += `</div>`;
-
-    // --- PANEL: CEDEARS ---
-    html += `<div class="monitor-panel hidden" data-monitor-panel="cedears">`;
-    html += this.#buildCedearsPanel(md.cedears || []);
-    html += `</div>`;
-
-    html += `</div>`; // cierra monitor-panels
 
     wrap.innerHTML = html;
 
@@ -271,7 +316,6 @@ export class InversionesModule extends BaseModule {
       });
     });
 
-    // Bind click en cualquier fila o tarjeta interactiva de mercado para consultar a FluxoAI
     wrap.querySelectorAll('[data-inv-symbol]').forEach(el => {
       el.style.cursor = 'pointer';
       el.addEventListener('click', () => {
@@ -284,12 +328,10 @@ export class InversionesModule extends BaseModule {
     });
   }
 
-  // --- BUILDERS DE CADA PANEL ---
+  // --- BUILDERS DE PANELES DE MERCADO ---
 
   #buildMundoPanel(arr) {
     if (!arr.length) return '<p style="color:var(--texto-3);text-align:center;padding:32px;">Sin datos de mercado disponibles.</p>';
-
-    // Agrupar por grupo (Índices, Tasas, Energía, Metales, Agro, Crypto, Monedas)
     const grupos = {};
     arr.forEach(m => {
       const g = m.group || 'Otros';
@@ -299,8 +341,8 @@ export class InversionesModule extends BaseModule {
 
     let html = '';
     for (const [grupo, items] of Object.entries(grupos)) {
-      html += `<div style="margin-bottom:20px;">
-        <h4 style="margin:0 0 10px;color:var(--texto-2);font-size:0.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">${App.Utils.escapeHtml(grupo)}</h4>
+      html += `<div style="margin-bottom:18px;">
+        <h4 style="margin:0 0 10px;color:var(--texto-2);font-size:0.78rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">${App.Utils.escapeHtml(grupo)}</h4>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;">`;
       items.forEach(m => {
         const clr = (m.change || 0) >= 0 ? 'var(--verde)' : 'var(--rojo)';
@@ -312,8 +354,8 @@ export class InversionesModule extends BaseModule {
             <span style="font-size:1.1rem;">${m.icon || ''}</span>
             <span style="font-weight:600;font-size:0.82rem;color:var(--texto-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${App.Utils.escapeHtml(m.name)}</span>
           </div>
-          <div style="font-size:1.2rem;font-weight:700;color:var(--texto);">${priceStr}</div>
-          <div style="font-size:0.78rem;font-weight:700;color:${clr};margin-top:3px;">${arrow} ${m.change >= 0 ? '+' : ''}${pct}%</div>
+          <div style="font-size:1.15rem;font-weight:700;color:var(--texto);">${priceStr}</div>
+          <div style="font-size:0.76rem;font-weight:700;color:${clr};margin-top:3px;">${arrow} ${m.change >= 0 ? '+' : ''}${pct}%</div>
         </div>`;
       });
       html += `</div></div>`;
@@ -361,7 +403,7 @@ export class InversionesModule extends BaseModule {
           <span style="font-weight:700;font-size:0.95rem;color:var(--texto);">${sym}</span>
           <span style="font-size:0.65rem;font-weight:600;padding:2px 6px;border-radius:4px;background:${accent}22;color:${accent};">${tipo}</span>
         </div>
-        <div style="font-size:1.3rem;font-weight:800;margin-top:6px;color:${accent};">$ ${priceStr}</div>
+        <div style="font-size:1.25rem;font-weight:800;margin-top:6px;color:${accent};">$ ${priceStr}</div>
         <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.75rem;color:var(--texto-3);">
           <span>Bid: ${Number(l.bid || 0).toFixed(2)}</span>
           <span>Ask: ${Number(l.ask || 0).toFixed(2)}</span>
@@ -401,7 +443,6 @@ export class InversionesModule extends BaseModule {
 
   #buildCedearsPanel(arr) {
     if (!arr.length) return '<p style="color:var(--texto-3);text-align:center;padding:32px;">Sin datos de CEDEARs disponibles.</p>';
-    // Ordenar por volumen desc para mostrar los más operados
     const sorted = [...arr].filter(c => parseFloat(c.c) > 0).sort((a,b) => (Number(b.v)||0) - (Number(a.v)||0)).slice(0, 40);
     let html = `<div style="overflow-x:auto;">
       <table class="table" style="min-width:650px;">
@@ -430,141 +471,575 @@ export class InversionesModule extends BaseModule {
     return html;
   }
 
-  _render(data) {
-    if (!data || !data.success) {
-      App.Toast.error(data?.error || 'Error al obtener portfolio.');
-      return;
-    }
-
-    const { kpis, portfolio } = data;
-
-    this.#kpiValor?.setValue(kpis.valorActual, {
-      subtitulo: `Costo: ${App.Utils.formatearMoneda(kpis.costoTotal)}`
-    });
-    this.#kpiCosto?.setValue(kpis.costoTotal);
-    this.#kpiResult?.setValue(kpis.gananciaTotal, {
-      variacion : kpis.rendimientoPorc,
-      invertido : false
-    });
-
-    this.#table?.load(portfolio || []);
-    App.log('InversionesModule', '_render', `${(portfolio || []).length} posiciones`);
-  }
-
-  // --- SECCIÓN 3: BUILD DOM ---
+  // --- SECCIÓN 3: BUILD DOM (FinSet 3-Row Architecture) ---
 
   _buildVista() {
     const vista = document.getElementById(this.vistaId);
     if (!vista) return;
 
     vista.innerHTML = `
-      <div class="module-view-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-        </svg>
-        <span>Inversiones</span>
+      <!-- ═══ ROW 1: SCORECARDS FINSET ═══ -->
+      <div class="finset-kpi-grid" id="inv-scorecards-grid" style="margin-bottom: 24px;">
+        
+        <!-- Card 1: Valor Actual -->
+        <div class="finset-kpi-card" id="inv-card-kpi-valor">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-blue">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              <span class="finset-kpi-title">Valor Actual</span>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="inv-kpi-val-valor">$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="inv-kpi-sub-valor">Costo: $ 0,00</span>
+            <span class="finset-trend-pill trend-up"><span>Portfolio</span></span>
+          </div>
+        </div>
+
+        <!-- Card 2: Costo Total Invertido -->
+        <div class="finset-kpi-card" id="inv-card-kpi-costo">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-purple">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+              </div>
+              <span class="finset-kpi-title">Costo Invertido</span>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="inv-kpi-val-costo">$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext">Capital histórico colocado</span>
+            <span class="finset-trend-pill trend-neutral"><span>Costo</span></span>
+          </div>
+        </div>
+
+        <!-- Card 3: Ganancia P&L -->
+        <div class="finset-kpi-card" id="inv-card-kpi-result">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-green">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+              </div>
+              <span class="finset-kpi-title">Ganancia (P&L)</span>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="inv-kpi-val-result">$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="inv-kpi-sub-result">Resultado acumulado</span>
+            <span class="finset-trend-pill trend-up" id="inv-kpi-pill-result"><span>0.00%</span></span>
+          </div>
+        </div>
+
+        <!-- Card 4: Rendimiento Global % -->
+        <div class="finset-kpi-card" id="inv-card-kpi-rend">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-yellow">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              </div>
+              <div style="display:flex; flex-direction:column; line-height:1.2;">
+                <span class="finset-kpi-title">Rendimiento</span>
+                <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3);">Retorno sobre capital</span>
+              </div>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="inv-kpi-val-rend" style="font-size:1.35rem;">0.00%</div>
+          <div class="finset-goal-progress-wrap">
+            <div class="finset-goal-progress-bar">
+              <div class="finset-goal-progress-fill" id="inv-rend-progress-fill" style="width: 50%; background: var(--verde);"></div>
+            </div>
+          </div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext">Retorno de cartera</span>
+            <span class="finset-trend-pill trend-up"><span>Retorno</span></span>
+          </div>
+        </div>
+
       </div>
 
-      <div class="kpi-grid" id="inv-kpi-grid"></div>
-
-      <!-- Cotizaciones del Dólar -->
-      <div id="inv-dolar-info" style="margin-bottom:var(--space-4); display:flex; gap:12px; flex-wrap:wrap;"></div>
-
-      <div class="section-header" style="margin-bottom:var(--space-3)">
-        <div class="acciones-container" id="inv-acciones">
-          <button id="inv-btn-nuevo" class="btn btn-primary">
-            ${App.Icons.get('add', 'icon-sm')} Nueva operación
-          </button>
+      <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Evolución + Asset Allocation) ═══ -->
+      <div class="finset-grid-2col" style="margin-bottom: 24px;">
+        
+        <!-- Left (60%): Evolución Mensual del Portfolio -->
+        <div class="finset-card" id="inv-widget-moneyflow">
+          <div class="finset-card-header">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Flujo de Inversiones</h3>
+              <span class="finset-card-subtitle" id="inv-moneyflow-sub">Evolución histórica últimos 6 meses</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <div class="fintech-pill-switch" id="inv-period-switch">
+                <button class="fintech-pill-btn active" data-period="6M">6M</button>
+                <button class="fintech-pill-btn" data-period="12M">12M</button>
+                <button class="fintech-pill-btn" data-period="YTD">Año actual</button>
+              </div>
+            </div>
+          </div>
+          <div style="position:relative; width:100%; height:230px; margin: 4px 0;">
+            <canvas id="inv-moneyflow-canvas"></canvas>
+          </div>
+          <div class="finset-chart-summary" id="inv-moneyflow-summary"></div>
         </div>
-        <div class="selector-vista-container">
-          <button id="inv-btn-portfolio" class="btn btn-primary btn-vista active">Mi Portfolio</button>
-          <button id="inv-btn-mercados" class="btn btn-ghost btn-vista">Monitor Global</button>
+
+        <!-- Right (40%): Asset Allocation (FinSet Side-by-Side) -->
+        <div class="finset-card" id="inv-widget-categories">
+          <div class="finset-card-header">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Asset Allocation</h3>
+              <span class="finset-card-subtitle">Distribución por activo</span>
+            </div>
+          </div>
+          <div class="finset-categories-side-wrap">
+            <div class="fintech-legend-list" id="inv-categories-legend" style="margin-top:0;"></div>
+            <div class="fintech-donut-wrapper" style="height:180px; margin:0;">
+              <canvas id="inv-categories-donut-canvas"></canvas>
+              <div class="fintech-donut-center" id="inv-categories-donut-center">
+                <span class="fintech-donut-center-label">Total Invertido</span>
+                <span class="fintech-donut-center-val" id="inv-donut-center-val" style="font-size:1.05rem;">$ 0,00</span>
+              </div>
+            </div>
+          </div>
         </div>
+
       </div>
 
-      <div class="table-card" id="inv-tabla-wrap"></div>
-      
-      <!-- Contenedor del Monitor -->
-      <div class="table-card hidden" id="inv-mercados-wrap">
-         <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando mercados...</div>
+      <!-- Live Ticker de Mercados & Dólar -->
+      <div id="inv-dolar-info" style="margin-bottom: 24px;"></div>
+
+      <!-- ═══ ROW 3: OPERATIONS & POSICIONES / MONITOR GLOBAL ═══ -->
+      <div class="finset-card" id="inv-widget-operaciones">
+        <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+          <div class="dh-drilldown-left" style="min-width:200px;">
+            <div class="dh-drilldown-badge badge-all" id="inv-operaciones-badge">
+              <span class="dh-badge-dot"></span>
+              <span class="dh-badge-title" id="inv-operaciones-title">Posiciones & Operaciones</span>
+            </div>
+            <div class="dh-drilldown-summary" id="inv-operaciones-summary">—</div>
+          </div>
+
+          <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
+            <!-- Switch Portfolio vs Monitor -->
+            <div class="currency-pills" id="inv-view-switch" style="display:flex;">
+              <button class="currency-pill active" id="inv-btn-portfolio" data-view="portfolio">Mi Portfolio</button>
+              <button class="currency-pill" id="inv-btn-mercados" data-view="mercados">Monitor Global</button>
+            </div>
+
+            <div id="inv-portfolio-controls" style="display:flex; align-items:center; gap:10px;">
+              <!-- Pestañas de Filtrado -->
+              <div class="dh-filter-tabs" id="inv-operaciones-tabs">
+                <button class="dh-tab-btn active" data-filter="ALL" id="inv-tab-all">Todos</button>
+                <button class="dh-tab-btn" data-filter="COMPRA" id="inv-tab-compras">Compras</button>
+                <button class="dh-tab-btn" data-filter="VENTA" id="inv-tab-ventas">Ventas</button>
+              </div>
+
+              <!-- Buscador -->
+              <div class="dh-search-box" style="margin:0;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="inv-search-input" placeholder="Buscar ticker..." class="finset-search-input" style="width:140px;">
+              </div>
+
+              <!-- Único Botón Contextual Primario -->
+              <button class="btn btn-primary btn-sm" id="inv-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>+ Operación</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista de operaciones interactiva estilo movimientos -->
+        <div class="dh-drilldown-list dh-side-main" id="inv-operaciones-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
+        </div>
+
+        <!-- Contenedor del Monitor Global de Mercados -->
+        <div class="hidden" id="inv-mercados-wrap" style="margin-top:12px;">
+           <div style="padding:2rem;color:var(--texto-3);text-align:center">Cargando mercados...</div>
+        </div>
       </div>
     `;
-
-    const grid = document.getElementById('inv-kpi-grid');
-    this.#kpiValor  = new App.KpiCard(grid, { titulo: 'Valor actual',  icono: 'investment', colorClass: 'kpi-blue',   onFormat: App.Utils.formatearMoneda });
-    this.#kpiCosto  = new App.KpiCard(grid, { titulo: 'Costo total',   icono: 'wallet',     colorClass: 'kpi-purple', onFormat: App.Utils.formatearMoneda });
-    this.#kpiResult = new App.KpiCard(grid, { titulo: 'Ganancia',      icono: 'trending_up',colorClass: 'kpi-green',  onFormat: App.Utils.formatearMoneda });
-
-    this.#table = new App.DataTable(
-      document.getElementById('inv-tabla-wrap'),
-      {
-        columns: [
-          { key: 'fecha',         label: 'Fecha',     sortable: true,
-            render: (r) => App.Utils.formatearFecha(r.fecha?.value || r.fecha) },
-          { key: 'tipo_op',       label: 'Operación', sortable: true,
-            render: (r) => `<span class="tipo-mov tipo-${r.tipo_op === 'COMPRA' ? 'ingreso' : 'egreso'}">${App.Utils.escapeHtml(r.tipo_op)}</span>` },
-          { key: 'ticker',        label: 'Ticker',    sortable: true,
-            render: (r) => `<strong>${App.Utils.escapeHtml(r.ticker)}</strong>` },
-          { key: 'cantidad',      label: 'Cantidad',  align: 'right',
-            render: (r) => App.Utils.formatearMoneda(r.cantidad, false) },
-          { key: 'precio',        label: 'Precio',    align: 'right',
-            render: (r) => {
-              const fmt = r.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
-              return fmt(r.precio);
-            }},
-          { key: 'precio_actual', label: 'Precio actual', align: 'right',
-            render: (r) => {
-              if (!r.precio_actual) return '—';
-              const fmt = r.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
-              return fmt(r.precio_actual);
-            }},
-          { key: 'ganancia',      label: 'P&L',       align: 'right',
-            render: (r) => {
-              if (r.ganancia === null || r.ganancia === undefined) return '—';
-              const cls = r.ganancia >= 0 ? 'positivo' : 'negativo';
-              return `<span class="${cls}">${App.Utils.formatearMoneda(r.ganancia)}</span>`;
-            }}
-        ],
-        emptyMsg: 'No hay operaciones en el portfolio.',
-        paginated: true,
-        pageSize : 25,
-        onRowClick: (row) => this.#abrirModalDetalle(row)
-      }
-    );
   }
 
-  // --- SECCIÓN 4: MODAL ---
+  // --- SECCIÓN 4: ANALYTICS & CHARTS ---
 
-  #abrirModalAlta() {
+  #renderMoneyFlowChart() {
+    const canvas = document.getElementById('inv-moneyflow-canvas');
+    if (!canvas) return;
+
+    if (this.#chartInstance) {
+      this.#chartInstance.destroy();
+      this.#chartInstance = null;
+    }
+
+    const portfolio = this.#portfolioData?.portfolio || [];
+
+    let count = 6;
+    if (this.#flowPeriod === '12M') count = 12;
+    else if (this.#flowPeriod === 'YTD') {
+      const currentMonthNum = new Date().getMonth() + 1;
+      count = Math.max(1, currentMonthNum);
+    }
+
+    const labels = [];
+    const keys = [];
+    const dateCursor = new Date();
+
+    for (let i = count - 1; i >= 0; i--) {
+      const d = new Date(dateCursor.getFullYear(), dateCursor.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      keys.push(ym);
+      const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      labels.push(monthNames[d.getMonth()]);
+    }
+
+    const comprasData = keys.map(k => {
+      return portfolio
+        .filter(p => p.tipo_op === 'COMPRA' && (p.fecha?.value || p.fecha || '').startsWith(k))
+        .reduce((sum, p) => sum + (Number(p.cantidad || 0) * Number(p.precio || 0)), 0);
+    });
+
+    const ventasData = keys.map(k => {
+      return portfolio
+        .filter(p => p.tipo_op === 'VENTA' && (p.fecha?.value || p.fecha || '').startsWith(k))
+        .reduce((sum, p) => sum + (Number(p.cantidad || 0) * Number(p.precio || 0)), 0);
+    });
+
+    const totalComp = comprasData.reduce((a, b) => a + b, 0);
+    const totalVent = ventasData.reduce((a, b) => a + b, 0);
+    const netoInvertido = totalComp - totalVent;
+
+    const summaryEl = document.getElementById('inv-moneyflow-summary');
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <span>Compras: <strong style="color:var(--verde);">${App.Utils.formatearMoneda(totalComp)}</strong></span>
+        <span style="margin:0 8px; color:var(--borde);">•</span>
+        <span>Ventas: <strong style="color:var(--rojo);">${App.Utils.formatearMoneda(totalVent)}</strong></span>
+        <span style="margin:0 8px; color:var(--borde);">•</span>
+        <span>Flujo Neto: <strong>${App.Utils.formatearMoneda(netoInvertido)}</strong></span>
+      `;
+    }
+
+    const ctx = canvas.getContext('2d');
+    this.#chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Compras',
+            data: comprasData,
+            backgroundColor: '#10B981',
+            borderRadius: 6,
+            barPercentage: 0.5,
+            categoryPercentage: 0.7
+          },
+          {
+            label: 'Ventas',
+            data: ventasData,
+            backgroundColor: '#3B82F6',
+            borderRadius: 6,
+            barPercentage: 0.5,
+            categoryPercentage: 0.7
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            align: 'end',
+            labels: {
+              boxWidth: 10,
+              boxHeight: 10,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              color: 'var(--texto-2)',
+              font: { family: 'inherit', size: 11, weight: '600' }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(24, 24, 27, 0.95)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            padding: 10,
+            cornerRadius: 8,
+            callbacks: {
+              label: (item) => ` ${item.dataset.label}: ${App.Utils.formatearMoneda(item.raw)}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: 'var(--texto-3)', font: { size: 11 } }
+          },
+          y: {
+            grid: { color: 'rgba(128, 128, 128, 0.1)' },
+            ticks: {
+              color: 'var(--texto-3)',
+              font: { size: 10 },
+              callback: (v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v
+            }
+          }
+        }
+      }
+    });
+  }
+
+  #renderDonutChart() {
+    const canvas = document.getElementById('inv-categories-donut-canvas');
+    if (!canvas) return;
+
+    if (this.#donutChartInstance) {
+      this.#donutChartInstance.destroy();
+      this.#donutChartInstance = null;
+    }
+
+    const portfolio = this.#portfolioData?.portfolio || [];
+
+    // Agrupar por Ticker (o tipo de activo)
+    const mapTickers = {};
+    portfolio.forEach(p => {
+      const sym = (p.ticker || 'OTROS').toUpperCase();
+      const val = Number(p.cantidad || 0) * Number(p.precio_actual || p.precio || 0);
+      mapTickers[sym] = (mapTickers[sym] || 0) + val;
+    });
+
+    const labels = Object.keys(mapTickers);
+    const dataVals = Object.values(mapTickers);
+    const total = dataVals.reduce((a, b) => a + b, 0);
+
+    const centerValEl = document.getElementById('inv-donut-center-val');
+    if (centerValEl) centerValEl.textContent = App.Utils.formatearMoneda(total);
+
+    const PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#F97316'];
+    const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
+
+    const legendEl = document.getElementById('inv-categories-legend');
+    if (legendEl) {
+      if (!labels.length) {
+        legendEl.innerHTML = '<p style="color:var(--texto-3); font-size:0.8rem; padding:10px;">Sin posiciones en cartera.</p>';
+      } else {
+        legendEl.innerHTML = labels.map((lbl, i) => {
+          const val = dataVals[i];
+          const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
+          return `
+            <div class="fintech-legend-item">
+              <div class="fintech-legend-left">
+                <span class="fintech-legend-dot" style="background: ${colors[i]};"></span>
+                <span class="fintech-legend-label" title="${App.Utils.escapeHtml(lbl)}">${App.Utils.escapeHtml(lbl)}</span>
+              </div>
+              <div class="fintech-legend-right">
+                <span class="fintech-legend-pct">${pct}%</span>
+                <span class="fintech-legend-amount" style="color: var(--texto); font-weight: 600;">${App.Utils.formatearMoneda(val)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    const ctx = canvas.getContext('2d');
+    this.#donutChartInstance = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: dataVals.length ? dataVals : [1],
+          backgroundColor: dataVals.length ? colors : ['#E2E8F0'],
+          borderWidth: 2,
+          borderColor: 'var(--superficie)',
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '74%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: dataVals.length > 0,
+            callbacks: {
+              label: (item) => ` ${item.label}: ${App.Utils.formatearMoneda(item.raw)}`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // --- SECCIÓN 5: FILTRADO Y LISTA DE OPERACIONES ---
+
+  #filterAndRenderOperaciones() {
+    const portfolio = this.#portfolioData?.portfolio || [];
+
+    const filtered = portfolio.filter(p => {
+      if (this.#tipoFiltro !== 'ALL' && p.tipo_op !== this.#tipoFiltro) return false;
+      if (this.#busqueda) {
+        const q = this.#busqueda.toLowerCase();
+        const sym = (p.ticker || '').toLowerCase();
+        if (!sym.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const badgeTitleEl = document.getElementById('inv-operaciones-title');
+    const badgeEl = document.getElementById('inv-operaciones-badge');
+    const summaryEl = document.getElementById('inv-operaciones-summary');
+
+    if (badgeTitleEl) {
+      if (this.#tipoFiltro === 'COMPRA') badgeTitleEl.textContent = 'Operaciones de Compra';
+      else if (this.#tipoFiltro === 'VENTA') badgeTitleEl.textContent = 'Operaciones de Venta';
+      else badgeTitleEl.textContent = 'Posiciones & Operaciones';
+    }
+    if (badgeEl) {
+      badgeEl.className = 'dh-drilldown-badge ' + (this.#tipoFiltro === 'COMPRA' ? 'badge-ing' : (this.#tipoFiltro === 'VENTA' ? 'badge-egr' : 'badge-all'));
+    }
+
+    const totalVol = filtered.reduce((acc, p) => acc + (Number(p.cantidad || 0) * Number(p.precio || 0)), 0);
+    const totalPL = filtered.reduce((acc, p) => acc + Number(p.ganancia || 0), 0);
+
+    if (summaryEl) {
+      summaryEl.textContent = `${filtered.length} ${filtered.length === 1 ? 'operación' : 'operaciones'} • Volumen: ${App.Utils.formatearMoneda(totalVol)} • P&L: ${App.Utils.formatearMoneda(totalPL)}`;
+    }
+
+    this.#renderOperacionesList(filtered);
+  }
+
+  #renderOperacionesList(items) {
+    const listEl = document.getElementById('inv-operaciones-list');
+    if (!listEl) return;
+
+    if (!items.length) {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:36px 16px; color:var(--texto-3);">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.6;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <p style="font-weight:600; margin:0 0 4px; color:var(--texto-2);">No hay operaciones registradas</p>
+          <p style="font-size:0.8rem; margin:0;">No se encontraron registros con los filtros aplicados.</p>
+        </div>
+      `;
+      return;
+    }
+
+    listEl.innerHTML = items.map(r => {
+      const isCompra = r.tipo_op === 'COMPRA';
+      const iconBg = isCompra ? 'rgba(16, 185, 129, 0.12)' : 'rgba(59, 130, 246, 0.12)';
+      const iconClr = isCompra ? 'var(--verde)' : '#3b82f6';
+      const badgeCls = isCompra ? 'dh-badge-ing' : 'dh-badge-recur';
+      const badgeLabel = isCompra ? 'Compra' : 'Venta';
+
+      const sym = App.Utils.escapeHtml(r.ticker || '—');
+      const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
+      const fmt = r.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
+      const totalOperacion = Number(r.cantidad || 0) * Number(r.precio || 0);
+
+      let plHtml = '—';
+      if (r.ganancia !== null && r.ganancia !== undefined) {
+        const plCls = r.ganancia >= 0 ? 'positivo' : 'negativo';
+        const sign = r.ganancia >= 0 ? '+' : '';
+        plHtml = `<span class="${plCls}" style="font-weight:700;">${sign}${App.Utils.formatearMoneda(r.ganancia)}</span>`;
+      }
+
+      return `
+        <div class="dh-drill-row" data-inv-id="${r.id_operacion}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid var(--borde); cursor:pointer; transition:background 0.15s ease;">
+          <div style="width:36px; height:36px; border-radius:10px; background:${iconBg}; color:${iconClr}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              ${isCompra ? '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>' : '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>'}
+            </svg>
+          </div>
+
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+              <span style="font-weight:700; font-size:0.92rem; color:var(--texto);">${sym}</span>
+              <span class="dh-item-badge ${badgeCls}" style="font-size:0.68rem; padding:2px 6px; border-radius:4px;">${badgeLabel}</span>
+              <span style="font-size:0.75rem; color:var(--texto-3);">${r.moneda || 'ARS'}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:0.75rem; color:var(--texto-3);">
+              <span>${fechaStr}</span>
+              <span>•</span>
+              <span>${Number(r.cantidad || 0).toLocaleString('es-AR')} un. @ ${fmt(r.precio)}</span>
+              ${r.precio_actual ? `<span>• Act: ${fmt(r.precio_actual)}</span>` : ''}
+            </div>
+          </div>
+
+          <div style="text-align:right; flex-shrink:0;">
+            <div style="font-weight:700; font-size:0.95rem; color:var(--texto);">
+              ${fmt(totalOperacion)}
+            </div>
+            <div style="font-size:0.75rem;">
+              P&L: ${plHtml}
+            </div>
+          </div>
+
+          <div class="dh-drill-actions" style="display:flex; align-items:center; gap:4px; margin-left:8px;" onclick="event.stopPropagation();">
+            <button class="btn-icon-sm inv-btn-delete" data-id="${r.id_operacion}" title="Eliminar" style="color:var(--rojo);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
+      const id = rowEl.dataset.invId;
+      const rowData = items.find(x => String(x.id_operacion) === String(id));
+      if (!rowData) return;
+
+      rowEl.addEventListener('click', () => this.#abrirModalDetalle(rowData));
+
+      rowEl.querySelector('.inv-btn-delete')?.addEventListener('click', () => {
+        this.#eliminarOperacion(rowData);
+      });
+    });
+  }
+
+  // --- SECCIÓN 6: MODAL DE ALTA ---
+
+  abrirAlta(tipo = 'COMPRA') {
+    this.#abrirModalAlta(tipo);
+  }
+
+  #abrirModalAlta(tipo = 'COMPRA') {
     this.#editData = null;
     this.#modal.open({
-      titulo      : 'Nueva operación de inversión',
+      titulo      : tipo === 'COMPRA' ? 'Nueva Compra de Inversión' : 'Nueva Venta de Inversión',
       icono       : 'investment',
-      body        : this.#buildFormHtml(null),
-      confirmLabel: 'Guardar',
+      body        : this.#buildFormHtml(tipo, null),
+      confirmLabel: 'Guardar Operación',
       size        : 'lg',
       onConfirm   : (m) => this.#guardar(m)
     });
+    this.#postOpenForm();
     this.#bindTickerSearch();
   }
 
-  #buildFormHtml(data) {
+  #buildFormHtml(tipo, data) {
+    const isCompra = tipo === 'COMPRA';
     const tasas = this.#cotizDolar;
     const usdInfo = tasas
-      ? `<small style="color:var(--color-text-muted)">USD Blue: $${App.Utils.formatearMoneda(tasas.blue?.venta, false)}</small>`
+      ? `<small style="color:var(--texto-3)">USD Blue: $${App.Utils.formatearMoneda(tasas.blue?.venta, false)}</small>`
       : '';
 
     return `
-      <form id="form-inv" class="form-grid">
-        <input type="hidden" name="id_operacion" value="${data?.id_operacion || ''}">
+      <!-- Selector Segmentado: Compra vs Venta -->
+      <div class="modal-segmented-switch">
+        <button type="button" class="modal-segmented-btn btn-inv-tipo-toggle ${isCompra ? 'active btn-seg-green' : ''}" data-tipo="COMPRA">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+          Compra
+        </button>
+        <button type="button" class="modal-segmented-btn btn-inv-tipo-toggle ${!isCompra ? 'active btn-seg-red' : ''}" data-tipo="VENTA">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+          Venta
+        </button>
+      </div>
 
-        <div class="form-group">
-          <label>Tipo de operación <span class="required-mark">*</span></label>
-          <select class="input" name="tipo_op" required>
-            <option value="COMPRA" ${data?.tipo_op === 'COMPRA' ? 'selected':''}>Compra</option>
-            <option value="VENTA"  ${data?.tipo_op === 'VENTA'  ? 'selected':''}>Venta</option>
-          </select>
-        </div>
+      <form id="form-inv" class="form-grid">
+        <input type="hidden" name="tipo_op" id="inv-form-tipo" value="${tipo}">
+        <input type="hidden" name="id_operacion" value="${data?.id_operacion || ''}">
 
         <div class="form-group">
           <label>Fecha <span class="required-mark">*</span></label>
@@ -577,12 +1052,12 @@ export class InversionesModule extends BaseModule {
           <label>Ticker <span class="required-mark">*</span></label>
           <input class="input" type="text" name="ticker" id="inv-ticker"
                  value="${App.Utils.escapeHtml(data?.ticker || '')}"
-                 autocomplete="off" required placeholder="Ej: GGAL, AAPL">
+                 autocomplete="off" required placeholder="Ej: GGAL, AAPL, AL30...">
           <div id="inv-ticker-suggestions" class="suggestions-container hidden"></div>
         </div>
 
         <div class="form-group">
-          <label>Moneda</label>
+          <label>Moneda <span class="required-mark">*</span></label>
           <select class="input" name="moneda">
             <option value="ARS" ${data?.moneda === 'ARS' ? 'selected':''}>ARS</option>
             <option value="USD" ${data?.moneda === 'USD' ? 'selected':'selected'}>USD</option>
@@ -592,19 +1067,45 @@ export class InversionesModule extends BaseModule {
         <div class="form-group">
           <label>Cantidad <span class="required-mark">*</span></label>
           <input class="input" type="number" name="cantidad" min="0.0001" step="0.0001"
-                 value="${data?.cantidad || ''}" required>
+                 value="${data?.cantidad || ''}" required placeholder="0.00">
         </div>
 
-        <div class="form-group">
+        <div class="form-group full-width">
           <label>Precio unitario <span class="required-mark">*</span></label>
           <div>
             <input class="input" type="number" name="precio" min="0.0001" step="0.0001"
-                   value="${data?.precio || ''}" required>
+                   value="${data?.precio || ''}" required placeholder="0.00">
             ${usdInfo}
           </div>
         </div>
       </form>
     `;
+  }
+
+  #postOpenForm() {
+    this.#modal.el.querySelectorAll('.btn-inv-tipo-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nuevoTipo = btn.dataset.tipo;
+        const isCompra = nuevoTipo === 'COMPRA';
+
+        this.#modal.el.querySelectorAll('.btn-inv-tipo-toggle').forEach(b => {
+          b.className = `modal-segmented-btn btn-inv-tipo-toggle ${b.dataset.tipo === nuevoTipo ? (isCompra ? 'active btn-seg-green' : 'active btn-seg-red') : ''}`;
+        });
+
+        const tipoHidden = this.#modal.el.querySelector('#inv-form-tipo');
+        if (tipoHidden) tipoHidden.value = nuevoTipo;
+
+        const confirmBtn = this.#modal.el.querySelector('.modal-confirm');
+        if (confirmBtn) {
+          confirmBtn.textContent = isCompra ? 'Guardar Compra' : 'Guardar Venta';
+          confirmBtn.className = `btn ${isCompra ? 'btn-primary' : 'btn-danger'} modal-confirm`;
+        }
+
+        const titleSpan = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:${isCompra ? 'var(--verde)' : 'var(--rojo)'};">${App.Icons.get(isCompra ? 'trending_up' : 'trending_down')}</span>${isCompra ? 'Nueva Compra de Inversión' : 'Nueva Venta de Inversión'}`;
+        const titleEl = this.#modal.el.querySelector('.modal-title');
+        if (titleEl) titleEl.innerHTML = titleSpan;
+      });
+    });
   }
 
   #bindTickerSearch() {
@@ -642,7 +1143,7 @@ export class InversionesModule extends BaseModule {
     }, { once: false });
   }
 
-  // --- SECCIÓN 5: CRUD ---
+  // --- SECCIÓN 7: CRUD ---
 
   async #guardar(modal) {
     const form = modal.getForm();
@@ -658,7 +1159,7 @@ export class InversionesModule extends BaseModule {
 
     const payload = {
       idCuenta : App.Store.cuenta,
-      tipoOp   : d.tipo_op,
+      tipoOp   : d.tipo_op || 'COMPRA',
       fecha    : d.fecha,
       ticker   : d.ticker.toUpperCase().trim(),
       moneda   : d.moneda,
@@ -669,49 +1170,97 @@ export class InversionesModule extends BaseModule {
     modal.setLoading(true);
     try {
       await this._handleCreate(payload, modal);
+      App.API.invalidatePattern('api_getPortfolio');
+      this.destruir();
+      await this.cargar();
     } catch (_) {
       modal.setLoading(false);
     }
   }
 
-  // --- SECCIÓN 6: LISTENERS ---
+  // --- SECCIÓN 8: LISTENERS ---
 
   _bindListeners() {
     const vista = document.getElementById(this.vistaId);
-    if (vista) {
-      vista.addEventListener('click', (e) => {
-        const btn = e.target.closest('button');
-        if (!btn) return;
-        if (btn.id === 'inv-btn-nuevo') this.#abrirModalAlta();
-        else if (btn.id === 'inv-btn-portfolio') {
-          document.getElementById('inv-btn-portfolio')?.classList.replace('btn-ghost', 'btn-primary');
-          document.getElementById('inv-btn-mercados')?.classList.replace('btn-primary', 'btn-ghost');
-          document.getElementById('inv-tabla-wrap')?.classList.remove('hidden');
-          document.getElementById('inv-mercados-wrap')?.classList.add('hidden');
-        } else if (btn.id === 'inv-btn-mercados') {
-          document.getElementById('inv-btn-mercados')?.classList.replace('btn-ghost', 'btn-primary');
-          document.getElementById('inv-btn-portfolio')?.classList.replace('btn-primary', 'btn-ghost');
-          document.getElementById('inv-mercados-wrap')?.classList.remove('hidden');
-          document.getElementById('inv-tabla-wrap')?.classList.add('hidden');
-        }
-      });
-    }
+    if (!vista) return;
+
+    // Switch de vista Portfolio vs Monitor Global
+    const btnPort = document.getElementById('inv-btn-portfolio');
+    const btnMerc = document.getElementById('inv-btn-mercados');
+    const portList = document.getElementById('inv-operaciones-list');
+    const mercWrap = document.getElementById('inv-mercados-wrap');
+    const portControls = document.getElementById('inv-portfolio-controls');
+
+    btnPort?.addEventListener('click', () => {
+      btnPort.classList.add('active');
+      btnMerc.classList.remove('active');
+      portList?.classList.remove('hidden');
+      portControls?.classList.remove('hidden');
+      mercWrap?.classList.add('hidden');
+    });
+
+    btnMerc?.addEventListener('click', () => {
+      btnMerc.classList.add('active');
+      btnPort.classList.remove('active');
+      mercWrap?.classList.remove('hidden');
+      portList?.classList.add('hidden');
+      portControls?.classList.add('hidden');
+    });
+
+    // Pestañas de filtrado (Todos / Compras / Ventas)
+    const tabs = document.getElementById('inv-operaciones-tabs');
+    tabs?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.dh-tab-btn');
+      if (!btn) return;
+      tabs.querySelectorAll('.dh-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      this.#tipoFiltro = btn.dataset.filter;
+      this.#filterAndRenderOperaciones();
+    });
+
+    // Buscador de Ticker
+    const searchInput = document.getElementById('inv-search-input');
+    searchInput?.addEventListener('input', (e) => {
+      this.#busqueda = e.target.value.trim();
+      this.#filterAndRenderOperaciones();
+    });
+
+    // Switch Período Flujo (6M / 12M / Año actual)
+    const periodSwitch = document.getElementById('inv-period-switch');
+    periodSwitch?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.fintech-pill-btn');
+      if (!btn) return;
+      periodSwitch.querySelectorAll('.fintech-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      this.#flowPeriod = btn.dataset.period;
+      const subEl = document.getElementById('inv-moneyflow-sub');
+      if (subEl) {
+        if (this.#flowPeriod === '6M') subEl.textContent = 'Evolución histórica últimos 6 meses';
+        else if (this.#flowPeriod === '12M') subEl.textContent = 'Evolución histórica últimos 12 meses';
+        else subEl.textContent = 'Evolución acumulada año actual';
+      }
+      this.#renderMoneyFlowChart();
+    });
+
+    // Único Botón Contextual Primario
+    const btnNuevo = document.getElementById('inv-btn-nuevo');
+    btnNuevo?.addEventListener('click', () => {
+      this.#abrirModalAlta('COMPRA');
+    });
   }
 
-  /** Inversiones no invalida por cambio de mes */
   _subscribeEvents() {
     App.Events.on('store:cuenta-changed', () => {
       this.destruir();
       this.cargar();
     });
-    // Sin mes-changed: portfolio es global
   }
 
-  // --- SECCIÓN 7: HELPERS ---
+  // --- SECCIÓN 9: HELPERS ---
 
   #abrirModalDetalle(row) {
     const isCompra = row.tipo_op === 'COMPRA';
-    const clr = isCompra ? 'var(--verde)' : 'var(--rojo)';
+    const clr = isCompra ? 'var(--verde)' : '#3b82f6';
     const fmt = row.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
     
     let resultHtml = '';
@@ -739,10 +1288,10 @@ export class InversionesModule extends BaseModule {
         </div>
         <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
           <span style="color:var(--texto-2)">Cantidad</span>
-          <strong>${App.Utils.formatearMoneda(row.cantidad, false)}</strong>
+          <strong>${Number(row.cantidad || 0).toLocaleString('es-AR')}</strong>
         </div>
         <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
-          <span style="color:var(--texto-2)">Precio</span>
+          <span style="color:var(--texto-2)">Precio Compra</span>
           <strong>${fmt(row.precio)}</strong>
         </div>
         <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
@@ -783,30 +1332,35 @@ export class InversionesModule extends BaseModule {
   }
 
   #eliminarOperacion(row) {
-      const m = new App.Modal('modal-inv-del-confirm');
-      m.open({
-        titulo      : 'Eliminar operación',
-        body        : `<p>¿Eliminar operación de <strong>${App.Utils.escapeHtml(row.ticker)}</strong>?</p>`,
-        confirmLabel: 'Eliminar',
-        danger      : true,
-        onConfirm   : async () => {
-          try {
-            await App.API.call('api_deleteInversion', row.id_operacion);
-            App.API.invalidatePattern('api_getPortfolio');
-            App.Toast.success('Operación eliminada.');
-            this.destruir();
-            await this.cargar();
-          } catch (err) {
-            App.Toast.error('Error: ' + err.message);
-          }
+    const m = new App.Modal('modal-inv-del-confirm');
+    m.open({
+      titulo      : 'Eliminar operación',
+      body        : `<p>¿Eliminar operación de <strong>${App.Utils.escapeHtml(row.ticker)}</strong>?</p>`,
+      confirmLabel: 'Eliminar',
+      danger      : true,
+      onConfirm   : async () => {
+        try {
+          await App.API.call('api_deleteInversion', row.id_operacion);
+          App.API.invalidatePattern('api_getPortfolio');
+          App.Toast.success('Operación eliminada.');
+          this.destruir();
+          await this.cargar();
+        } catch (err) {
+          App.Toast.error('Error: ' + err.message);
         }
-      });
+      }
+    });
   }
 
   #mostrarKpiSkeletons() {
-    this.#kpiValor?.showSkeleton();
-    this.#kpiCosto?.showSkeleton();
-    this.#kpiResult?.showSkeleton();
+    const valValorEl = document.getElementById('inv-kpi-val-valor');
+    const valCostoEl = document.getElementById('inv-kpi-val-costo');
+    const valResultEl = document.getElementById('inv-kpi-val-result');
+    const valRendEl = document.getElementById('inv-kpi-val-rend');
+    if (valValorEl) valValorEl.textContent = '...';
+    if (valCostoEl) valCostoEl.textContent = '...';
+    if (valResultEl) valResultEl.textContent = '...';
+    if (valRendEl) valRendEl.textContent = '...';
   }
 }
 

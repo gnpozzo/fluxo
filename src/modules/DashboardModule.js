@@ -142,7 +142,7 @@ export class DashboardModule extends BaseModule {
           if (egrEl) egrEl.textContent = App.Utils.formatearMoneda(d.kpis.egresos);
           if (balEl) {
             balEl.textContent = App.Utils.formatearMoneda(d.kpis.resultado);
-            balEl.className = 'portfolio-kpi-val ' + (d.kpis.resultado >= 0 ? 'positivo' : 'negativo');
+            balEl.className = 'portfolio-kpi-val' + (d.kpis.resultado > 0 ? ' positivo' : d.kpis.resultado < 0 ? ' negativo' : '');
           }
         }
       } catch (_) {}
@@ -656,7 +656,7 @@ export class DashboardModule extends BaseModule {
                       </div>
                     </div>
                     <div class="fsc-right-block">
-                      <span class="fsc-value positivo" id="dash-ahorro-total">—</span>
+                      <span class="fsc-value" id="dash-ahorro-total">—</span>
                       <button class="finset-arrow-btn" id="dash-ahorro-detail" title="Ver alcancías de ahorro">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                       </button>
@@ -1197,7 +1197,7 @@ export class DashboardModule extends BaseModule {
       const el = document.getElementById('dash-cc-saldo');
       if (el) {
         el.textContent = App.Utils.formatearMoneda(saldo);
-        el.className = 'fsc-value ' + (saldo >= 0 ? 'positivo' : 'negativo');
+        el.className = 'fsc-value' + (saldo > 0 ? ' positivo' : saldo < 0 ? ' negativo' : '');
       }
     };
     try {
@@ -1638,7 +1638,7 @@ export class DashboardModule extends BaseModule {
 
     if (centerValEl) {
       centerValEl.textContent = App.Utils.formatearMoneda(totalMetric);
-      centerValEl.className = 'fintech-donut-center-val ' + (isIngresos ? 'positivo' : 'negativo');
+      centerValEl.className = 'fintech-donut-center-val';
     }
 
     if (!pool.length || totalMetric <= 0) {
@@ -1684,7 +1684,7 @@ export class DashboardModule extends BaseModule {
             </div>
             <div class="fintech-legend-right">
               <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${cat.pct.toFixed(1)}%</span>
-              <span class="${isIngresos ? 'positivo' : 'negativo'}" style="font-size:0.82rem;">${App.Utils.formatearMoneda(cat.total)}</span>
+              <span style="font-size:0.82rem;font-weight:600;color:var(--texto);">${App.Utils.formatearMoneda(cat.total)}</span>
             </div>
           </div>
         `;

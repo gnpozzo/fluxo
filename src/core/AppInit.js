@@ -262,23 +262,6 @@ class AppInit {
     // Ocultar todos los paneles de contenido
     document.querySelectorAll('.vista-container').forEach(v => v.classList.remove('active'));
 
-    // Control Subview Breadcrumb / Back Bar visibility (shown on sub-modules)
-    const subviewNavBar = document.getElementById('subview-nav-bar');
-    const subviewTitle = document.getElementById('subview-breadcrumb-title');
-    if (subviewNavBar) {
-      const isDashboard = (vistaId === 'vista-dashboard');
-      subviewNavBar.style.display = isDashboard ? 'none' : 'flex';
-      if (!isDashboard && subviewTitle) {
-        const titles = {
-          'vista-tarjetas': 'Tarjetas de Crédito',
-          'vista-cc': 'Gastos Compartidos',
-          'vista-ahorro': 'Chanchito (Ahorro)',
-          'vista-inversiones': 'Inversiones',
-          'vista-admin': 'Configuración'
-        };
-        subviewTitle.textContent = titles[vistaId] || 'Módulo';
-      }
-    }
 
     // Desactivar todos los nav items del sidebar
     document.querySelectorAll('.nav-item[data-vista]').forEach(b => {
@@ -556,51 +539,75 @@ class AppInit {
   // --- SECCIÓN 5: QUICK ADD (Universal) ---
 
   #setupQuickAdd() {
-    const btnQa = document.getElementById('btn-fab-quick-add');
-    if (!btnQa) return;
+    const wrap = document.getElementById('topbar-quick-add-wrap');
+    const btn = document.getElementById('topbar-btn-nuevo');
+    const menu = document.getElementById('topbar-quick-add-menu');
+    if (!wrap || !btn || !menu) return;
 
-    const closeQA = () => { document.getElementById('modal-quick-add')?.classList.remove('modal-open'); document.body.classList.remove('modal-active'); };
-    window._qaClose = closeQA;
-
-    const chev = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--texto-3)"><polyline points="9 18 15 12 9 6"/></svg>`;
-    const rs = 'display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:var(--r);cursor:pointer;background:var(--fondo);border:1px solid var(--borde);transition:all .15s;text-align:left;width:100%;font-family:inherit;font-size:.93rem;font-weight:500;color:var(--texto)';
-    const iw = (svg, bg, clr) => `<span style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:var(--r-sm);background:${bg};color:${clr};flex-shrink:0">${svg}</span>`;
-    const hv = 'onmouseover="this.style.borderColor=\'var(--primary)\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,.06)\'" onmouseout="this.style.borderColor=\'var(--borde)\';this.style.boxShadow=\'none\'"';
-
-    const icons = {
-      ing: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>',
-      egr: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>',
-      tc:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
-      cc:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-      ah:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>'
+    const toggleMenu = (show) => {
+      const willShow = (show !== undefined) ? show : menu.classList.contains('hidden');
+      if (willShow) {
+        menu.classList.remove('hidden');
+        wrap.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+      } else {
+        menu.classList.add('hidden');
+        wrap.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
     };
 
-    btnQa.addEventListener('click', () => {
-      const m = new App.Modal('modal-quick-add');
-      m.open({
-        titulo: '¿Qué vas a registrar?',
-        icono: 'add',
-        size: 'sm',
-        body: `<div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('EGRESO')">${iw(icons.egr,'var(--rojo-tint)','var(--rojo)')}<span style="flex:1">Gasto al Contado</span>${chev}</button>
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.tarjetas?.abrirAlta()">${iw(icons.tc,'#eff6ff','#2563eb')}<span style="flex:1">Consumo en Tarjeta</span>${chev}</button>
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.movimientos?.abrirAlta('INGRESO')">${iw(icons.ing,'var(--verde-tint)','var(--verde)')}<span style="flex:1">Nuevo Ingreso / Sueldo</span>${chev}</button>
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.cc?.abrirAlta()">${iw(icons.cc,'#f5f3ff','#7c3aed')}<span style="flex:1">Gasto Compartido (Clearing)</span>${chev}</button>
-          <button style="${rs}" ${hv} onclick="window._qaClose(); App.Modules.ahorro?.abrirAlta()">${iw(icons.ah,'var(--amarillo-tint)','var(--amarillo-text)')}<span style="flex:1">Guardar en Chanchito</span>${chev}</button>
-        </div>`,
-        confirmLabel: '',
-        cancelLabel: 'Cancelar'
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMenu();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!wrap.contains(e.target)) {
+        toggleMenu(false);
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !menu.classList.contains('hidden')) {
+        toggleMenu(false);
+      }
+    });
+
+    menu.querySelectorAll('.qa-menu-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMenu(false);
+        const action = item.dataset.qaAction;
+        switch (action) {
+          case 'egreso':
+            App.Modules.movimientos?.abrirAlta('EGRESO');
+            break;
+          case 'ingreso':
+            App.Modules.movimientos?.abrirAlta('INGRESO');
+            break;
+          case 'tarjeta':
+            App.Modules.tarjetas?.abrirAlta();
+            break;
+          case 'cc':
+            App.Modules.cc?.abrirAlta();
+            break;
+          case 'ahorro':
+            App.Modules.ahorro?.abrirAlta('DEPOSITO');
+            break;
+          case 'inversion':
+            App.Modules.inversiones?.abrirAlta('COMPRA');
+            break;
+        }
       });
-      const cb = m.el.querySelector('.modal-confirm');
-      if (cb) cb.style.display = 'none';
-      const xb = m.el.querySelector('.modal-cancel');
-      if (xb) { xb.classList.replace('btn-ghost', 'btn-outline'); xb.style.borderRadius = 'var(--r)'; }
     });
   }
 
   // --- SECCIÓN 5: INICIALIZAR MÓDULOS ---
 
   #initModulos() {
+    this.#setupQuickAdd();
+
     Object.values(App.Modules).forEach(mod => {
       if (typeof mod.init === 'function') {
         try { mod.init(); } catch (e) {
@@ -614,12 +621,22 @@ class AppInit {
       btn.addEventListener('click', () => this.#navegarTab(btn.dataset.vista));
     });
 
-    // Bind subview back button and breadcrumb parent
-    document.getElementById('btn-subview-back')?.addEventListener('click', () => {
-      this.#navegarTab('vista-dashboard');
-    });
-    document.getElementById('subview-bc-parent')?.addEventListener('click', () => {
-      this.#navegarTab('vista-dashboard');
+    // Sidebar Collapse / Expand (Modo solo iconos)
+    const sidebar = document.getElementById('app-sidebar');
+    const collapseBtn = document.getElementById('sidebar-collapse-btn');
+    
+    // Restaurar preferencia guardada
+    const isCollapsed = localStorage.getItem('fluxo_sidebar_collapsed') === 'true';
+    if (isCollapsed && window.innerWidth > 900) {
+      sidebar?.classList.add('collapsed');
+      document.documentElement.style.setProperty('--sidebar-w', '72px');
+    }
+
+    collapseBtn?.addEventListener('click', () => {
+      const willCollapse = !sidebar.classList.contains('collapsed');
+      sidebar.classList.toggle('collapsed', willCollapse);
+      document.documentElement.style.setProperty('--sidebar-w', willCollapse ? '72px' : '240px');
+      localStorage.setItem('fluxo_sidebar_collapsed', willCollapse);
     });
 
     // Bind logo to return to dashboard
@@ -630,7 +647,7 @@ class AppInit {
       });
     }
 
-    // Botón Admin — NO navega a ningún tab, simplemente abre el modal admin.
+    // Botón Admin (si existe en DOM)
     const adminBtn = document.getElementById('btn-admin');
     if (adminBtn) {
       adminBtn.addEventListener('click', () => {
@@ -1331,7 +1348,8 @@ class AppInit {
             titulo: 'Acerca de Fluxo',
             body: `
               <div style="text-align:center;padding:20px 10px;">
-                <img src="/Fluxo-logo-azul.png" alt="Fluxo Logo" style="width:170px;margin-bottom:16px;object-fit:contain;" class="modal-logo">
+                <img src="/Fluxo-logo-azul.png" alt="Fluxo Logo" style="width:170px;margin:0 auto 16px;object-fit:contain;" class="modal-logo logo-light">
+                <img src="/Fluxo-logo-blanco.png" alt="Fluxo Logo" style="width:170px;margin:0 auto 16px;object-fit:contain;" class="modal-logo logo-dark">
                 <p style="font-weight:600;margin-bottom:8px;">Fluxo — Gestión Inteligente de Finanzas</p>
                 <p style="font-size:0.85rem;color:var(--texto-2);margin-bottom:20px;">Versión 6.0.0 (Rediseño Mobile-First)</p>
                 <div style="border-top:1px solid var(--borde);padding-top:16px;font-size:0.82rem;color:var(--texto-2);">

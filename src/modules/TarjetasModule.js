@@ -36,7 +36,12 @@ export class TarjetasModule extends BaseModule {
   #chartInstance = null;
   #evolucionChartInstance = null;
   #proyeccionesData = [];
+  #evolucionData = [];
   #currentView = 'mes';
+  #moneyFlowPeriod = '6M';
+  #catMetric = 'gastos';
+  #consumosFilter = 'ALL';
+  #consumosSearch = '';
 
   preserveViewOnUpdate(id) {
     const scrollEl = document.querySelector('.main-content');
@@ -158,9 +163,39 @@ export class TarjetasModule extends BaseModule {
       incidenciaPersonal = totalResumenArs - incidenciaFamiliar;
     }
 
-    this.#kpiTotal?.setValue(saldoTotal);
-    this.#kpiImputado?.setValue(incidenciaPersonal, { invertido: incidenciaPersonal < 0 });
-    this.#kpiConsol?.setValue(incidenciaFamiliar, { invertido: false });
+    // Actualizar Scorecards FinSet
+    // 1. ARS
+    const valArsEl = document.getElementById('tc-kpi-val-ars');
+    if (valArsEl) valArsEl.textContent = App.Utils.formatearMoneda(saldoTotal);
+
+    // 2. USD
+    let totalUsd = 0;
+    filteredConsumos.forEach(c => {
+      if (c.moneda === 'USD') totalUsd += Number(c.importe || 0);
+    });
+    this.#tarjetas.forEach(tc => {
+      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+      if (isDueInMonth && Number(tc.total_resumen_usd || 0) > 0) {
+        totalUsd = Number(tc.total_resumen_usd);
+      }
+    });
+    const valUsdEl = document.getElementById('tc-kpi-val-usd');
+    const subUsdEl = document.getElementById('tc-kpi-sub-usd');
+    if (valUsdEl) valUsdEl.textContent = 'US$ ' + totalUsd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (subUsdEl) {
+      const cotizOficial = App.Store.cotizaciones?.oficial?.venta || 0;
+      subUsdEl.textContent = cotizOficial ? `Equiv. oficial: $ ${Math.round(totalUsd * cotizOficial).toLocaleString('es-AR')}` : 'Equiv. oficial: —';
+    }
+
+    // 3. Impuestos & Percepciones
+    const taxConsumos = filteredConsumos.filter(c => this.#isTaxConsumo(c));
+    const totalImpuestos = taxConsumos.reduce((acc, t) => acc + Number(t.importe || 0), 0);
+    const valTaxesEl = document.getElementById('tc-kpi-val-taxes');
+    if (valTaxesEl) valTaxesEl.textContent = App.Utils.formatearMoneda(totalImpuestos);
+
+    // 4. Tope TC (Salud Financiera)
+    this.#updateTopeKpi(saldoTotal);
 
     // Store filtered consumos for card selector filtering
     this.#allConsumos = filteredConsumos;
@@ -174,69 +209,14 @@ export class TarjetasModule extends BaseModule {
     // Build the card selector pills
     this.#renderCardSelector();
 
-    this.#renderToolbarFiltros();
     this.#filterConsumos();
+    this.#renderMoneyFlowChart();
     App.log('TarjetasModule', '_render', `${filteredConsumos.length} consumos (filtered from ${(consumos || []).length})`);
   }
 
   _renderProyecciones(data) {
      this.#proyeccionesData = data?.proyeccion || [];
-     this.#renderEvolucionProyeccion();
-     const wrap = document.getElementById('tc-proy-wrap');
-     if (!wrap) return;
-     if (!data.proyeccion || data.proyeccion.length === 0) {
-        wrap.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.875rem;">No hay proyecciones futuras para mostrar.</div>`;
-        return;
-     }
-
-     const rows = data.proyeccion.map((p, idx) => {
-        const imp = p.impuestos || {};
-        const hasTaxes = (imp.total_impuestos || 0) > 0;
-        const taxDetailId = `tc-proy-tax-${idx}`;
-
-        return `
-        <div class="tc-proy-row" style="border-bottom:1px solid var(--borde); font-size:0.875rem; transition:background-color 0.15s ease;">
-           <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; flex-wrap:wrap; gap:8px;">
-              <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                 <span style="font-weight:600; color:var(--texto); font-size:0.875rem; min-width:130px;">${App.Utils.escapeHtml(App.Utils.formatearMes(p.mes))}</span>
-                 <span style="font-size:0.8rem; color:var(--texto-2);">Consumos: <strong>${App.Utils.formatearMoneda(p.subtotal_consumos !== undefined ? p.subtotal_consumos : p.total)}</strong></span>
-                 ${hasTaxes ? `
-                 <button type="button" class="tc-proy-tax-badge" onclick="const el = document.getElementById('${taxDetailId}'); el?.classList.toggle('open'); this.classList.toggle('active');" title="Ver desglose de impuestos estimados">
-                    <span>🏛️ + Impuestos: ${App.Utils.formatearMoneda(imp.total_impuestos)}</span>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                 </button>
-                 ` : ''}
-              </div>
-              <div style="display:flex; align-items:center; gap:10px;">
-                 <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--texto-3);">Total Resumen</span>
-                 <span class="negativo" style="font-weight:700; font-size:0.95rem;">${App.Utils.formatearMoneda(p.total)}</span>
-              </div>
-           </div>
-
-           ${hasTaxes ? `
-           <div class="tc-proy-tax-detail" id="${taxDetailId}">
-              <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; padding:10px 18px 14px 18px; background:var(--bg-2); border-top:1px dashed var(--borde-1); font-size:0.8rem;">
-                 <div><span style="color:var(--texto-3);">Sellos Prov. (0,10%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.sellos || 0)}</strong></div>
-                 ${imp.iva_digital > 0 ? `<div><span style="color:var(--texto-3);">IVA Serv. Digitales (21%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.iva_digital)}</strong></div>` : ''}
-                 ${imp.ganancias_rg5617 > 0 ? `<div><span style="color:var(--texto-3);">Percep. Ganancias (30%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.ganancias_rg5617)}</strong></div>` : ''}
-                 ${imp.iibb_santafe > 0 ? `<div><span style="color:var(--texto-3);">Percep. IIBB (3%):</span> <strong style="color:var(--texto);">${App.Utils.formatearMoneda(imp.iibb_santafe)}</strong></div>` : ''}
-              </div>
-           </div>
-           ` : ''}
-        </div>
-        `;
-     }).join('');
-
-     wrap.innerHTML = `
-        <div style="padding:14px 18px; border-bottom:1px solid var(--borde); background:var(--fondo); display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);">
-          <div>
-            <h4 style="margin:0 0 2px 0; color:var(--texto); font-size:0.82rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Proyección a 12 meses</h4>
-            <p style="margin:0; color:var(--texto-2); font-size:0.8rem;">Incluye cálculo dinámico de Sellos (0,10%) y percepciones sobre servicios digitales (IVA 21%, RG 5617 30%, IIBB 3%).</p>
-          </div>
-          ${App.Icons.get('trending_up', 'icon-md', { style: 'color:var(--kpi-amber);' })}
-        </div>
-        <div style="background:var(--superficie);">${rows}</div>
-     `;
+     this.#renderMoneyFlowChart();
   }
 
   // --- SECCIÓN 3: BUILD DOM ---
@@ -246,148 +226,226 @@ export class TarjetasModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
-      <div class="module-view-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
-          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-          <line x1="1" y1="10" x2="23" y2="10"/>
-        </svg>
-        <span>Tarjetas de Crédito</span>
-      </div>
-
-      <!-- Card Selector Slider Wrapper -->
-      <div class="tc-slider-container" style="position:relative; display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:var(--space-3); width:100%;">
-        <button id="tc-slide-prev" class="tc-slide-arrow" aria-label="Tarjeta Anterior">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px; display:block;">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
+      <!-- ═══ ROW 1: SCORECARDS FINSET ═══ -->
+      <div class="finset-kpi-grid" id="tc-scorecards-grid" style="margin-bottom: 24px;">
         
-        <div id="tc-card-selector" class="tc-card-list">
-          <!-- Cards are dynamically rendered here -->
-        </div>
-        
-        <button id="tc-slide-next" class="tc-slide-arrow" aria-label="Siguiente Tarjeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px; display:block;">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-        </button>
-      </div>
-
-      <div class="kpi-grid" id="tc-kpi-grid"></div>
-
-      <div class="section-header" style="margin-bottom:var(--space-3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div class="acciones-container" id="tc-acciones"></div>
-        <div class="selector-vista-container">
-          <button id="tc-btn-mes" class="btn btn-primary btn-vista active">Consumos del Mes</button>
-          <button id="tc-btn-proy" class="btn btn-ghost btn-vista">Proyecciones</button>
-          <button id="tc-btn-pagar-resumen" class="btn btn-secondary btn-sm" style="margin-left:8px;display:inline-flex;align-items:center;gap:6px;" title="Liquidar resumen y marcar consumos como saldados">💳 Pagar Resumen</button>
-        </div>
-      </div>
-
-      <!-- Layout 2 Columnas Side-by-Side: Grilla a la izquierda + Analítica Lateral a la derecha -->
-      <div class="analytics-side-layout">
-        <div class="analytics-main-col">
-          <div class="table-card table-compact" id="tc-tabla-wrap"></div>
-          <div id="tc-taxes-wrap" style="margin-top:var(--space-3)"></div>
-          <div class="table-card hidden" id="tc-proy-wrap">
-             <div style="padding:1rem;color:var(--texto-3);text-align:center">Cargando proyecciones...</div>
+        <!-- Card 1: Consumos Totales (ARS) -->
+        <div class="finset-kpi-card" id="tc-card-kpi-ars">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-blue">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              </div>
+              <span class="finset-kpi-title">Consumos del Mes</span>
+            </div>
+            <button class="finset-arrow-btn" id="tc-btn-filter-ars" title="Ver consumos">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <div class="finset-kpi-value" id="tc-kpi-val-ars">$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="tc-kpi-sub-ars">Total a pagar en pesos</span>
+            <span class="finset-trend-pill trend-up"><span>ARS</span></span>
           </div>
         </div>
-        <div class="analytics-side-col">
-          <div class="table-card fintech-card" id="tc-graficos-wrap"></div>
-          <div class="table-card fintech-card" id="tc-evolucion-wrap"></div>
+
+        <!-- Card 2: Consumos en Dólares (USD) -->
+        <div class="finset-kpi-card" id="tc-card-kpi-usd">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-cyan">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+              </div>
+              <span class="finset-kpi-title">Consumos en Dólares</span>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="tc-kpi-val-usd">US$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="tc-kpi-sub-usd">Equiv. oficial: —</span>
+            <span class="finset-trend-pill trend-neutral"><span>USD</span></span>
+          </div>
         </div>
+
+        <!-- Card 3: Impuestos & Percepciones -->
+        <div class="finset-kpi-card" id="tc-card-kpi-taxes">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-yellow">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <span class="finset-kpi-title">Impuestos & Cargos</span>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="tc-kpi-val-taxes">$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext">PAIS, Ganancias y Sellos</span>
+            <span class="finset-trend-pill trend-down"><span>Cargos</span></span>
+          </div>
+        </div>
+
+        <!-- Card 4: Tope TC (Salud Financiera) -->
+        <div class="finset-kpi-card" id="tc-card-kpi-tope" style="cursor:pointer;" title="Tope de tarjeta configurado (25% de ingresos)">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-purple">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              </div>
+              <div style="display:flex; flex-direction:column; line-height:1.2;">
+                <span class="finset-kpi-title">Tope Tarjetas</span>
+                <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3);" id="tc-tope-kpi-target">Tope: 25% de ingresos</span>
+              </div>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="tc-tope-kpi-val" style="font-size:1.35rem;">En rango</div>
+          <div class="finset-goal-progress-wrap">
+            <div class="finset-goal-progress-bar">
+              <div class="finset-goal-progress-fill" id="tc-tope-progress-fill" style="width: 0%; background: var(--verde);"></div>
+            </div>
+          </div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="tc-tope-kpi-sub">0% de ingresos consumido</span>
+            <span class="finset-trend-pill trend-up" id="tc-tope-status-pill"><span>Salud OK</span></span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Money Flow + Top Categorías) ═══ -->
+      <div class="finset-grid-2col" style="margin-bottom: 24px;">
+        
+        <!-- Left (60%): Evolución Mensual de Consumos -->
+        <div class="finset-card" id="tc-widget-moneyflow">
+          <div class="finset-card-header">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Flujo de Fondos</h3>
+              <span class="finset-card-subtitle" id="tc-moneyflow-sub">Evolución histórica últimos 6 meses</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <div class="fintech-pill-switch" id="tc-period-switch">
+                <button class="fintech-pill-btn active" data-period="6M">6M</button>
+                <button class="fintech-pill-btn" data-period="12M">12M</button>
+                <button class="fintech-pill-btn" data-period="YTD">Año actual</button>
+              </div>
+            </div>
+          </div>
+          <div style="position:relative; width:100%; height:230px; margin: 4px 0;">
+            <canvas id="tc-moneyflow-canvas"></canvas>
+          </div>
+          <div class="finset-chart-summary" id="tc-moneyflow-summary"></div>
+        </div>
+
+        <!-- Right (40%): Top Categorías (FinSet Side-by-Side) -->
+        <div class="finset-card" id="tc-widget-categories">
+          <div class="finset-card-header">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Top Categorías</h3>
+              <span class="finset-card-subtitle" id="tc-categories-subtitle">Distribución de consumos</span>
+            </div>
+            <div class="fintech-pill-switch" id="tc-cat-switch">
+              <button class="fintech-pill-btn active" data-cat-view="gastos">% Consumos</button>
+              <button class="fintech-pill-btn" data-cat-view="tarjeta">Por Tarjeta</button>
+            </div>
+          </div>
+          <div class="finset-categories-side-wrap">
+            <div class="fintech-legend-list" id="tc-categories-legend" style="margin-top:0;"></div>
+            <div class="fintech-donut-wrapper" style="height:180px; margin:0;">
+              <canvas id="tc-categories-donut-canvas"></canvas>
+              <div class="fintech-donut-center" id="tc-categories-donut-center">
+                <span class="fintech-donut-center-label" id="tc-donut-center-label">Total Consumos</span>
+                <span class="fintech-donut-center-val" id="tc-donut-center-val" style="font-size:1.05rem;">$ 0,00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ ROW 3: OPERATIONS & DRILLDOWN (Consumos + Panel de Tarjetas) ═══ -->
+      <div class="finset-grid-2col" style="grid-template-columns: 1.45fr 0.95fr;">
+        
+        <!-- Left (60-65%): Grilla de Consumos (Mismo estilo que Movimientos) -->
+        <div class="finset-card" id="tc-widget-consumos">
+          <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+            <div class="dh-drilldown-left" style="min-width:180px;">
+              <div class="dh-drilldown-badge badge-all" id="tc-consumos-badge">
+                <span class="dh-badge-dot"></span>
+                <span class="dh-badge-title" id="tc-consumos-title">Todos los Consumos</span>
+              </div>
+              <div class="dh-drilldown-summary" id="tc-consumos-summary">—</div>
+            </div>
+
+            <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
+              <div class="dh-filter-tabs" id="tc-consumos-tabs">
+                <button class="dh-tab-btn active" data-filter="ALL" id="tc-tab-all">Todos</button>
+                <button class="dh-tab-btn" data-filter="CUOTAS" id="tc-tab-cuotas">En Cuotas</button>
+                <button class="dh-tab-btn" data-filter="COMUN" id="tc-tab-comun">Pago Único</button>
+              </div>
+
+              <div class="dh-search-box" style="margin:0;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="tc-consumos-search" placeholder="Buscar..." class="finset-search-input" style="width:130px;">
+              </div>
+
+              <button class="btn btn-primary btn-sm" id="tc-btn-nuevo-inline" style="display:inline-flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Nuevo Consumo</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Lista de consumos interactiva -->
+          <div class="dh-drilldown-list dh-side-main" id="tc-consumos-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
+          </div>
+        </div>
+
+        <!-- Right (35-40%): Panel de Plásticos & Resumen Oficial -->
+        <div class="finset-card" id="tc-widget-cards-panel">
+          <div class="finset-card-header" style="justify-content:space-between; align-items:center;">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Mis Tarjetas</h3>
+              <span class="finset-card-subtitle" id="tc-card-panel-sub">Plásticos y resúmenes oficiales</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="tc-btn-pagar-resumen" style="display:inline-flex;align-items:center;gap:6px;" title="Liquidar resumen y marcar consumos como saldados">
+              💳 Pagar Resumen
+            </button>
+          </div>
+
+          <!-- Interactive Plastic Card Slider -->
+          <div class="tc-slider-container" style="position:relative; display:flex; align-items:center; justify-content:center; gap:8px; margin: 10px 0 14px; width:100%;">
+            <button id="tc-slide-prev" class="tc-slide-arrow" aria-label="Tarjeta Anterior">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; display:block;">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            
+            <div id="tc-card-selector" class="tc-card-list" style="display:flex; overflow-x:auto; scroll-behavior:smooth; gap:12px; padding:6px 2px; max-width: 250px;">
+            </div>
+            
+            <button id="tc-slide-next" class="tc-slide-arrow" aria-label="Siguiente Tarjeta">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; display:block;">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Selected Card Metadata -->
+          <div id="tc-selected-card-info" style="padding:12px 14px; background:var(--fondo); border:1px solid var(--borde); border-radius:10px; margin-bottom:14px; font-size:0.8rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="color:var(--texto-3);">Cierre oficial: <strong id="tc-info-cierre" style="color:var(--texto);">—</strong></span>
+              <span style="color:var(--texto-3);">Vencimiento: <strong id="tc-info-vto" style="color:var(--texto);">—</strong></span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--texto-3);">Total resumen oficial:</span>
+              <strong id="tc-info-total-oficial" style="color:var(--texto); font-size:0.88rem;">—</strong>
+            </div>
+          </div>
+
+          <!-- Desglose de Impuestos -->
+          <div id="tc-taxes-wrap"></div>
+        </div>
+
       </div>
     `;
-
-    const grid = document.getElementById('tc-kpi-grid');
-    this.#kpiTotal    = new App.KpiCard(grid, { titulo: 'Deuda Total',         icono: 'credit_card', colorClass: 'kpi-red',    onFormat: App.Utils.formatearMoneda });
-    this.#kpiImputado = new App.KpiCard(grid, { titulo: 'Incidencia Personal', icono: 'person',      colorClass: 'kpi-blue',   onFormat: App.Utils.formatearMoneda });
-    this.#kpiConsol   = new App.KpiCard(grid, { titulo: 'Incidencia Externa',  icono: 'groups',      colorClass: 'kpi-amber',  onFormat: App.Utils.formatearMoneda });
-
-    this.#renderAcciones();
-
-    this.#table = new App.DataTable(
-      document.getElementById('tc-tabla-wrap'),
-      {
-        columns: [
-          {
-            key: 'fecha',
-            label: 'Fecha',
-            sortable: true,
-            sortValue: (r) => new Date(r.fecha?.value || r.fecha || '2000-01-01').getTime(),
-            render: (r) => App.Utils.formatearFecha(r.fecha?.value || r.fecha)
-          },
-          {
-            key: 'tarjeta_nombre',
-            label: 'Tarjeta',
-            sortable: true,
-            sortValue: (r) => r.tarjeta_nombre || '',
-            render: (r) => App.Utils.escapeHtml(r.tarjeta_nombre || '—')
-          },
-          {
-            key: 'categoria_nombre',
-            label: 'Categoría',
-            sortable: true,
-            sortValue: (r) => r.categoria_nombre || '',
-            render: (r) => App.Utils.escapeHtml(r.categoria_nombre || 'General')
-          },
-          {
-            key: 'descripcion',
-            label: 'Descripción',
-            sortable: true,
-            searchable: true,
-            sortValue: (r) => r.descripcion || '',
-            searchValue: (r) => `${r.descripcion || ''} ${r.categoria_nombre || ''} ${r.tarjeta_nombre || ''} ${r.cuenta_imputada_nombre || ''}`,
-            render: (r) => this.#renderDescripcion(r)
-          },
-          {
-            key: 'importe',
-            label: 'Importe',
-            sortable: true,
-            align: 'right',
-            sortValue: (r) => Number(r.importe || 0),
-            render: (r) => `<span class="negativo">${r.moneda === 'USD' ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : App.Utils.formatearMoneda(r.importe)}</span>`
-          },
-          {
-            key: 'imputacion',
-            label: 'Imputación',
-            sortable: true,
-            sortValue: (r) => !r.imputado ? 'AAA_SIN_IMPUTAR' : (r.es_incidencia_externa ? (r.cuenta_imputada_nombre || 'Externa') : 'Personal'),
-            render: (r) => {
-              if (!r.imputado) return `<span class="badge badge-neutro">Sin Imputar</span>`;
-              if (r.es_incidencia_externa) {
-                return `<span class="badge badge-recur" title="Imputado a cuenta ${App.Utils.escapeHtml(r.cuenta_imputada_nombre || '')}">🏛️ ${App.Utils.escapeHtml(r.cuenta_imputada_nombre || 'Externa')}</span>`;
-              }
-              return `<span class="badge badge-tc">Personal</span>`;
-            }
-          },
-          {
-            key: 'pagado',
-            label: 'Estado Pago',
-            sortable: true,
-            align: 'center',
-            sortValue: (r) => r.pagado ? 1 : 0,
-            render: (r) => {
-              const isPaid = !!r.pagado;
-              return `
-                <button type="button" class="btn-toggle-pago ${isPaid ? 'pago-saldado' : 'pago-pendiente'}"
-                        data-toggle-pago-tc="${r.id_consumo_tc || r.id_consumo_tarjeta}"
-                        title="${isPaid ? 'Saldado (Clic para marcar como pendiente)' : 'Pendiente (Clic para marcar como saldado)'}">
-                  ${isPaid ? '✓ Saldado' : '⏳ Pendiente'}
-                </button>
-              `;
-            }
-          }
-        ],
-        emptyMsg          : 'No hay consumos para este período.',
-        searchable        : true,
-        searchPlaceholder : 'Buscar consumo o comercio...',
-        paginated         : true,
-        pageSize          : 25,
-        onRowClick        : ({ row }) => this.#abrirModalDetalle(row)
-      }
-    );
   }
 
   // --- SECCIÓN 4: MODAL ---
@@ -668,30 +726,8 @@ export class TarjetasModule extends BaseModule {
         const btn = e.target.closest('button');
         if (!btn) return;
         
-        if (btn.id === 'tc-btn-nuevo') {
+        if (btn.id === 'tc-btn-nuevo' || btn.id === 'tc-btn-nuevo-inline') {
           this.#abrirModalAlta();
-        } else if (btn.id === 'tc-btn-mes') {
-          this.#currentView = 'mes';
-          const btnMes = document.getElementById('tc-btn-mes');
-          const btnProy = document.getElementById('tc-btn-proy');
-          btnMes?.classList.add('active', 'btn-primary');
-          btnMes?.classList.remove('btn-ghost');
-          btnProy?.classList.remove('active', 'btn-primary');
-          btnProy?.classList.add('btn-ghost');
-          document.getElementById('tc-tabla-wrap')?.classList.remove('hidden');
-          document.getElementById('tc-taxes-wrap')?.classList.remove('hidden');
-          document.getElementById('tc-proy-wrap')?.classList.add('hidden');
-        } else if (btn.id === 'tc-btn-proy') {
-          this.#currentView = 'proy';
-          const btnMes = document.getElementById('tc-btn-mes');
-          const btnProy = document.getElementById('tc-btn-proy');
-          btnProy?.classList.add('active', 'btn-primary');
-          btnProy?.classList.remove('btn-ghost');
-          btnMes?.classList.remove('active', 'btn-primary');
-          btnMes?.classList.add('btn-ghost');
-          document.getElementById('tc-proy-wrap')?.classList.remove('hidden');
-          document.getElementById('tc-tabla-wrap')?.classList.add('hidden');
-          document.getElementById('tc-taxes-wrap')?.classList.add('hidden');
         } else if (btn.id === 'tc-btn-pagar-resumen') {
           this.#confirmarPagarResumen();
         } else if (btn.dataset.togglePagoTc) {
@@ -704,7 +740,50 @@ export class TarjetasModule extends BaseModule {
         } else if (btn.id === 'tc-slide-next') {
           const selectorEl = document.getElementById('tc-card-selector');
           selectorEl?.scrollBy({ left: 240, behavior: 'smooth' });
+        } else if (btn.id === 'tc-btn-filter-ars') {
+          document.getElementById('tc-widget-consumos')?.scrollIntoView({ behavior: 'smooth' });
         }
+      });
+
+      // Filter tabs (Todos, En Cuotas, Pago Único)
+      document.getElementById('tc-consumos-tabs')?.querySelectorAll('.dh-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#tc-consumos-tabs .dh-tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.#consumosFilter = btn.dataset.filter || 'ALL';
+          this.#filterConsumos();
+        });
+      });
+
+      // Search box
+      document.getElementById('tc-consumos-search')?.addEventListener('input', (e) => {
+        this.#consumosSearch = e.target.value || '';
+        this.#filterConsumos();
+      });
+
+      // Period switch for Money Flow (6M, 12M, YTD)
+      document.getElementById('tc-period-switch')?.querySelectorAll('.fintech-pill-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#tc-period-switch .fintech-pill-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.#moneyFlowPeriod = btn.dataset.period || '6M';
+          this.#renderMoneyFlowChart();
+        });
+      });
+
+      // Categories switch (% Consumos vs Por Tarjeta)
+      document.getElementById('tc-cat-switch')?.querySelectorAll('.fintech-pill-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#tc-cat-switch .fintech-pill-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.#catMetric = btn.dataset.catView || 'gastos';
+          this.#renderGraficos();
+        });
+      });
+
+      // Card 4: Tope TC click to configure
+      document.getElementById('tc-card-kpi-tope')?.addEventListener('click', () => {
+        this.#abrirModalTopeTC();
       });
     }
 
@@ -1043,36 +1122,161 @@ export class TarjetasModule extends BaseModule {
     const regularConsumos = filtered.filter(c => !this.#isTaxConsumo(c));
     const taxConsumos = filtered.filter(c => this.#isTaxConsumo(c));
 
-    const targetPage = this.#savedViewPosition?.page;
-    if (targetPage) {
-      this.#table?.load(regularConsumos, { page: targetPage });
-    } else {
-      this.#table?.load(regularConsumos);
+    // Filtro por pestañas (ALL, CUOTAS, COMUN)
+    let displayConsumos = regularConsumos;
+    if (this.#consumosFilter === 'CUOTAS') {
+      displayConsumos = displayConsumos.filter(c => c.tipo_consumo === 'CUOTAS' || Number(c.cuota_total) > 1);
+    } else if (this.#consumosFilter === 'COMUN') {
+      displayConsumos = displayConsumos.filter(c => c.tipo_consumo === 'COMUN' || (!c.cuota_total || Number(c.cuota_total) <= 1));
     }
+
+    // Filtro por búsqueda de texto
+    if (this.#consumosSearch && this.#consumosSearch.trim()) {
+      const q = this.#consumosSearch.trim().toLowerCase();
+      displayConsumos = displayConsumos.filter(c => {
+        const desc = (c.descripcion || '').toLowerCase();
+        const cat = (c.categoria_nombre || '').toLowerCase();
+        const tc = (c.tarjeta_nombre || '').toLowerCase();
+        return desc.includes(q) || cat.includes(q) || tc.includes(q);
+      });
+    }
+
+    // Actualizar resumen y títulos
+    const badgeTitleEl = document.getElementById('tc-consumos-title');
+    const badgeEl = document.getElementById('tc-consumos-badge');
+    const summaryEl = document.getElementById('tc-consumos-summary');
+
+    if (badgeTitleEl) {
+      if (this.#consumosFilter === 'CUOTAS') badgeTitleEl.textContent = 'Consumos en Cuotas';
+      else if (this.#consumosFilter === 'COMUN') badgeTitleEl.textContent = 'Consumos Pago Único';
+      else badgeTitleEl.textContent = 'Todos los Consumos';
+    }
+    if (badgeEl) {
+      badgeEl.className = 'dh-drilldown-badge ' + (this.#consumosFilter === 'CUOTAS' ? 'badge-recur' : 'badge-all');
+    }
+
+    const totalDisplay = displayConsumos.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+    if (summaryEl) {
+      summaryEl.textContent = `${displayConsumos.length} ${displayConsumos.length === 1 ? 'consumo' : 'consumos'} • Total: ${App.Utils.formatearMoneda(totalDisplay)}`;
+    }
+
+    this.#renderConsumosList(displayConsumos);
     this.#renderImpuestosAccordion(taxConsumos);
     this.#renderGraficos();
 
-    // Restaurar ubicación de pantalla y resaltar consumo modificado
-    if (this.#savedViewPosition) {
-      const { scroll, rowId } = this.#savedViewPosition;
-      this.#savedViewPosition = null;
-      const restore = () => {
-        const sc = document.querySelector('.main-content');
-        if (sc && scroll > 0) sc.scrollTop = scroll;
-        if (window.scrollY > 0 || scroll > 0) window.scrollTo(0, scroll);
-        if (rowId) {
-          const rowEl = document.querySelector(`tr[data-id="${rowId}"]`);
-          if (rowEl) {
-            rowEl.classList.add('dt-row-highlight');
-            setTimeout(() => rowEl.classList.remove('dt-row-highlight'), 2500);
-          }
-        }
-      };
-      restore();
-      requestAnimationFrame(restore);
-      setTimeout(restore, 50);
-      setTimeout(restore, 150);
+    // Actualizar metadata de tarjeta seleccionada en el panel derecho
+    const infoCard = this.#selectedTcId ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId) : null;
+    const infoCierre = document.getElementById('tc-info-cierre');
+    const infoVto = document.getElementById('tc-info-vto');
+    const infoTotal = document.getElementById('tc-info-total-oficial');
+    if (infoCierre) infoCierre.textContent = infoCard?.fecha_cierre_actual ? App.Utils.formatearFecha(infoCard.fecha_cierre_actual) : '—';
+    if (infoVto) infoVto.textContent = infoCard?.fecha_vencimiento_actual ? App.Utils.formatearFecha(infoCard.fecha_vencimiento_actual) : '—';
+    if (infoTotal) {
+      const oficialArs = infoCard ? Number(infoCard.total_resumen_ars || 0) : 0;
+      infoTotal.textContent = oficialArs > 0 ? App.Utils.formatearMoneda(oficialArs) : App.Utils.formatearMoneda(totalDisplay);
     }
+  }
+
+  #renderConsumosList(items) {
+    const listEl = document.getElementById('tc-consumos-list');
+    if (!listEl) return;
+
+    if (!items || items.length === 0) {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:3rem 1.5rem; color:var(--texto-3); font-size:0.875rem;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.6;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <div>No hay consumos registrados para el criterio seleccionado.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const getCatIconSvg = (catName) => {
+      const cat = (catName || '').toLowerCase();
+      if (cat.includes('super') || cat.includes('alimento') || cat.includes('comida')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
+      }
+      if (cat.includes('serv') || cat.includes('luz') || cat.includes('gas') || cat.includes('internet') || cat.includes('digital')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+      }
+      if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+      }
+      if (cat.includes('salud') || cat.includes('farmacia')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
+      }
+      return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
+    };
+
+    const rowsHtml = items.map(r => {
+      const catName = r.categoria_nombre || 'General';
+      const desc = r.descripcion || catName;
+      const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
+      const isPaid = !!r.pagado;
+      const id = r.id_consumo_tc || r.id_consumo_tarjeta;
+      const tcName = r.tarjeta_nombre || 'TC';
+
+      let badgesHtml = '';
+      if (r.tipo_consumo === 'CUOTAS' || Number(r.cuota_total) > 1) {
+        badgesHtml += `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Cuota ${r.cuota_actual || 1}/${r.cuota_total || 12}</span>`;
+      } else if (r.tipo_consumo === 'RECURRENTE') {
+        badgesHtml += `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Recurrente</span>`;
+      }
+      if (r.imputado && r.cuenta_imputada_nombre && r.cuenta_imputada_nombre !== 'Propios') {
+        badgesHtml += `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${App.Utils.escapeHtml(r.cuenta_imputada_nombre)}</span>`;
+      }
+
+      const importeFmt = r.moneda === 'USD'
+        ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : App.Utils.formatearMoneda(r.importe);
+
+      return `
+        <div class="dh-drill-row" data-id="${id}">
+          <div class="dh-col-main">
+            <div class="dh-item-icon icon-subtle">
+              ${getCatIconSvg(catName)}
+            </div>
+            <div class="dh-col-desc-wrap">
+              <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+                <span class="dh-row-desc">${App.Utils.escapeHtml(desc)}</span>
+                ${badgesHtml}
+              </div>
+              <span class="dh-row-date">${fechaStr} • <strong style="color:var(--texto-2);">${App.Utils.escapeHtml(tcName)}</strong></span>
+            </div>
+          </div>
+          <div class="dh-col-cat">
+            <span class="dh-cat-pill">${App.Utils.escapeHtml(catName)}</span>
+          </div>
+          <div class="dh-col-medio">
+            <button type="button" class="btn-toggle-pago ${isPaid ? 'pago-saldado' : 'pago-pendiente'}"
+                    data-toggle-pago-tc="${id}"
+                    title="${isPaid ? 'Saldado (Clic para marcar como pendiente)' : 'Pendiente (Clic para marcar como saldado)'}">
+              ${isPaid ? '✓ Saldado' : '⏳ Pendiente'}
+            </button>
+          </div>
+          <div class="dh-col-amount negativo">
+            ${importeFmt}
+          </div>
+          <div class="dh-col-action">
+            <button class="btn-icon-sm dh-row-btn" title="Ver detalle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    listEl.innerHTML = `<div class="dh-rows-list">${rowsHtml}</div>`;
+
+    // Row click listeners for detail modal
+    listEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
+      rowEl.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-toggle-pago')) return;
+        const id = rowEl.dataset.id;
+        const row = this.#allConsumos.find(c => (c.id_consumo_tc || c.id_consumo_tarjeta) == id);
+        if (row) this.#abrirModalDetalle(row);
+      });
+    });
   }
 
   #renderImpuestosAccordion(taxes) {
@@ -1085,247 +1289,94 @@ export class TarjetasModule extends BaseModule {
 
     const totalImpuestos = taxes.reduce((acc, t) => acc + Number(t.importe || 0), 0);
     wrap.innerHTML = `
-      <div class="tc-taxes-accordion" id="tc-taxes-accordion">
-        <div class="tc-taxes-header" id="tc-taxes-toggle" role="button" tabindex="0" title="Ver desglose detallado de impuestos">
-          <div class="tc-taxes-header-left">
+      <div class="tc-taxes-accordion" id="tc-taxes-accordion" style="margin-top:12px; border:1px solid var(--borde); border-radius:10px; overflow:hidden; background:var(--fondo);">
+        <div class="tc-taxes-header" id="tc-taxes-toggle" role="button" tabindex="0" title="Ver desglose detallado de impuestos" style="padding:10px 14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; background:var(--bg-2); user-select:none;">
+          <div class="tc-taxes-header-left" style="display:flex; align-items:center; gap:8px;">
             <span class="tc-taxes-icon">🏛️</span>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span class="tc-taxes-title">Impuestos y Percepciones del Resumen</span>
-              <span class="tc-taxes-badge">${taxes.length} ${taxes.length === 1 ? 'ítem' : 'ítems'}</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="tc-taxes-title" style="font-weight:600; font-size:0.8rem; color:var(--texto);">Impuestos del Resumen</span>
+              <span class="tc-taxes-badge" style="font-size:0.7rem; padding:1px 6px; border-radius:10px; background:rgba(239,68,68,0.1); color:var(--rojo); font-weight:700;">${taxes.length} ${taxes.length === 1 ? 'ítem' : 'ítems'}</span>
             </div>
           </div>
-          <div class="tc-taxes-header-right">
-            <span class="tc-taxes-total-label">Total Impuestos:</span>
-            <span class="tc-taxes-total-val negativo">${App.Utils.formatearMoneda(totalImpuestos)}</span>
-            <svg class="tc-taxes-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <div class="tc-taxes-header-right" style="display:flex; align-items:center; gap:8px;">
+            <span class="tc-taxes-total-val negativo" style="font-weight:700; font-size:0.85rem;">${App.Utils.formatearMoneda(totalImpuestos)}</span>
+            <svg class="tc-taxes-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </div>
         </div>
-        <div class="tc-taxes-body">
-          <div class="table-responsive">
-            <table class="table" style="margin:0;width:100%;font-family:inherit;">
-              <thead>
-                <tr style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--texto-3);border-bottom:1px solid var(--borde);">
-                  <th style="padding:10px 16px;text-align:left;">Fecha</th>
-                  <th style="padding:10px 16px;text-align:left;">Concepto Impositivo</th>
-                  <th style="padding:10px 16px;text-align:right;">Importe</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${taxes.map(t => `
-                  <tr style="border-bottom:1px solid var(--borde-1);">
-                    <td style="padding:10px 16px;font-size:0.82rem;color:var(--texto-2);">${App.Utils.formatearFecha(t.fecha)}</td>
-                    <td style="padding:10px 16px;font-size:0.84rem;font-weight:500;color:var(--texto);">${App.Utils.escapeHtml(t.descripcion)}</td>
-                    <td style="padding:10px 16px;font-size:0.84rem;font-weight:600;text-align:right;color:var(--rojo);">${App.Utils.formatearMoneda(t.importe)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
+        <div class="tc-taxes-body" style="padding:8px 12px; font-size:0.78rem; border-top:1px dashed var(--borde-1); display:none;" id="tc-taxes-content">
+          ${taxes.map(t => `
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--borde-1);">
+              <span style="color:var(--texto-2);">${App.Utils.escapeHtml(t.descripcion)}</span>
+              <strong style="color:var(--rojo);">${App.Utils.formatearMoneda(t.importe)}</strong>
+            </div>
+          `).join('')}
         </div>
       </div>
     `;
 
     const toggle = document.getElementById('tc-taxes-toggle');
-    const accordion = document.getElementById('tc-taxes-accordion');
-    if (toggle && accordion) {
+    const content = document.getElementById('tc-taxes-content');
+    if (toggle && content) {
       toggle.addEventListener('click', () => {
-        accordion.classList.toggle('open');
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        const chevron = toggle.querySelector('.tc-taxes-chevron');
+        if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
       });
     }
   }
 
-  #renderGraficos() {
-    const wrap = document.getElementById('tc-graficos-wrap');
-    if (!wrap) return;
-
-    let filtered = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
-    if (this.#selectedTcId) {
-      filtered = filtered.filter(c => c.id_tarjeta === this.#selectedTcId);
-    }
-    if (this.#selectedCuentaId) {
-      if (this.#selectedCuentaId === 'sin_imputar') {
-        filtered = filtered.filter(c => !c.imputado);
-      } else if (this.#selectedCuentaId === 'personal') {
-        filtered = filtered.filter(c => c.imputado && (!c.es_incidencia_externa || c.id_cuenta_imputada === App.Store.cuenta));
-      } else {
-        filtered = filtered.filter(c => c.id_cuenta_imputada === this.#selectedCuentaId);
-      }
-    }
-
-    const totalConsumos = filtered.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
-
-    const activeCardName = this.#selectedTcId
-      ? (this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId)?.nombre || 'Tarjeta')
-      : 'Consolidado';
-
-    if (filtered.length === 0 || totalConsumos <= 0) {
-      wrap.innerHTML = `
-        <div class="fintech-card-header">
-          <h3 class="fintech-card-title">Top Categorías</h3>
-          <span class="fintech-pill-btn">${App.Utils.escapeHtml(activeCardName)}</span>
-        </div>
-        <div style="padding:2.5rem 1.5rem;text-align:center;color:var(--texto-3);font-size:0.85rem;">
-          No hay consumos en este período.
-        </div>`;
-      this.#renderEvolucionProyeccion();
-      return;
-    }
-
-    const catMap = {};
-    filtered.forEach(c => {
-      if (c.moneda === 'USD') return;
-      const cat = c.categoria_nombre || 'General';
-      const imp = Number(c.importe || 0);
-      if (!catMap[cat]) catMap[cat] = { total: 0, count: 0, personal: 0, externa: 0 };
-      catMap[cat].total += imp;
-      catMap[cat].count += 1;
-      if (c.imputado && c.es_incidencia_externa) catMap[cat].externa += imp;
-      else catMap[cat].personal += imp;
-    });
-
-    const sortedCats = Object.entries(catMap)
-      .map(([name, data]) => ({
-        name,
-        total: data.total,
-        count: data.count,
-        personal: data.personal,
-        externa: data.externa,
-        pct: ((data.total / totalConsumos) * 100)
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    // Paleta de identidad Fluxo: encabezada por el azul oscuro característico
-    const palette = [
-      '#1D195D', '#2563EB', '#0EA5E9', '#10B981', '#8B5CF6',
-      '#F59E0B', '#F43F5E', '#4F46E5', '#64748B'
-    ];
-
-    const labels = sortedCats.map(c => c.name);
-    const dataValues = sortedCats.map(c => Math.round(c.total));
-    const bgColors = sortedCats.map((_, i) => palette[i % palette.length]);
-
-    wrap.innerHTML = `
-      <div class="fintech-card-header">
-        <div>
-          <h3 class="fintech-card-title">Top Categorías</h3>
-          <div style="font-size:0.75rem;color:var(--texto-3);margin-top:2px;">
-            Total: <strong>${App.Utils.formatearMoneda(totalConsumos)}</strong>
-          </div>
-        </div>
-        <span class="fintech-pill-btn active">${App.Utils.escapeHtml(activeCardName)}</span>
-      </div>
-
-      <div class="fintech-donut-wrapper">
-        <canvas id="tc-chart-canvas"></canvas>
-        <div class="fintech-donut-center">
-          <span class="fintech-donut-center-label">${App.Utils.escapeHtml(activeCardName)}</span>
-          <span class="fintech-donut-center-val" style="color:var(--primary);">${App.Utils.formatearMoneda(totalConsumos)}</span>
-        </div>
-      </div>
-
-      <div class="fintech-legend-list">
-        ${sortedCats.map((cat, idx) => {
-          const color = bgColors[idx];
-          return `
-            <div class="fintech-legend-item">
-              <div class="fintech-legend-left" title="${App.Utils.escapeHtml(cat.name)}">
-                <span class="fintech-legend-dot" style="background:${color};"></span>
-                <span style="color:var(--texto);">${App.Utils.escapeHtml(cat.name)}</span>
-              </div>
-              <div class="fintech-legend-right">
-                <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${cat.pct.toFixed(1)}%</span>
-                <span class="negativo" style="font-size:0.82rem;">${App.Utils.formatearMoneda(cat.total)}</span>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-
-    const canvas = document.getElementById('tc-chart-canvas');
-    if (canvas) {
-      this.#chartInstance?.destroy();
-      const ctx = canvas.getContext('2d');
-      this.#chartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: dataValues,
-            backgroundColor: bgColors,
-            borderColor: '#ffffff',
-            borderWidth: 2,
-            hoverOffset: 5
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '74%',
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (context) => {
-                  const val = context.parsed || 0;
-                  const pct = ((val / totalConsumos) * 100).toFixed(1);
-                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pct}%)`;
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-
-    this.#renderEvolucionProyeccion();
-  }
-
-  #renderEvolucionProyeccion() {
-    const wrap = document.getElementById('tc-evolucion-wrap');
-    if (!wrap) return;
-
-    const proyList = this.#proyeccionesData || [];
-    if (!proyList.length) {
-      wrap.innerHTML = `
-        <div class="fintech-card-header">
-          <h3 class="fintech-card-title">Proyección de Pagos</h3>
-        </div>
-        <div style="padding:1.5rem 1rem;text-align:center;color:var(--texto-3);font-size:0.82rem;">
-          Cargando datos de proyección...
-        </div>`;
-      return;
-    }
-
-    const items = proyList.slice(0, 6);
-    const labels = items.map(p => App.Utils.formatearMes(p.mes));
-    const values = items.map(p => Math.round(p.total || 0));
-
-    wrap.innerHTML = `
-      <div class="fintech-card-header">
-        <div>
-          <h3 class="fintech-card-title">Proyección de Pagos</h3>
-          <span style="font-size:0.75rem;color:var(--texto-3);">Vencimientos a 6 meses</span>
-        </div>
-        <span class="fintech-pill-btn active">Próximos Meses</span>
-      </div>
-      <div style="position:relative;width:100%;height:165px;display:flex;align-items:center;justify-content:center;margin:4px 0;">
-        <canvas id="tc-evolucion-canvas"></canvas>
-      </div>
-    `;
-
-    const canvas = document.getElementById('tc-evolucion-canvas');
+  #renderMoneyFlowChart() {
+    const canvas = document.getElementById('tc-moneyflow-canvas');
     if (!canvas) return;
+
+    const currentMes = App.Store.mes || new Date().toISOString().substring(0, 7);
+    const currentYear = currentMes.substring(0, 4);
+
+    // Build timeline using this.#proyeccionesData
+    let dataList = (this.#proyeccionesData || []).map(p => ({
+      mes: p.mes,
+      total: Number(p.total || 0),
+      consumos: Number(p.subtotal_consumos !== undefined ? p.subtotal_consumos : p.total || 0),
+      impuestos: Number(p.impuestos?.total_impuestos || 0)
+    }));
+
+    // If proyecciones are empty, build fallback from current month consumos
+    if (!dataList.length) {
+      const currTotal = (this.#allConsumos || []).reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+      dataList = [{ mes: currentMes, total: currTotal, consumos: currTotal, impuestos: 0 }];
+    }
+
+    // Filter by selected period
+    let filtered = [];
+    if (this.#moneyFlowPeriod === 'YTD') {
+      filtered = dataList.filter(d => d.mes.startsWith(currentYear));
+      if (!filtered.length) filtered = dataList.slice(0, 6);
+    } else if (this.#moneyFlowPeriod === '12M') {
+      filtered = dataList.slice(0, 12);
+    } else { // 6M
+      filtered = dataList.slice(0, 6);
+    }
+
+    const subEl = document.getElementById('tc-moneyflow-sub');
+    if (subEl) {
+      if (this.#moneyFlowPeriod === '6M') subEl.textContent = 'Evolución y vencimientos próximos 6 meses';
+      else if (this.#moneyFlowPeriod === '12M') subEl.textContent = 'Proyección completa a 12 meses';
+      else subEl.textContent = `Vencimientos del año ${currentYear}`;
+    }
 
     this.#evolucionChartInstance?.destroy();
     const ctx = canvas.getContext('2d');
+    const labels = filtered.map(d => App.Utils.formatearMes(d.mes));
+    const totals = filtered.map(d => Math.round(d.total));
+
     this.#evolucionChartInstance = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: labels,
+        labels,
         datasets: [{
           label: 'Total Resumen',
-          data: values,
+          data: totals,
           backgroundColor: '#1D195D',
           borderRadius: 5,
           barPercentage: 0.65,
@@ -1349,17 +1400,235 @@ export class TarjetasModule extends BaseModule {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
+            ticks: { font: { size: 11, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
           },
           y: {
             grid: { color: 'rgba(0,0,0,0.04)' },
             ticks: {
-              font: { size: 9, family: 'Inter, sans-serif' },
+              font: { size: 10, family: 'Inter, sans-serif' },
               color: 'var(--texto-3)',
               callback: (v) => '$ ' + (v >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : (v / 1000).toFixed(0) + 'k')
             }
           }
         }
+      }
+    });
+
+    // Summary under chart
+    const sumEl = document.getElementById('tc-moneyflow-summary');
+    if (sumEl && filtered.length > 0) {
+      const sumTotal = totals.reduce((a, b) => a + b, 0);
+      const avg = sumTotal / filtered.length;
+      const maxVal = Math.max(...totals);
+      const maxItem = filtered.find(f => Math.round(f.total) === maxVal);
+      sumEl.innerHTML = `
+        <div class="finset-chart-summary-item">
+          <span class="finset-chart-summary-label">Promedio mensual</span>
+          <span class="finset-chart-summary-val">${App.Utils.formatearMoneda(avg)}</span>
+        </div>
+        <div class="finset-chart-summary-item">
+          <span class="finset-chart-summary-label">Mes con mayor cargo</span>
+          <span class="finset-chart-summary-val">${maxItem ? App.Utils.formatearMes(maxItem.mes) : '—'} (${App.Utils.formatearMoneda(maxVal)})</span>
+        </div>
+        <div class="finset-chart-summary-item">
+          <span class="finset-chart-summary-label">Total proyectado (${this.#moneyFlowPeriod})</span>
+          <span class="finset-chart-summary-val negativo">${App.Utils.formatearMoneda(sumTotal)}</span>
+        </div>
+      `;
+    }
+  }
+
+  #renderGraficos() {
+    const canvas = document.getElementById('tc-categories-donut-canvas');
+    const legendEl = document.getElementById('tc-categories-legend');
+    const centerValEl = document.getElementById('tc-donut-center-val');
+    const centerLblEl = document.getElementById('tc-donut-center-label');
+    const subEl = document.getElementById('tc-categories-subtitle');
+
+    let pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
+    if (this.#selectedTcId) {
+      pool = pool.filter(c => c.id_tarjeta === this.#selectedTcId);
+    }
+
+    const isByCard = this.#catMetric === 'tarjeta';
+    if (subEl) subEl.textContent = isByCard ? 'Distribución por tarjeta' : 'Distribución por categorías';
+    if (centerLblEl) centerLblEl.textContent = isByCard ? 'Por Tarjeta' : 'Total Consumos';
+
+    const totalMetric = pool.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+    if (centerValEl) {
+      centerValEl.textContent = App.Utils.formatearMoneda(totalMetric);
+    }
+
+    if (!pool.length || totalMetric <= 0) {
+      this.#chartInstance?.destroy();
+      if (legendEl) {
+        legendEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--texto-3);font-size:0.85rem;">No hay consumos registrados</div>`;
+      }
+      return;
+    }
+
+    const groupMap = {};
+    pool.forEach(c => {
+      if (c.moneda === 'USD') return;
+      const key = isByCard ? (c.tarjeta_nombre || 'Otras') : (c.categoria_nombre || 'General');
+      const imp = Number(c.importe || 0);
+      if (!groupMap[key]) groupMap[key] = { total: 0, count: 0 };
+      groupMap[key].total += imp;
+      groupMap[key].count += 1;
+    });
+
+    const sorted = Object.entries(groupMap)
+      .map(([name, d]) => ({
+        name,
+        total: d.total,
+        count: d.count,
+        pct: (d.total / totalMetric) * 100
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const palette = [
+      '#1D195D', '#2563EB', '#0EA5E9', '#10B981', '#8B5CF6',
+      '#F59E0B', '#EF4444', '#4F46E5', '#64748B'
+    ];
+
+    if (legendEl) {
+      const top5 = sorted.slice(0, 5);
+      legendEl.innerHTML = top5.map((item, idx) => {
+        const color = palette[idx % palette.length];
+        return `
+          <div class="fintech-legend-item">
+            <div class="fintech-legend-left" title="${App.Utils.escapeHtml(item.name)}">
+              <span class="fintech-legend-dot" style="background:${color};"></span>
+              <span style="color:var(--texto);">${App.Utils.escapeHtml(item.name)}</span>
+            </div>
+            <div class="fintech-legend-right">
+              <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${item.pct.toFixed(1)}%</span>
+              <span style="font-size:0.82rem;font-weight:600;color:var(--texto);">${App.Utils.formatearMoneda(item.total)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    if (canvas) {
+      this.#chartInstance?.destroy();
+      const ctx = canvas.getContext('2d');
+      this.#chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: sorted.map(s => s.name),
+          datasets: [{
+            data: sorted.map(s => Math.round(s.total)),
+            backgroundColor: sorted.map((_, i) => palette[i % palette.length]),
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            hoverOffset: 5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '74%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const val = context.parsed || 0;
+                  const pct = ((val / totalMetric) * 100).toFixed(1);
+                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  #updateTopeKpi(saldoTotal) {
+    let tope = { topePorcentaje: 25 };
+    try {
+      const stored = localStorage.getItem('fluxo_tope_tc');
+      if (stored) tope = JSON.parse(stored);
+    } catch (_) {}
+
+    const topePct = Number(tope.topePorcentaje) || 25;
+    const targetEl = document.getElementById('tc-tope-kpi-target');
+    if (targetEl) targetEl.textContent = `Tope: ${topePct}% de ingresos`;
+
+    // Estimate user monthly income from store or movements
+    const monthlyIncome = Number(App.Store.kpis?.ingresos || 0);
+    const valEl = document.getElementById('tc-tope-kpi-val');
+    const fillEl = document.getElementById('tc-tope-progress-fill');
+    const subEl = document.getElementById('tc-tope-kpi-sub');
+    const statusPill = document.getElementById('tc-tope-status-pill');
+
+    if (monthlyIncome <= 0) {
+      if (valEl) valEl.textContent = 'En rango';
+      if (fillEl) fillEl.style.width = '15%';
+      if (subEl) subEl.textContent = 'Configurá tus ingresos';
+      if (statusPill) statusPill.innerHTML = '<span>Salud OK</span>';
+      return;
+    }
+
+    const actualPct = (saldoTotal / monthlyIncome) * 100;
+    const ratio = actualPct / topePct;
+    const progressWidth = Math.min(100, Math.round(ratio * 100));
+
+    if (fillEl) fillEl.style.width = `${progressWidth}%`;
+    if (subEl) subEl.textContent = `${actualPct.toFixed(1)}% de ingresos consumido`;
+
+    if (ratio <= 0.8) {
+      if (valEl) { valEl.textContent = `${actualPct.toFixed(0)}%`; valEl.style.color = 'var(--verde)'; }
+      if (fillEl) fillEl.style.background = 'var(--verde)';
+      if (statusPill) { statusPill.className = 'finset-trend-pill trend-up'; statusPill.innerHTML = '<span>Salud OK</span>'; }
+    } else if (ratio <= 1.0) {
+      if (valEl) { valEl.textContent = `${actualPct.toFixed(0)}%`; valEl.style.color = 'var(--amarillo-text, #F59E0B)'; }
+      if (fillEl) fillEl.style.background = 'var(--amarillo, #F59E0B)';
+      if (statusPill) { statusPill.className = 'finset-trend-pill trend-neutral'; statusPill.innerHTML = '<span>Alerta</span>'; }
+    } else {
+      if (valEl) { valEl.textContent = `${actualPct.toFixed(0)}%`; valEl.style.color = 'var(--rojo)'; }
+      if (fillEl) fillEl.style.background = 'var(--rojo)';
+      if (statusPill) { statusPill.className = 'finset-trend-pill trend-down'; statusPill.innerHTML = '<span>Excedido</span>'; }
+    }
+  }
+
+  #abrirModalTopeTC() {
+    let tope = { topePorcentaje: 25 };
+    try {
+      const stored = localStorage.getItem('fluxo_tope_tc');
+      if (stored) tope = JSON.parse(stored);
+    } catch (_) {}
+
+    const modal = new App.Modal('modal-tc-tope');
+    modal.open({
+      titulo: 'Configurar Tope de Tarjeta de Crédito',
+      icono: 'credit_card',
+      body: `
+        <form id="form-tc-tope" style="display:flex; flex-direction:column; gap:14px;">
+          <div>
+            <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Tope de gasto con Tarjetas (% de tus ingresos)</label>
+            <p style="font-size:0.8rem; color:var(--texto-3); margin:4px 0 8px;">Recomendación financiera: no superar el 25% - 30% de tus ingresos en cuotas y consumos con tarjeta.</p>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input class="input" type="number" name="topePorcentaje" min="5" max="100" step="1" value="${tope.topePorcentaje || 25}" required style="width:120px;">
+              <span style="font-weight:700; color:var(--texto); font-size:1rem;">%</span>
+            </div>
+          </div>
+        </form>
+      `,
+      confirmLabel: 'Guardar Tope',
+      onConfirm: (m) => {
+        const form = document.getElementById('form-tc-tope');
+        if (!form) return;
+        const fd = new FormData(form);
+        const topePorcentaje = Number(fd.get('topePorcentaje')) || 25;
+        const nuevoTope = { topePorcentaje, topeMonto: null };
+        localStorage.setItem('fluxo_tope_tc', JSON.stringify(nuevoTope));
+        App.Events.emit('tope_tc:updated', nuevoTope);
+        App.Toast.success('Tope de tarjeta actualizado.');
+        m.close();
+        this._render({ success: true, consumos: this.#allConsumos });
       }
     });
   }

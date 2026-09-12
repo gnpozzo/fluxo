@@ -1088,7 +1088,7 @@ export class MovimientosModule extends BaseModule {
         <canvas id="mov-donut-canvas"></canvas>
         <div class="fintech-donut-center">
           <span class="fintech-donut-center-label">Total Gastos</span>
-          <span class="fintech-donut-center-val" style="color:var(--primary);">${App.Utils.formatearMoneda(totalGastos)}</span>
+          <span class="fintech-donut-center-val">${App.Utils.formatearMoneda(totalGastos)}</span>
         </div>
       </div>
 
@@ -1104,7 +1104,7 @@ export class MovimientosModule extends BaseModule {
               </div>
               <div class="fintech-legend-right">
                 <span style="font-size:0.75rem;color:var(--texto-3);">${pct.toFixed(1)}%</span>
-                <span class="negativo">${App.Utils.formatearMoneda(cat.total)}</span>
+                <span style="font-size:0.82rem;font-weight:600;color:var(--texto);">${App.Utils.formatearMoneda(cat.total)}</span>
               </div>
             </div>
           `;

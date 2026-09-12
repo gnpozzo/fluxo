@@ -22,7 +22,8 @@
     <div id="login-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--fondo);z-index:9999;display:none;align-items:center;justify-content:center;">
       <div style="background:var(--superficie);padding:40px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.1);max-width:400px;width:90%;">
         <div style="text-align:center;margin-bottom:30px;">
-           <img src="/Fluxo-logo-azul.png" alt="Fluxo" style="width:180px;height:auto;object-fit:contain;">
+           <img src="/Fluxo-logo-azul.png" alt="Fluxo" class="logo-light" style="width:180px;height:auto;object-fit:contain;margin:0 auto;">
+           <img src="/Fluxo-logo-blanco.png" alt="Fluxo" class="logo-dark" style="width:180px;height:auto;object-fit:contain;margin:0 auto;">
            <p style="color:var(--texto-2);margin-top:10px;">Inicia sesión para continuar</p>
         </div>
         <form id="form-login" onsubmit="event.preventDefault()">
@@ -74,72 +75,56 @@
          ══════════════════════════════════════════════════════════ -->
     <aside class="sidebar" id="app-sidebar">
 
+      <!-- Collapse Toggle Button (FinSet Chevron <) -->
+      <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Contraer / Expandir menú" aria-label="Contraer menú">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+
       <!-- Brand -->
       <div class="sidebar-brand" id="app-header-logo" style="justify-content:center;padding:16px 12px 14px;cursor:pointer;" title="Volver al Dashboard">
-        <img src="/Fluxo-logo-azul.png" alt="Fluxo" style="height:90px;width:auto;max-width:215px;object-fit:contain;">
+        <img src="/Fluxo-logo-azul.png" alt="Fluxo" class="sidebar-logo-img logo-light" style="height:90px;width:auto;max-width:215px;object-fit:contain;">
+        <img src="/Fluxo-logo-blanco.png" alt="Fluxo" class="sidebar-logo-img logo-dark" style="height:90px;width:auto;max-width:215px;object-fit:contain;">
       </div>
 
       <!-- Navigation -->
       <nav class="sidebar-nav" id="sidebar-nav" role="tablist">
-        <button class="nav-item active" data-vista="vista-dashboard" role="tab" aria-selected="true" id="nav-btn-dashboard">
+        <button class="nav-item active" data-vista="vista-dashboard" role="tab" aria-selected="true" id="nav-btn-dashboard" title="Dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
           </svg>
-          Dashboard
+          <span class="nav-text">Dashboard</span>
         </button>
 
-        <button class="nav-item" data-vista="vista-tarjetas" role="tab" id="tab-btn-tarjetas">
+        <button class="nav-item" data-vista="vista-tarjetas" role="tab" id="tab-btn-tarjetas" title="Tarjetas">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
           </svg>
-          Tarjetas
+          <span class="nav-text">Tarjetas</span>
         </button>
 
-        <button class="nav-item" data-vista="vista-cc" role="tab" id="tab-btn-cc">
+        <button class="nav-item" data-vista="vista-cc" role="tab" id="tab-btn-cc" title="Gastos compartidos">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          Gastos compartidos
+          <span class="nav-text">Gastos compartidos</span>
         </button>
 
-        <button class="nav-item" data-vista="vista-ahorro" role="tab" id="tab-btn-ahorro">
+        <button class="nav-item" data-vista="vista-ahorro" role="tab" id="tab-btn-ahorro" title="Ahorro">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>
           </svg>
-          Chanchito
+          <span class="nav-text">Ahorro</span>
         </button>
 
-        <button class="nav-item" data-vista="vista-inversiones" role="tab" id="tab-btn-inversiones">
+        <button class="nav-item" data-vista="vista-inversiones" role="tab" id="tab-btn-inversiones" title="Inversiones">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
-          Inversiones
+          <span class="nav-text">Inversiones</span>
         </button>
       </nav>
-
-      
-      <!-- Proplan Ad -->
-      <div class="sidebar-proplan" style="margin: 0 16px 16px; padding: 16px; background: rgba(79, 70, 229, 0.08); border-radius: 12px; text-align: center;">
-        <span style="display:block; font-size: 0.75rem; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 4px;">PROPLAN</span>
-        <span style="display:block; font-size: 0.85rem; font-weight: 600; color: var(--texto); margin-bottom: 12px;">Maximiza tu capital</span>
-        <button class="btn btn-primary btn-sm" style="width:100%; border-radius: 20px;">Actualizar</button>
-      </div>
-
-      <!-- Footer -->
-      <div class="sidebar-footer">
-        <button class="nav-item" id="btn-admin" title="Configuración" aria-label="Abrir configuración">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-          Ajustes
-        </button>
-        <button class="nav-item" id="btn-logout" title="Cerrar Sesión" aria-label="Cerrar sesión">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Cerrar Sesión
-        </button>
-      </div>
     </aside>
 
     <!-- Sidebar backdrop for mobile -->
@@ -197,11 +182,71 @@
         </div>
 
         <div class="app-header-actions">
-          <!-- Quick Add Button -->
-          <button class="btn btn-primary btn-sm topbar-quick-add" id="topbar-btn-nuevo" onclick="App.Modules.movimientos?.abrirAlta()" title="Registrar nuevo gasto o ingreso">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            <span>Nuevo</span>
-          </button>
+          <!-- Quick Add Dropdown Button -->
+          <div class="topbar-quick-add-wrap" id="topbar-quick-add-wrap">
+            <button class="btn btn-primary btn-sm topbar-quick-add" id="topbar-btn-nuevo" aria-haspopup="true" aria-expanded="false" title="Registrar nuevo movimiento">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>Nuevo</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="topbar-qa-chevron"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="topbar-quick-add-menu hidden" id="topbar-quick-add-menu">
+              <div class="qa-menu-header">¿Qué querés registrar?</div>
+              <button class="qa-menu-item" data-qa-action="egreso">
+                <span class="qa-item-icon icon-red">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+                </span>
+                <div class="qa-item-info">
+                  <span class="qa-item-title">Gasto al contado</span>
+                  <span class="qa-item-sub">Efectivo, débito o transferencia</span>
+                </div>
+              </button>
+              <button class="qa-menu-item" data-qa-action="ingreso">
+                <span class="qa-item-icon icon-green">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+                </span>
+                <div class="qa-item-info">
+                  <span class="qa-item-title">Nuevo Ingreso</span>
+                  <span class="qa-item-sub">Sueldo, cobro o rendimientos</span>
+                </div>
+              </button>
+              <button class="qa-menu-item" data-qa-action="tarjeta">
+                <span class="qa-item-icon icon-blue">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                </span>
+                <div class="qa-item-info">
+                  <span class="qa-item-title">Consumo en Tarjeta</span>
+                  <span class="qa-item-sub">Pago único o cuotas futuras</span>
+                </div>
+              </button>
+              <button class="qa-menu-item" data-qa-action="cc">
+                <span class="qa-item-icon icon-purple">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </span>
+                <div class="qa-item-info">
+                  <span class="qa-item-title">Gasto Compartido</span>
+                  <span class="qa-item-sub">División de gastos con contactos</span>
+                </div>
+              </button>
+              <button class="qa-menu-item" data-qa-action="ahorro">
+                <span class="qa-item-icon icon-yellow">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                </span>
+                <div class="qa-item-info">
+                  <span class="qa-item-title">Ahorro / Chanchito</span>
+                  <span class="qa-item-sub">Depósito o retiro en alcancía</span>
+                </div>
+              </button>
+              <button class="qa-menu-item" data-qa-action="inversion">
+                <span class="qa-item-icon icon-cyan">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </span>
+                <div class="qa-item-info">
+                  <span class="qa-item-title">Operación de Inversión</span>
+                  <span class="qa-item-sub">Compra o venta de activos</span>
+                </div>
+              </button>
+            </div>
+          </div>
 
           <!-- Gemini AI Advisor Button (Top Bar Header) -->
           <button id="btn-header-gemini" class="btn-icon-sm btn-gemini-header" title="FluxoAI - Asesor Inteligente" aria-label="Abrir FluxoAI">
@@ -284,21 +329,6 @@
         <div id="welcome-bar" style="display:none;"></div>
         <!-- Hidden greeting placeholders for script compatibility -->
         <h2 id="welcome-name" style="display:none;">Hola</h2>
-        <!-- Subview Global Breadcrumb / Back Bar -->
-        <div id="subview-nav-bar" class="subview-nav-bar" style="display:none;">
-          <button id="btn-subview-back" class="btn-subview-back" title="Volver al Dashboard" aria-label="Volver al Dashboard">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            <span>Volver al Dashboard</span>
-          </button>
-          <div class="subview-breadcrumb-path">
-            <span class="subview-bc-parent" id="subview-bc-parent">Dashboard</span>
-            <span class="subview-bc-sep">/</span>
-            <span class="subview-bc-active" id="subview-breadcrumb-title">Módulo</span>
-          </div>
-        </div>
 
         <!-- Paneles de contenido (módulos) -->
         <div id="vista-dashboard"     class="vista-container active" role="tabpanel"></div>

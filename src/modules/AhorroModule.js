@@ -1,9 +1,11 @@
 'use strict';
 /* ============================================================
-   module-ahorro.html — v5.0.0
-   Módulo Ahorro ARS/USD.
+   module-ahorro.js — v6.0.0 (FinSet 3-Row Architecture)
+   Módulo Ahorro ARS/USD (Chanchito).
    Extiende BaseModule. Carga lazy con cache sessionStorage.
    ============================================================ */
+
+import Chart from 'chart.js/auto';
 
 // --- SECCIÓN 0: CLASE AhorroModule ---
 
@@ -16,15 +18,16 @@ export class AhorroModule extends BaseModule {
   get _updateEndpoint() { return 'api_updateAhorro'; }
   get _deleteEndpoint() { return 'api_deleteAhorro'; }
 
-  #table        = null;
-  #kpiArs       = null;
-  #kpiUsd       = null;
-  #kpiConsol    = null;
-  #modal        = null;
-  #vistaActual  = 'ARS'; // 'ARS' | 'USD'
-  #dataCompleta = null;
-  #cotizacion   = null;
-  #editData     = null;
+  #modal              = null;
+  #vistaActual        = 'ARS'; // 'ARS' | 'USD'
+  #tipoFiltro         = 'ALL'; // 'ALL' | 'DEPOSITO' | 'RETIRO'
+  #busqueda           = '';
+  #dataCompleta       = null;
+  #cotizacion         = null;
+  #editData           = null;
+  #flowPeriod         = '6M';  // '6M' | '12M' | 'YTD'
+  #chartInstance      = null;
+  #donutChartInstance = null;
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -33,7 +36,7 @@ export class AhorroModule extends BaseModule {
     this._buildVista();
     this._bindListeners();
     this._subscribeEvents();
-    App.log('AhorroModule', 'init', 'Módulo ahorro iniciado');
+    App.log('AhorroModule', 'init', 'Módulo ahorro iniciado (FinSet)');
   }
 
   async cargar() {
@@ -43,7 +46,6 @@ export class AhorroModule extends BaseModule {
 
     const { fechaInicio, fechaFin } = this.#calcFechas(mes);
     this.#mostrarKpiSkeletons();
-    this.#table?.showSkeleton(5);
 
     try {
       const resp = await App.API.swr(
@@ -60,6 +62,18 @@ export class AhorroModule extends BaseModule {
     }
   }
 
+  destruir() {
+    if (this.#chartInstance) {
+      this.#chartInstance.destroy();
+      this.#chartInstance = null;
+    }
+    if (this.#donutChartInstance) {
+      this.#donutChartInstance.destroy();
+      this.#donutChartInstance = null;
+    }
+    super.destruir();
+  }
+
   // --- SECCIÓN 2: RENDER ---
 
   _render(data) {
@@ -72,150 +86,675 @@ export class AhorroModule extends BaseModule {
     this.#cotizacion   = data.cotizacion;
 
     const { kpis } = data;
-    const tasa      = this.#cotizacion?.venta || 0;
+    const tasa = this.#cotizacion?.venta || App.Store.exchangeRate || 0;
 
-    this.#kpiArs?.setValue(kpis.arsTotal, {
-      subtitulo: tasa ? `Eq: USD ${App.Utils.formatearMoneda(kpis.arsTotal / tasa, false)}` : ''
-    });
-    this.#kpiUsd?.setValue(kpis.usdTotal, {
-      subtitulo: tasa ? `Eq: ARS ${App.Utils.formatearMoneda(kpis.usdTotal * tasa, false)} (1 USD = $${App.Utils.formatearMoneda(tasa, false)})` : ''
-    });
-    this.#kpiConsol?.setValue(kpis.consolidadoArs, {
-      subtitulo: this.#cotizacion?.fecha
+    // Scorecard 1: ARS
+    const valArsEl = document.getElementById('aho-kpi-val-ars');
+    const subArsEl = document.getElementById('aho-kpi-sub-ars');
+    if (valArsEl) valArsEl.textContent = App.Utils.formatearMoneda(kpis.arsTotal);
+    if (subArsEl) {
+      subArsEl.textContent = tasa ? `Eq: USD ${App.Utils.formatearMoneda(kpis.arsTotal / tasa, false)}` : 'Eq: —';
+    }
+
+    // Scorecard 2: USD
+    const valUsdEl = document.getElementById('aho-kpi-val-usd');
+    const subUsdEl = document.getElementById('aho-kpi-sub-usd');
+    if (valUsdEl) valUsdEl.textContent = 'US$ ' + Number(kpis.usdTotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (subUsdEl) {
+      subUsdEl.textContent = tasa ? `Eq: ARS ${App.Utils.formatearMoneda(kpis.usdTotal * tasa, false)} (1 USD = $${App.Utils.formatearMoneda(tasa, false)})` : 'Eq: —';
+    }
+
+    // Scorecard 3: Consolidado ARS
+    const valConsolEl = document.getElementById('aho-kpi-val-consol');
+    const subConsolEl = document.getElementById('aho-kpi-sub-consol');
+    if (valConsolEl) valConsolEl.textContent = App.Utils.formatearMoneda(kpis.consolidadoArs);
+    if (subConsolEl) {
+      subConsolEl.textContent = this.#cotizacion?.fecha
         ? `Cotización: ${App.Utils.formatearFecha(this.#cotizacion.fecha)}`
-        : ''
-    });
+        : 'Patrimonio en alcancías';
+    }
 
-    this.#setVista(this.#vistaActual);
+    // Scorecard 4: Meta / Tasa de Ahorro
+    const valMetaEl = document.getElementById('aho-kpi-val-meta');
+    const subMetaEl = document.getElementById('aho-kpi-sub-meta');
+    const fillMetaEl = document.getElementById('aho-meta-progress-fill');
+    const transferencias = data.transferencias || [];
+    const depositosMes = transferencias
+      .filter(t => t.tipo_mov === 'DEPOSITO' && t.moneda === this.#vistaActual)
+      .reduce((acc, t) => acc + Number(t.importe || 0), 0);
+    const subcuentasCount = (data.subcuentas || []).length;
+    
+    if (valMetaEl) {
+      valMetaEl.textContent = subcuentasCount > 0 ? `${subcuentasCount} ${subcuentasCount === 1 ? 'Alcancía' : 'Alcancías'}` : 'Sin metas';
+    }
+    if (subMetaEl) {
+      subMetaEl.textContent = depositosMes > 0 
+        ? `Depósitos del mes: ${this.#vistaActual === 'USD' ? App.Utils.formatearMonedaUSD(depositosMes) : App.Utils.formatearMoneda(depositosMes)}`
+        : 'Sin depósitos este mes';
+    }
+    if (fillMetaEl) {
+      fillMetaEl.style.width = depositosMes > 0 ? '75%' : '20%';
+      fillMetaEl.style.background = depositosMes > 0 ? 'var(--verde)' : 'var(--amarillo-text)';
+    }
+
+    // Renderizar Gráficos y Lista
+    this.#renderMoneyFlowChart();
+    this.#renderDonutChart();
+    this.#filterAndRenderMovimientos();
+
     App.log('AhorroModule', '_render', 'Datos de ahorro renderizados');
   }
 
-  // --- SECCIÓN 3: BUILD DOM ---
+  // --- SECCIÓN 3: BUILD DOM (FinSet 3-Row Architecture) ---
 
   _buildVista() {
     const vista = document.getElementById(this.vistaId);
     if (!vista) return;
 
     vista.innerHTML = `
-      <div class="module-view-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/>
-          <path d="M12 18V6"/>
-        </svg>
-        <span>Chanchito</span>
+      <!-- ═══ ROW 1: SCORECARDS FINSET ═══ -->
+      <div class="finset-kpi-grid" id="aho-scorecards-grid" style="margin-bottom: 24px;">
+        
+        <!-- Card 1: Ahorro en Pesos (ARS) -->
+        <div class="finset-kpi-card" id="aho-card-kpi-ars">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-green">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+              </div>
+              <span class="finset-kpi-title">Ahorro en Pesos</span>
+            </div>
+            <button class="finset-arrow-btn" id="aho-btn-filter-ars" title="Ver ahorros en pesos">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <div class="finset-kpi-value" id="aho-kpi-val-ars">$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="aho-kpi-sub-ars">Eq: —</span>
+            <span class="finset-trend-pill trend-up"><span>ARS</span></span>
+          </div>
+        </div>
+
+        <!-- Card 2: Ahorro en Dólares (USD) -->
+        <div class="finset-kpi-card" id="aho-card-kpi-usd">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-cyan">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              </div>
+              <span class="finset-kpi-title">Ahorro en Dólares</span>
+            </div>
+            <button class="finset-arrow-btn" id="aho-btn-filter-usd" title="Ver ahorros en dólares">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <div class="finset-kpi-value" id="aho-kpi-val-usd">US$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="aho-kpi-sub-usd">Eq: —</span>
+            <span class="finset-trend-pill trend-neutral"><span>USD</span></span>
+          </div>
+        </div>
+
+        <!-- Card 3: Total Consolidado -->
+        <div class="finset-kpi-card" id="aho-card-kpi-consol">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-purple">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+              </div>
+              <span class="finset-kpi-title">Total Consolidado</span>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="aho-kpi-val-consol">$ 0,00</div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="aho-kpi-sub-consol">Patrimonio en alcancías</span>
+            <span class="finset-trend-pill trend-up"><span>Patrimonio</span></span>
+          </div>
+        </div>
+
+        <!-- Card 4: Metas / Alcancías -->
+        <div class="finset-kpi-card" id="aho-card-kpi-meta">
+          <div class="finset-kpi-header">
+            <div class="finset-kpi-title-wrap">
+              <div class="finset-kpi-icon icon-yellow">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              </div>
+              <div style="display:flex; flex-direction:column; line-height:1.2;">
+                <span class="finset-kpi-title">Alcancías Activas</span>
+                <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3);">Objetivos de ahorro</span>
+              </div>
+            </div>
+          </div>
+          <div class="finset-kpi-value" id="aho-kpi-val-meta" style="font-size:1.35rem;">—</div>
+          <div class="finset-goal-progress-wrap">
+            <div class="finset-goal-progress-bar">
+              <div class="finset-goal-progress-fill" id="aho-meta-progress-fill" style="width: 50%; background: var(--verde);"></div>
+            </div>
+          </div>
+          <div class="finset-kpi-footer">
+            <span class="finset-kpi-subtext" id="aho-kpi-sub-meta">Depósitos este mes</span>
+            <span class="finset-trend-pill trend-up"><span>Alcancía</span></span>
+          </div>
+        </div>
+
       </div>
 
-      <div class="kpi-grid" id="aho-kpi-grid"></div>
+      <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Money Flow + Distribución por Alcancías) ═══ -->
+      <div class="finset-grid-2col" style="margin-bottom: 24px;">
+        
+        <!-- Left (60%): Evolución Mensual del Ahorro -->
+        <div class="finset-card" id="aho-widget-moneyflow">
+          <div class="finset-card-header">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Flujo de Ahorro</h3>
+              <span class="finset-card-subtitle" id="aho-moneyflow-sub">Evolución histórica últimos 6 meses</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <div class="fintech-pill-switch" id="aho-period-switch">
+                <button class="fintech-pill-btn active" data-period="6M">6M</button>
+                <button class="fintech-pill-btn" data-period="12M">12M</button>
+                <button class="fintech-pill-btn" data-period="YTD">Año actual</button>
+              </div>
+            </div>
+          </div>
+          <div style="position:relative; width:100%; height:230px; margin: 4px 0;">
+            <canvas id="aho-moneyflow-canvas"></canvas>
+          </div>
+          <div class="finset-chart-summary" id="aho-moneyflow-summary"></div>
+        </div>
 
-      <div class="section-header" style="margin-bottom:var(--space-3)">
-        <div class="acciones-container" id="aho-acciones"></div>
-        <div class="selector-vista-container">
-          <button id="aho-btn-ars" class="btn btn-primary btn-vista active">ARS</button>
-          <button id="aho-btn-usd" class="btn btn-ghost btn-vista">USD</button>
+        <!-- Right (40%): Distribución por Alcancías (FinSet Side-by-Side) -->
+        <div class="finset-card" id="aho-widget-categories">
+          <div class="finset-card-header">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Distribución por Alcancías</h3>
+              <span class="finset-card-subtitle">Saldo acumulado por subcuenta</span>
+            </div>
+          </div>
+          <div class="finset-categories-side-wrap">
+            <div class="fintech-legend-list" id="aho-categories-legend" style="margin-top:0;"></div>
+            <div class="fintech-donut-wrapper" style="height:180px; margin:0;">
+              <canvas id="aho-categories-donut-canvas"></canvas>
+              <div class="fintech-donut-center" id="aho-categories-donut-center">
+                <span class="fintech-donut-center-label">Total Ahorrado</span>
+                <span class="fintech-donut-center-val" id="aho-donut-center-val" style="font-size:1.05rem;">$ 0,00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ ROW 3: OPERATIONS & DRILLDOWN (Grilla de Movimientos de Ahorro) ═══ -->
+      <div class="finset-card" id="aho-widget-movimientos">
+        <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+          <div class="dh-drilldown-left" style="min-width:200px;">
+            <div class="dh-drilldown-badge badge-all" id="aho-movimientos-badge">
+              <span class="dh-badge-dot"></span>
+              <span class="dh-badge-title" id="aho-movimientos-title">Todos los Movimientos de Ahorro</span>
+            </div>
+            <div class="dh-drilldown-summary" id="aho-movimientos-summary">—</div>
+          </div>
+
+          <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
+            <!-- Selector Moneda (ARS / USD) -->
+            <div class="currency-pills" id="aho-currency-switch" style="display:flex;">
+              <button class="currency-pill active" id="aho-btn-ars" data-moneda="ARS">ARS</button>
+              <button class="currency-pill" id="aho-btn-usd" data-moneda="USD">USD</button>
+            </div>
+
+            <!-- Pestañas de Filtrado -->
+            <div class="dh-filter-tabs" id="aho-movimientos-tabs">
+              <button class="dh-tab-btn active" data-filter="ALL" id="aho-tab-all">Todos</button>
+              <button class="dh-tab-btn" data-filter="DEPOSITO" id="aho-tab-deposito">Depósitos</button>
+              <button class="dh-tab-btn" data-filter="RETIRO" id="aho-tab-retiro">Retiros</button>
+            </div>
+
+            <!-- Buscador -->
+            <div class="dh-search-box" style="margin:0;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="aho-search-input" placeholder="Buscar ahorro..." class="finset-search-input" style="width:140px;">
+            </div>
+
+            <!-- Único Botón Contextual Primario -->
+            <button class="btn btn-primary btn-sm" id="aho-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>+ Movimiento</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista de movimientos interactiva estilo movimientos -->
+        <div class="dh-drilldown-list dh-side-main" id="aho-movimientos-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
         </div>
       </div>
-
-      <div class="table-card" id="aho-tabla-wrap"></div>
     `;
-
-    const grid = document.getElementById('aho-kpi-grid');
-    this.#kpiArs    = new App.KpiCard(grid, { titulo: 'Ahorro ARS', icono: 'savings', colorClass: 'kpi-green',  onFormat: App.Utils.formatearMoneda });
-    this.#kpiUsd    = new App.KpiCard(grid, { titulo: 'Ahorro USD', icono: 'savings', colorClass: 'kpi-blue',   onFormat: App.Utils.formatearMonedaUSD });
-    this.#kpiConsol = new App.KpiCard(grid, { titulo: 'Consolidado ARS', icono: 'investment', colorClass: 'kpi-purple', onFormat: App.Utils.formatearMoneda });
-
-    document.getElementById('aho-acciones').innerHTML = `
-      <button id="aho-btn-deposito" class="btn btn-success">
-        ${App.Icons.get('add', 'icon-sm')} Depósito
-      </button>
-      <button id="aho-btn-retiro" class="btn btn-danger">
-        ${App.Icons.get('trending_down', 'icon-sm')} Retiro
-      </button>
-    `;
-
-    this.#table = new App.DataTable(
-      document.getElementById('aho-tabla-wrap'),
-      {
-        columns: [
-          { key: 'fecha',           label: 'Fecha',    sortable: true,
-            render: (r) => App.Utils.formatearFecha(r.fecha?.value || r.fecha) },
-          { key: 'tipo_mov',        label: 'Tipo',
-            render: (r) => `<span class="tipo-mov tipo-${r.tipo_mov?.toLowerCase()}">${App.Utils.escapeHtml(r.tipo_mov)}</span>` },
-          { key: 'subcuenta_nombre',label: 'Subcuenta', sortable: true,
-            render: (r) => App.Utils.escapeHtml(r.subcuenta_nombre || '—') },
-          { key: 'descripcion',     label: 'Descripción', searchable: true,
-            render: (r) => App.Utils.escapeHtml(r.descripcion || '') },
-          { key: 'importe',         label: 'Importe',  sortable: true, align: 'right',
-            render: (r) => {
-              const fmt = r.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
-              const cls = r.tipo_mov === 'RETIRO' ? 'negativo' : 'positivo';
-              return `<span class="${cls}">${fmt(r.importe)}</span>`;
-            }}
-        ],
-        emptyMsg : 'No hay movimientos de ahorro para este período.',
-        paginated: true,
-        pageSize : 25,
-        onRowClick: (row) => this.#abrirModalDetalle(row)
-      }
-    );
   }
 
-  // --- SECCIÓN 4: CAMBIO DE VISTA ARS/USD ---
+  // --- SECCIÓN 4: ANALYTICS & CHARTS ---
 
-  #setVista(moneda) {
-    this.#vistaActual = moneda;
+  #renderMoneyFlowChart() {
+    const canvas = document.getElementById('aho-moneyflow-canvas');
+    if (!canvas) return;
+
+    if (this.#chartInstance) {
+      this.#chartInstance.destroy();
+      this.#chartInstance = null;
+    }
+
     const transferencias = this.#dataCompleta?.transferencias || [];
-    const filtradas      = transferencias.filter(t => t.moneda === moneda);
-    this.#table?.load(filtradas);
+    const isUSD = this.#vistaActual === 'USD';
+    const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
 
-    document.getElementById('aho-btn-ars')?.classList.toggle('btn-primary', moneda === 'ARS');
-    document.getElementById('aho-btn-ars')?.classList.toggle('btn-ghost',   moneda !== 'ARS');
-    document.getElementById('aho-btn-usd')?.classList.toggle('btn-primary', moneda === 'USD');
-    document.getElementById('aho-btn-usd')?.classList.toggle('btn-ghost',   moneda !== 'USD');
+    // Calcular rango de meses según #flowPeriod
+    let count = 6;
+    if (this.#flowPeriod === '12M') count = 12;
+    else if (this.#flowPeriod === 'YTD') {
+      const currentMonthNum = new Date().getMonth() + 1;
+      count = Math.max(1, currentMonthNum);
+    }
+
+    const labels = [];
+    const keys = [];
+    const dateCursor = new Date();
+
+    for (let i = count - 1; i >= 0; i--) {
+      const d = new Date(dateCursor.getFullYear(), dateCursor.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      keys.push(ym);
+      const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      labels.push(monthNames[d.getMonth()]);
+    }
+
+    const depositosData = keys.map(k => {
+      return transferencias
+        .filter(t => t.moneda === this.#vistaActual && t.tipo_mov === 'DEPOSITO' && (t.fecha?.value || t.fecha || '').startsWith(k))
+        .reduce((sum, t) => sum + Number(t.importe || 0), 0);
+    });
+
+    const retirosData = keys.map(k => {
+      return transferencias
+        .filter(t => t.moneda === this.#vistaActual && t.tipo_mov === 'RETIRO' && (t.fecha?.value || t.fecha || '').startsWith(k))
+        .reduce((sum, t) => sum + Number(t.importe || 0), 0);
+    });
+
+    const totalDep = depositosData.reduce((a, b) => a + b, 0);
+    const totalRet = retirosData.reduce((a, b) => a + b, 0);
+    const neto = totalDep - totalRet;
+
+    const summaryEl = document.getElementById('aho-moneyflow-summary');
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <span>Depósitos: <strong style="color:var(--verde);">${fmt(totalDep)}</strong></span>
+        <span style="margin:0 8px; color:var(--borde);">•</span>
+        <span>Retiros: <strong style="color:var(--rojo);">${fmt(totalRet)}</strong></span>
+        <span style="margin:0 8px; color:var(--borde);">•</span>
+        <span>Ahorro Neto: <strong style="color:${neto >= 0 ? 'var(--verde)' : 'var(--rojo)'};">${fmt(neto)}</strong></span>
+      `;
+    }
+
+    const ctx = canvas.getContext('2d');
+    this.#chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Depósitos',
+            data: depositosData,
+            backgroundColor: '#10B981',
+            borderRadius: 6,
+            barPercentage: 0.5,
+            categoryPercentage: 0.7
+          },
+          {
+            label: 'Retiros',
+            data: retirosData,
+            backgroundColor: '#EF4444',
+            borderRadius: 6,
+            barPercentage: 0.5,
+            categoryPercentage: 0.7
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            align: 'end',
+            labels: {
+              boxWidth: 10,
+              boxHeight: 10,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              color: 'var(--texto-2)',
+              font: { family: 'inherit', size: 11, weight: '600' }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(24, 24, 27, 0.95)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            padding: 10,
+            cornerRadius: 8,
+            callbacks: {
+              label: (item) => ` ${item.dataset.label}: ${fmt(item.raw)}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: 'var(--texto-3)', font: { size: 11 } }
+          },
+          y: {
+            grid: { color: 'rgba(128, 128, 128, 0.1)' },
+            ticks: {
+              color: 'var(--texto-3)',
+              font: { size: 10 },
+              callback: (v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v
+            }
+          }
+        }
+      }
+    });
   }
 
-  // --- SECCIÓN 5: MODAL ---
+  #renderDonutChart() {
+    const canvas = document.getElementById('aho-categories-donut-canvas');
+    if (!canvas) return;
+
+    if (this.#donutChartInstance) {
+      this.#donutChartInstance.destroy();
+      this.#donutChartInstance = null;
+    }
+
+    const transferencias = this.#dataCompleta?.transferencias || [];
+    const isUSD = this.#vistaActual === 'USD';
+    const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
+
+    // Agrupar depósitos por subcuenta
+    const mapSubcuentas = {};
+    transferencias
+      .filter(t => t.moneda === this.#vistaActual && t.tipo_mov === 'DEPOSITO')
+      .forEach(t => {
+        const nom = t.subcuenta_nombre || 'General';
+        mapSubcuentas[nom] = (mapSubcuentas[nom] || 0) + Number(t.importe || 0);
+      });
+
+    // Si no hay depósitos, usar la lista de subcuentas cargadas
+    if (Object.keys(mapSubcuentas).length === 0) {
+      const subcuentas = this.#dataCompleta?.subcuentas || [];
+      subcuentas
+        .filter(s => !s.moneda || s.moneda === this.#vistaActual)
+        .forEach(s => {
+          mapSubcuentas[s.nombre] = 1; // placeholder equitativo para mostrar el gráfico
+        });
+    }
+
+    const labels = Object.keys(mapSubcuentas);
+    const dataVals = Object.values(mapSubcuentas);
+    const total = dataVals.reduce((a, b) => a + b, 0);
+
+    const totalDisplay = this.#dataCompleta?.kpis?.[isUSD ? 'usdTotal' : 'arsTotal'] || total;
+    const centerValEl = document.getElementById('aho-donut-center-val');
+    if (centerValEl) centerValEl.textContent = fmt(totalDisplay);
+
+    const PALETTE = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+    const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
+
+    // Legend items con importes neutros negrita
+    const legendEl = document.getElementById('aho-categories-legend');
+    if (legendEl) {
+      if (!labels.length) {
+        legendEl.innerHTML = '<p style="color:var(--texto-3); font-size:0.8rem; padding:10px;">Sin datos de alcancías.</p>';
+      } else {
+        legendEl.innerHTML = labels.map((lbl, i) => {
+          const val = dataVals[i];
+          const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
+          return `
+            <div class="fintech-legend-item">
+              <div class="fintech-legend-left">
+                <span class="fintech-legend-dot" style="background: ${colors[i]};"></span>
+                <span class="fintech-legend-label" title="${App.Utils.escapeHtml(lbl)}">${App.Utils.escapeHtml(lbl)}</span>
+              </div>
+              <div class="fintech-legend-right">
+                <span class="fintech-legend-pct">${pct}%</span>
+                <span class="fintech-legend-amount" style="color: var(--texto); font-weight: 600;">${fmt(val)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    const ctx = canvas.getContext('2d');
+    this.#donutChartInstance = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: dataVals.length ? dataVals : [1],
+          backgroundColor: dataVals.length ? colors : ['#E2E8F0'],
+          borderWidth: 2,
+          borderColor: 'var(--superficie)',
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '74%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: dataVals.length > 0,
+            callbacks: {
+              label: (item) => ` ${item.label}: ${fmt(item.raw)}`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // --- SECCIÓN 5: FILTRADO Y GRILLA DE MOVIMIENTOS ---
+
+  #filterAndRenderMovimientos() {
+    const transferencias = this.#dataCompleta?.transferencias || [];
+    const isUSD = this.#vistaActual === 'USD';
+    const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
+
+    // Filtro por moneda, tipo (ALL / DEPOSITO / RETIRO) y búsqueda
+    const filtered = transferencias.filter(t => {
+      if (t.moneda !== this.#vistaActual) return false;
+      if (this.#tipoFiltro !== 'ALL' && t.tipo_mov !== this.#tipoFiltro) return false;
+      if (this.#busqueda) {
+        const q = this.#busqueda.toLowerCase();
+        const desc = (t.descripcion || '').toLowerCase();
+        const sub = (t.subcuenta_nombre || '').toLowerCase();
+        if (!desc.includes(q) && !sub.includes(q)) return false;
+      }
+      return true;
+    });
+
+    // Badge y resumen
+    const badgeTitleEl = document.getElementById('aho-movimientos-title');
+    const badgeEl = document.getElementById('aho-movimientos-badge');
+    const summaryEl = document.getElementById('aho-movimientos-summary');
+
+    if (badgeTitleEl) {
+      if (this.#tipoFiltro === 'DEPOSITO') badgeTitleEl.textContent = `Depósitos en ${this.#vistaActual}`;
+      else if (this.#tipoFiltro === 'RETIRO') badgeTitleEl.textContent = `Retiros en ${this.#vistaActual}`;
+      else badgeTitleEl.textContent = `Todos los Movimientos (${this.#vistaActual})`;
+    }
+    if (badgeEl) {
+      badgeEl.className = 'dh-drilldown-badge ' + (this.#tipoFiltro === 'DEPOSITO' ? 'badge-ing' : (this.#tipoFiltro === 'RETIRO' ? 'badge-egr' : 'badge-all'));
+    }
+
+    const totalDep = filtered.filter(t => t.tipo_mov === 'DEPOSITO').reduce((acc, t) => acc + Number(t.importe || 0), 0);
+    const totalRet = filtered.filter(t => t.tipo_mov === 'RETIRO').reduce((acc, t) => acc + Number(t.importe || 0), 0);
+    const saldoNeto = totalDep - totalRet;
+
+    if (summaryEl) {
+      summaryEl.textContent = `${filtered.length} ${filtered.length === 1 ? 'movimiento' : 'movimientos'} • Depósitos: ${fmt(totalDep)} • Retiros: ${fmt(totalRet)} • Neto: ${fmt(saldoNeto)}`;
+    }
+
+    this.#renderMovimientosList(filtered);
+  }
+
+  #renderMovimientosList(items) {
+    const listEl = document.getElementById('aho-movimientos-list');
+    if (!listEl) return;
+
+    if (!items.length) {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:36px 16px; color:var(--texto-3);">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.6;"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+          <p style="font-weight:600; margin:0 0 4px; color:var(--texto-2);">No hay movimientos de ahorro</p>
+          <p style="font-size:0.8rem; margin:0;">No se encontraron registros con los filtros aplicados.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const isUSD = this.#vistaActual === 'USD';
+    const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
+
+    listEl.innerHTML = items.map(t => {
+      const isDep = t.tipo_mov === 'DEPOSITO';
+      const iconBg = isDep ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+      const iconClr = isDep ? 'var(--verde)' : 'var(--rojo)';
+      const sign = isDep ? '+' : '−';
+      const clrClass = isDep ? 'monto-ingreso' : 'monto-egreso';
+      const badgeCls = isDep ? 'dh-badge-ing' : 'dh-badge-egr';
+      const badgeLabel = isDep ? 'Depósito' : 'Retiro';
+
+      const fechaStr = App.Utils.formatearFecha(t.fecha?.value || t.fecha);
+      const subcuentaNom = App.Utils.escapeHtml(t.subcuenta_nombre || 'Alcancía');
+      const descStr = App.Utils.escapeHtml(t.descripcion || 'Sin descripción');
+
+      return `
+        <div class="dh-drill-row" data-aho-id="${t.id_ahorro}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid var(--borde); cursor:pointer; transition:background 0.15s ease;">
+          <div style="width:36px; height:36px; border-radius:10px; background:${iconBg}; color:${iconClr}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              ${isDep ? '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>' : '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>'}
+            </svg>
+          </div>
+
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+              <span style="font-weight:600; font-size:0.88rem; color:var(--texto); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subcuentaNom}</span>
+              <span class="dh-item-badge ${badgeCls}" style="font-size:0.68rem; padding:2px 6px; border-radius:4px;">${badgeLabel}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:0.75rem; color:var(--texto-3);">
+              <span>${fechaStr}</span>
+              <span>•</span>
+              <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${descStr}</span>
+            </div>
+          </div>
+
+          <div style="text-align:right; flex-shrink:0;">
+            <div class="${clrClass}" style="font-weight:700; font-size:0.95rem;">
+              ${sign} ${fmt(t.importe)}
+            </div>
+            <span style="font-size:0.7rem; color:var(--texto-3); font-weight:600;">${t.moneda || 'ARS'}</span>
+          </div>
+
+          <div class="dh-drill-actions" style="display:flex; align-items:center; gap:4px; margin-left:8px;" onclick="event.stopPropagation();">
+            <button class="btn-icon-sm aho-btn-edit" data-id="${t.id_ahorro}" title="Editar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="btn-icon-sm aho-btn-delete" data-id="${t.id_ahorro}" title="Eliminar" style="color:var(--rojo);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Listeners en las filas
+    listEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
+      const id = rowEl.dataset.ahoId;
+      const rowData = items.find(x => String(x.id_ahorro) === String(id));
+      if (!rowData) return;
+
+      rowEl.addEventListener('click', () => this.#abrirModalDetalle(rowData));
+
+      rowEl.querySelector('.aho-btn-edit')?.addEventListener('click', () => {
+        this.#abrirModalEdicion(rowData);
+      });
+
+      rowEl.querySelector('.aho-btn-delete')?.addEventListener('click', () => {
+        this.#eliminar(rowData);
+      });
+    });
+  }
+
+  // --- SECCIÓN 6: MODAL DE ALTA / EDICIÓN ---
+
+  abrirAlta(tipo = 'DEPOSITO') {
+    this.#abrirModalAlta(tipo);
+  }
 
   #abrirModalAlta(tipo) {
     this.#editData = null;
     this.#modal.open({
-      titulo      : tipo === 'DEPOSITO' ? 'Nuevo Depósito' : 'Nuevo Retiro',
+      titulo      : tipo === 'DEPOSITO' ? 'Nuevo Depósito de Ahorro' : 'Nuevo Retiro de Ahorro',
       icono       : tipo === 'DEPOSITO' ? 'trending_up' : 'trending_down',
       body        : this.#buildFormHtml(tipo, null),
-      confirmLabel: 'Guardar',
+      confirmLabel: tipo === 'DEPOSITO' ? 'Guardar Depósito' : 'Guardar Retiro',
       danger      : tipo === 'RETIRO',
-      onConfirm   : (m) => this.#guardar(m, tipo)
+      onConfirm   : (m) => this.#guardar(m)
     });
+    this.#postOpenForm();
   }
 
   #abrirModalEdicion(row) {
     this.#editData = row;
     this.#modal.open({
-      titulo      : 'Editar movimiento de ahorro',
+      titulo      : row.tipo_mov === 'DEPOSITO' ? 'Editar Depósito' : 'Editar Retiro',
       icono       : 'edit',
       body        : this.#buildFormHtml(row.tipo_mov, row),
       confirmLabel: 'Actualizar',
-      onConfirm   : (m) => this.#guardar(m, row.tipo_mov)
+      danger      : row.tipo_mov === 'RETIRO',
+      onConfirm   : (m) => this.#guardar(m)
     });
+    this.#postOpenForm();
   }
 
   #buildFormHtml(tipo, data) {
+    const isDep = tipo === 'DEPOSITO';
     const rawFecha = data
       ? (data.fecha?.value || data.fecha || '').substring(0, 10)
       : new Date().toISOString().substring(0, 10);
-    const moneda   = data?.moneda || this.#vistaActual;
+    const moneda = data?.moneda || this.#vistaActual;
 
     // Subcuentas (viene en dataCompleta)
     const subcuentas = this.#dataCompleta?.subcuentas || [];
-    const optsS      = subcuentas
+    const optsS = subcuentas
       .filter(s => !moneda || s.moneda === moneda)
       .map(s => `<option value="${s.id_subcuenta}" ${data?.id_subcuenta === s.id_subcuenta ? 'selected':''}>${App.Utils.escapeHtml(s.nombre)}</option>`)
       .join('');
 
     return `
+      <!-- Selector Segmentado: Depósito vs Retiro -->
+      <div class="modal-segmented-switch">
+        <button type="button" class="modal-segmented-btn btn-aho-tipo-toggle ${isDep ? 'active btn-seg-green' : ''}" data-tipo="DEPOSITO">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+          Depósito
+        </button>
+        <button type="button" class="modal-segmented-btn btn-aho-tipo-toggle ${!isDep ? 'active btn-seg-red' : ''}" data-tipo="RETIRO">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+          Retiro
+        </button>
+      </div>
+
       <form id="form-ahorro" class="form-grid">
-        <input type="hidden" name="tipo"       value="${tipo}">
-        <input type="hidden" name="id_ahorro"  value="${data?.id_ahorro || ''}">
+        <input type="hidden" name="tipo" id="aho-form-tipo" value="${tipo}">
+        <input type="hidden" name="id_ahorro" value="${data?.id_ahorro || ''}">
 
         <div class="form-group">
           <label>Fecha <span class="required-mark">*</span></label>
@@ -231,9 +770,9 @@ export class AhorroModule extends BaseModule {
         </div>
 
         <div class="form-group full-width">
-          <label>Subcuenta <span class="required-mark">*</span></label>
-          <select class="input" name="id_subcuenta" id="aho-subcuenta">
-            <option value="">-- Seleccionar --</option>
+          <label>Subcuenta / Alcancía <span class="required-mark">*</span></label>
+          <select class="input" name="id_subcuenta" id="aho-subcuenta" required>
+            <option value="">-- Seleccionar alcancía --</option>
             ${optsS}
           </select>
         </div>
@@ -241,26 +780,55 @@ export class AhorroModule extends BaseModule {
         <div class="form-group">
           <label>Importe <span class="required-mark">*</span></label>
           <input class="input" type="number" name="importe" min="0.01" step="0.01"
-                 value="${data?.importe || ''}" required>
+                 value="${data?.importe || ''}" required placeholder="0.00">
         </div>
 
         <div class="form-group">
           <label>Descripción</label>
           <input class="input" type="text" name="descripcion"
-                 value="${App.Utils.escapeHtml(data?.descripcion || '')}">
+                 value="${App.Utils.escapeHtml(data?.descripcion || '')}" placeholder="Ej: Ahorro sueldo, Fondo viaje...">
         </div>
       </form>
     `;
   }
 
-  // --- SECCIÓN 6: CRUD ---
+  #postOpenForm() {
+    this.#modal.el.querySelectorAll('.btn-aho-tipo-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nuevoTipo = btn.dataset.tipo;
+        const isDep = nuevoTipo === 'DEPOSITO';
+        
+        // Actualizar switch visual
+        this.#modal.el.querySelectorAll('.btn-aho-tipo-toggle').forEach(b => {
+          b.className = `modal-segmented-btn btn-aho-tipo-toggle ${b.dataset.tipo === nuevoTipo ? (isDep ? 'active btn-seg-green' : 'active btn-seg-red') : ''}`;
+        });
 
-  async #guardar(modal, tipo) {
+        const tipoHidden = this.#modal.el.querySelector('#aho-form-tipo');
+        if (tipoHidden) tipoHidden.value = nuevoTipo;
+
+        const confirmBtn = this.#modal.el.querySelector('.modal-confirm');
+        if (confirmBtn) {
+          confirmBtn.textContent = isDep ? 'Guardar Depósito' : 'Guardar Retiro';
+          confirmBtn.className = `btn ${isDep ? 'btn-primary' : 'btn-danger'} modal-confirm`;
+        }
+
+        const titleSpan = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:${isDep ? 'var(--verde)' : 'var(--rojo)'};">${App.Icons.get(isDep ? 'trending_up' : 'trending_down')}</span>${isDep ? 'Nuevo Depósito de Ahorro' : 'Nuevo Retiro de Ahorro'}`;
+        const titleEl = this.#modal.el.querySelector('.modal-title');
+        if (titleEl) titleEl.innerHTML = titleSpan;
+      });
+    });
+  }
+
+  // --- SECCIÓN 7: CRUD ---
+
+  async #guardar(modal) {
     const form = modal.getForm();
     if (!form) return;
     const fd = new FormData(form);
     const d  = {};
     fd.forEach((v, k) => { d[k] = v; });
+
+    const tipo = d.tipo || 'DEPOSITO';
 
     if (!d.fecha || !d.id_subcuenta || !d.importe || Number(d.importe) <= 0) {
       App.Toast.warning('Completá los campos obligatorios.');
@@ -285,6 +853,8 @@ export class AhorroModule extends BaseModule {
         const req = { data: payload, original: { id: this.#editData.id_ahorro }, scope: 'SINGLE' };
         await this._handleUpdate(this.#editData.id_ahorro, req, modal);
       }
+      this.destruir();
+      await this.cargar();
     } catch (_) {
       modal.setLoading(false);
     }
@@ -307,23 +877,75 @@ export class AhorroModule extends BaseModule {
     });
   }
 
-  // --- SECCIÓN 7: LISTENERS ---
+  // --- SECCIÓN 8: LISTENERS ---
 
   _bindListeners() {
     const vista = document.getElementById(this.vistaId);
-    if (vista) {
-      vista.addEventListener('click', (e) => {
-        const btn = e.target.closest('button');
-        if (!btn) return;
-        if (btn.id === 'aho-btn-deposito') this.#abrirModalAlta('DEPOSITO');
-        else if (btn.id === 'aho-btn-retiro') this.#abrirModalAlta('RETIRO');
-        else if (btn.id === 'aho-btn-ars') this.#setVista('ARS');
-        else if (btn.id === 'aho-btn-usd') this.#setVista('USD');
-      });
-    }
+    if (!vista) return;
+
+    // Selector Moneda ARS / USD
+    const btnArs = document.getElementById('aho-btn-ars');
+    const btnUsd = document.getElementById('aho-btn-usd');
+    const filterArs = document.getElementById('aho-btn-filter-ars');
+    const filterUsd = document.getElementById('aho-btn-filter-usd');
+
+    const switchCurrency = (moneda) => {
+      this.#vistaActual = moneda;
+      btnArs?.classList.toggle('active', moneda === 'ARS');
+      btnUsd?.classList.toggle('active', moneda === 'USD');
+      this.#renderMoneyFlowChart();
+      this.#renderDonutChart();
+      this.#filterAndRenderMovimientos();
+    };
+
+    btnArs?.addEventListener('click', () => switchCurrency('ARS'));
+    btnUsd?.addEventListener('click', () => switchCurrency('USD'));
+    filterArs?.addEventListener('click', () => switchCurrency('ARS'));
+    filterUsd?.addEventListener('click', () => switchCurrency('USD'));
+
+    // Pestañas de filtrado (Todos / Depósitos / Retiros)
+    const tabs = document.getElementById('aho-movimientos-tabs');
+    tabs?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.dh-tab-btn');
+      if (!btn) return;
+      tabs.querySelectorAll('.dh-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      this.#tipoFiltro = btn.dataset.filter;
+      this.#filterAndRenderMovimientos();
+    });
+
+    // Buscador
+    const searchInput = document.getElementById('aho-search-input');
+    searchInput?.addEventListener('input', (e) => {
+      this.#busqueda = e.target.value.trim();
+      this.#filterAndRenderMovimientos();
+    });
+
+    // Switch Período Flujo (6M / 12M / Año actual)
+    const periodSwitch = document.getElementById('aho-period-switch');
+    periodSwitch?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.fintech-pill-btn');
+      if (!btn) return;
+      periodSwitch.querySelectorAll('.fintech-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      this.#flowPeriod = btn.dataset.period;
+      const subEl = document.getElementById('aho-moneyflow-sub');
+      if (subEl) {
+        if (this.#flowPeriod === '6M') subEl.textContent = 'Evolución histórica últimos 6 meses';
+        else if (this.#flowPeriod === '12M') subEl.textContent = 'Evolución histórica últimos 12 meses';
+        else subEl.textContent = 'Evolución acumulada año actual';
+      }
+      this.#renderMoneyFlowChart();
+    });
+
+    // Único Botón Contextual
+    const btnNuevo = document.getElementById('aho-btn-nuevo');
+    btnNuevo?.addEventListener('click', () => {
+      this.#abrirModalAlta('DEPOSITO');
+    });
   }
 
-  // --- SECCIÓN 8: HELPERS ---
+  // --- SECCIÓN 9: HELPERS ---
 
   #abrirModalDetalle(row) {
     const isRetiro = row.tipo_mov === 'RETIRO';
@@ -337,7 +959,7 @@ export class AhorroModule extends BaseModule {
           <strong style="color:${clr}">${App.Utils.escapeHtml(row.tipo_mov)}</strong>
         </div>
         <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
-          <span style="color:var(--texto-2)">Subcuenta</span>
+          <span style="color:var(--texto-2)">Subcuenta / Alcancía</span>
           <strong>${App.Utils.escapeHtml(row.subcuenta_nombre || '—')}</strong>
         </div>
         <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--borde);">
@@ -394,9 +1016,12 @@ export class AhorroModule extends BaseModule {
   }
 
   #mostrarKpiSkeletons() {
-    this.#kpiArs?.showSkeleton();
-    this.#kpiUsd?.showSkeleton();
-    this.#kpiConsol?.showSkeleton();
+    const valArsEl = document.getElementById('aho-kpi-val-ars');
+    const valUsdEl = document.getElementById('aho-kpi-val-usd');
+    const valConsolEl = document.getElementById('aho-kpi-val-consol');
+    if (valArsEl) valArsEl.textContent = '...';
+    if (valUsdEl) valUsdEl.textContent = '...';
+    if (valConsolEl) valConsolEl.textContent = '...';
   }
 
   #calcFechas(mes) {
