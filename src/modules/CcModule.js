@@ -27,6 +27,7 @@ export class CCModule extends BaseModule {
   #consumosSearch = '';
   #categoriesChartInstance = null;
   #moneyFlowChartInstance = null;
+  #contactoFiltro = null;
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -146,6 +147,7 @@ export class CCModule extends BaseModule {
       subContEl.textContent = distinctUsers.size > 0 ? `${distinctUsers.size} activos` : 'Sin contactos';
     }
 
+    this.#renderLiquidacionYContactos();
     this.#filterConsumos();
     this.#renderMoneyFlowChart();
     this.#renderGraficos();
@@ -307,67 +309,33 @@ export class CCModule extends BaseModule {
 
         <!-- Right (40%): Panel de Liquidación & Contactos -->
         <div class="finset-card" id="cc-widget-side-panel">
-          <div class="finset-card-header" style="justify-content:space-between; align-items:center;">
+          <div class="finset-card-header" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <div class="finset-card-title-wrap">
               <h3 class="finset-card-title">Liquidación & Contactos</h3>
-              <span class="finset-card-subtitle">Balances y cuentas claras</span>
+              <span class="finset-card-subtitle">Gastos y balances por persona</span>
+            </div>
+            <div id="cc-contact-filter-badge" class="finset-filter-badge" style="display:none; align-items:center; gap:6px; background:var(--azul-light, rgba(37,99,235,0.08)); border:1px solid rgba(37,99,235,0.2); padding:3px 8px; border-radius:12px; font-size:0.75rem; color:var(--azul, #2563eb);">
+              <span id="cc-contact-filter-name" style="font-weight:600;"></span>
+              <button id="cc-btn-clear-contact-filter" style="background:none; border:none; padding:0; cursor:pointer; display:inline-flex; align-items:center; color:inherit;" title="Quitar filtro">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           </div>
 
-          <div class="finset-modules-stack" style="margin-top: 10px;">
-            <!-- 1. Total Compartido -->
-            <div class="finset-submodule-card">
-              <div class="fsc-header">
-                <div class="fsc-tag-wrap">
-                  <div class="fsc-icon-box icon-yellow">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-                  </div>
-                  <div class="fsc-text-block">
-                    <div class="fsc-title">Total Compartido</div>
-                    <div class="fsc-sub">Volumen total conjunto</div>
-                  </div>
-                </div>
-                <div class="fsc-right-block">
-                  <span class="fsc-value" id="cc-subcard-total">$ 0,00</span>
-                </div>
-              </div>
+          <!-- Resumen Macro -->
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin: 10px 0 12px 0;">
+            <div class="finset-submodule-card" style="padding:10px 12px;">
+              <div style="font-size:0.72rem; color:var(--texto-3); font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">Total Compartido</div>
+              <div style="font-size:1.05rem; font-weight:700; color:var(--texto); margin-top:2px;" id="cc-side-total-volumen">$ 0,00</div>
             </div>
+            <div class="finset-submodule-card" style="padding:10px 12px;">
+              <div style="font-size:0.72rem; color:var(--texto-3); font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">Estado Período</div>
+              <div style="font-size:0.95rem; font-weight:700; margin-top:3px;" id="cc-side-total-status">Al día</div>
+            </div>
+          </div>
 
-            <!-- 2. Estado de Liquidación -->
-            <div class="finset-submodule-card">
-              <div class="fsc-header">
-                <div class="fsc-tag-wrap">
-                  <div class="fsc-icon-box icon-green">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
-                  </div>
-                  <div class="fsc-text-block">
-                    <div class="fsc-title">Estado de Liquidación</div>
-                    <div class="fsc-sub">Balance neto del período</div>
-                  </div>
-                </div>
-                <div class="fsc-right-block">
-                  <span class="fsc-value" id="cc-subcard-liquidacion" style="font-size:0.85rem;">Al día</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 3. Contactos Activos -->
-            <div class="finset-submodule-card">
-              <div class="fsc-header">
-                <div class="fsc-tag-wrap">
-                  <div class="fsc-icon-box icon-purple">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  </div>
-                  <div class="fsc-text-block">
-                    <div class="fsc-title">Contactos con División</div>
-                    <div class="fsc-sub">Personas involucradas</div>
-                  </div>
-                </div>
-                <div class="fsc-right-block">
-                  <span class="fsc-value" id="cc-subcard-contactos">0 activos</span>
-                </div>
-              </div>
-            </div>
+          <!-- Lista de Contactos con su balance y gastos -->
+          <div id="cc-contactos-list" style="display:flex; flex-direction:column; gap:8px; max-height:430px; overflow-y:auto; padding-right:2px;">
           </div>
         </div>
 
@@ -599,6 +567,8 @@ export class CCModule extends BaseModule {
         this.#setFilter('YO');
       } else if (btn.id === 'cc-btn-filter-otro') {
         this.#setFilter('OTRO');
+      } else if (btn.id === 'cc-btn-clear-contact-filter') {
+        this.#limpiarFiltroContacto();
       }
     });
 
@@ -635,10 +605,211 @@ export class CCModule extends BaseModule {
     document.getElementById('cc-widget-consumos')?.scrollIntoView({ behavior: 'smooth' });
   }
 
-  // --- SECCIÓN 7: FILTRO Y RENDER DE GRILLA ---
+  // --- SECCIÓN 7: LIQUIDACIÓN & CONTACTOS ---
+
+  #renderLiquidacionYContactos() {
+    const listEl = document.getElementById('cc-contactos-list');
+    const volEl = document.getElementById('cc-side-total-volumen');
+    const statusEl = document.getElementById('cc-side-total-status');
+    const filterBadge = document.getElementById('cc-contact-filter-badge');
+    const filterNameEl = document.getElementById('cc-contact-filter-name');
+
+    if (filterBadge && filterNameEl) {
+      if (this.#contactoFiltro) {
+        filterBadge.style.display = 'inline-flex';
+        filterNameEl.textContent = `Contacto: ${this.#contactoFiltro.nombre}`;
+      } else {
+        filterBadge.style.display = 'none';
+      }
+    }
+
+    const pool = this.#allConsumos || [];
+    const totalVol = pool.reduce((acc, c) => acc + Number(c.importe_total || c.importe || 0), 0);
+    if (volEl) volEl.textContent = App.Utils.formatearMoneda(totalVol);
+
+    // Group consumos by contact
+    const contactMap = {};
+
+    // First seed with registered users if available
+    const otherUsers = (this.#usuarios || []).filter(u => u.id_cuenta_principal === App.Store.cuenta && !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
+    otherUsers.forEach(u => {
+      contactMap[u.id_usuario] = {
+        id: u.id_usuario,
+        nombre: u.nombre,
+        email: u.email || '',
+        totalGastos: 0,
+        miAporte: 0,
+        suAporte: 0,
+        miParte: 0,
+        suParte: 0,
+        cantidadOperaciones: 0
+      };
+    });
+
+    // Populate with actual consumos
+    pool.forEach(c => {
+      const cId = c.id_usuario || (c.contacto_nombre || c.usuario_nombre || 'Desconocido');
+      const cNombre = c.contacto_nombre || c.usuario_nombre || `Contacto #${cId}`;
+      if (!contactMap[cId]) {
+        contactMap[cId] = {
+          id: cId,
+          nombre: cNombre,
+          email: '',
+          totalGastos: 0,
+          miAporte: 0,
+          suAporte: 0,
+          miParte: 0,
+          suParte: 0,
+          cantidadOperaciones: 0
+        };
+      }
+      const imp = Number(c.importe_total || c.importe || 0);
+      const miP = Number(c.mi_parte || 0);
+      const suP = imp - miP;
+
+      contactMap[cId].totalGastos += imp;
+      contactMap[cId].cantidadOperaciones += 1;
+      contactMap[cId].miParte += miP;
+      contactMap[cId].suParte += suP;
+
+      if (c.pagador === 'YO') {
+        contactMap[cId].miAporte += imp;
+      } else {
+        contactMap[cId].suAporte += imp;
+      }
+    });
+
+    const contactsList = Object.values(contactMap);
+
+    let globalNeto = 0;
+    contactsList.forEach(ct => {
+      let balance = 0;
+      pool.filter(c => (c.id_usuario === ct.id || c.contacto_nombre === ct.nombre || c.usuario_nombre === ct.nombre)).forEach(c => {
+        const imp = Number(c.importe_total || c.importe || 0);
+        const miP = Number(c.mi_parte || 0);
+        const suP = imp - miP;
+        if (c.pagador === 'YO') {
+          balance += suP;
+        } else {
+          balance -= miP;
+        }
+      });
+      ct.saldoNeto = balance;
+      globalNeto += balance;
+    });
+
+    if (statusEl) {
+      if (globalNeto > 0.01) {
+        statusEl.innerHTML = `<span style="color:var(--verde);">+${App.Utils.formatearMoneda(globalNeto)}</span> <span style="font-size:0.75rem;font-weight:500;color:var(--texto-3);">(A favor)</span>`;
+      } else if (globalNeto < -0.01) {
+        statusEl.innerHTML = `<span style="color:var(--rojo);">-${App.Utils.formatearMoneda(Math.abs(globalNeto))}</span> <span style="font-size:0.75rem;font-weight:500;color:var(--texto-3);">(A pagar)</span>`;
+      } else {
+        statusEl.innerHTML = `<span style="color:var(--texto-2);">$ 0,00</span> <span style="font-size:0.75rem;font-weight:500;color:var(--texto-3);">(Al día)</span>`;
+      }
+    }
+
+    if (!listEl) return;
+
+    if (contactsList.length === 0) {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:2rem 1rem; color:var(--texto-3); font-size:0.85rem;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:6px; opacity:0.6;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <div>No hay contactos registrados en gastos compartidos.</div>
+        </div>
+      `;
+      return;
+    }
+
+    contactsList.sort((a, b) => {
+      if (Math.abs(b.saldoNeto) !== Math.abs(a.saldoNeto)) {
+        return Math.abs(b.saldoNeto) - Math.abs(a.saldoNeto);
+      }
+      return b.totalGastos - a.totalGastos;
+    });
+
+    listEl.innerHTML = contactsList.map(ct => {
+      const isSelected = this.#contactoFiltro && (this.#contactoFiltro.id === ct.id || this.#contactoFiltro.nombre === ct.nombre);
+      const isPositive = ct.saldoNeto > 0.01;
+      const isNegative = ct.saldoNeto < -0.01;
+
+      let balanceBadge = '';
+      if (isPositive) {
+        balanceBadge = `<span class="finset-trend-pill trend-up" style="font-size:0.75rem; font-weight:700;">Te debe ${App.Utils.formatearMoneda(ct.saldoNeto)}</span>`;
+      } else if (isNegative) {
+        balanceBadge = `<span class="finset-trend-pill trend-down" style="font-size:0.75rem; font-weight:700;">Le debes ${App.Utils.formatearMoneda(Math.abs(ct.saldoNeto))}</span>`;
+      } else {
+        balanceBadge = `<span class="finset-trend-pill trend-neutral" style="font-size:0.75rem; font-weight:600;">Al día ($ 0,00)</span>`;
+      }
+
+      const initial = (ct.nombre || 'C').charAt(0).toUpperCase();
+
+      return `
+        <div class="finset-submodule-card cc-contact-card ${isSelected ? 'active-card' : ''}" 
+             data-id="${ct.id}" data-name="${App.Utils.escapeHtml(ct.nombre)}"
+             style="cursor:pointer; padding:12px 14px; transition:all 0.15s ease; ${isSelected ? 'border-color:var(--azul, #2563eb); background:var(--azul-light, rgba(37,99,235,0.04)); box-shadow:0 0 0 1px var(--azul, #2563eb);' : ''}">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <div style="width:34px; height:34px; border-radius:50%; background:var(--surface-subtle, rgba(0,0,0,0.05)); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.85rem; color:var(--texto); flex-shrink:0;">
+                ${initial}
+              </div>
+              <div style="min-width:0;">
+                <div style="font-size:0.88rem; font-weight:600; color:var(--texto); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${App.Utils.escapeHtml(ct.nombre)}
+                </div>
+                <div style="font-size:0.74rem; color:var(--texto-3); margin-top:1px;">
+                  ${ct.cantidadOperaciones} ${ct.cantidadOperaciones === 1 ? 'gasto' : 'gastos'} • Total: ${App.Utils.formatearMoneda(ct.totalGastos)}
+                </div>
+              </div>
+            </div>
+
+            <div style="text-align:right; flex-shrink:0;">
+              ${balanceBadge}
+            </div>
+          </div>
+
+          <!-- Micro desglose -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed var(--borde, rgba(0,0,0,0.06)); font-size:0.73rem; color:var(--texto-3);">
+            <span>Aportaste: <strong style="color:var(--texto); font-weight:600;">${App.Utils.formatearMoneda(ct.miAporte)}</strong></span>
+            <span>Aportó: <strong style="color:var(--texto); font-weight:600;">${App.Utils.formatearMoneda(ct.suAporte)}</strong></span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Click handler on contact cards
+    listEl.querySelectorAll('.cc-contact-card').forEach(cardEl => {
+      cardEl.addEventListener('click', () => {
+        const cId = cardEl.dataset.id;
+        const cName = cardEl.dataset.name;
+        if (this.#contactoFiltro && (this.#contactoFiltro.id === cId || this.#contactoFiltro.nombre === cName)) {
+          this.#limpiarFiltroContacto();
+        } else {
+          this.#filtrarPorContacto(cId, cName);
+        }
+      });
+    });
+  }
+
+  #filtrarPorContacto(id, name) {
+    this.#contactoFiltro = { id, nombre: name };
+    this.#renderLiquidacionYContactos();
+    this.#filterConsumos();
+  }
+
+  #limpiarFiltroContacto() {
+    this.#contactoFiltro = null;
+    this.#renderLiquidacionYContactos();
+    this.#filterConsumos();
+  }
+
+  // --- SECCIÓN 8: FILTRO Y RENDER DE GRILLA ---
 
   #filterConsumos() {
     let filtered = this.#allConsumos || [];
+
+    if (this.#contactoFiltro) {
+      filtered = filtered.filter(c => c.id_usuario === this.#contactoFiltro.id || c.contacto_nombre === this.#contactoFiltro.nombre || c.usuario_nombre === this.#contactoFiltro.nombre);
+    }
 
     if (this.#consumosFilter === 'YO') {
       filtered = filtered.filter(c => c.pagador === 'YO');
@@ -661,12 +832,18 @@ export class CCModule extends BaseModule {
     const summaryEl = document.getElementById('cc-consumos-summary');
 
     if (badgeTitleEl) {
-      if (this.#consumosFilter === 'YO') badgeTitleEl.textContent = 'Mis Gastos Aportados';
-      else if (this.#consumosFilter === 'OTRO') badgeTitleEl.textContent = 'Gastos Aportados por Contacto';
-      else badgeTitleEl.textContent = 'Todos los Gastos Compartidos';
+      if (this.#contactoFiltro) {
+        badgeTitleEl.textContent = `Gastos con ${this.#contactoFiltro.nombre}`;
+      } else if (this.#consumosFilter === 'YO') {
+        badgeTitleEl.textContent = 'Mis Gastos Aportados';
+      } else if (this.#consumosFilter === 'OTRO') {
+        badgeTitleEl.textContent = 'Gastos Aportados por Contacto';
+      } else {
+        badgeTitleEl.textContent = 'Todos los Gastos Compartidos';
+      }
     }
     if (badgeEl) {
-      badgeEl.className = 'dh-drilldown-badge ' + (this.#consumosFilter === 'YO' ? 'badge-ing' : (this.#consumosFilter === 'OTRO' ? 'badge-recur' : 'badge-all'));
+      badgeEl.className = 'dh-drilldown-badge ' + (this.#contactoFiltro ? 'badge-tc' : (this.#consumosFilter === 'YO' ? 'badge-ing' : (this.#consumosFilter === 'OTRO' ? 'badge-recur' : 'badge-all')));
     }
 
     const totalDisplay = filtered.reduce((acc, c) => acc + Number(c.importe_total || c.importe || 0), 0);

@@ -25,6 +25,7 @@ export class InversionesModule extends BaseModule {
   #busqueda           = '';
   #chartInstance      = null;
   #donutChartInstance = null;
+  #selectedAssetClass = null;
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -151,12 +152,13 @@ export class InversionesModule extends BaseModule {
       };
     }
 
-    // Renderizar Gráficos y Lista
+    // Renderizar Gráficos y Listas
     this.#renderMoneyFlowChart();
     this.#renderDonutChart();
+    this.#renderEstrategiaCartera();
     this.#filterAndRenderOperaciones();
 
-    App.log('InversionesModule', '_render', `${(portfolio || []).length} posiciones cargadas`);
+    App.log('InversionesModule', '_render', `${(portfolio || []).length} operaciones cargadas`);
   }
 
   _renderTickerCarousel(md, dl) {
@@ -662,58 +664,24 @@ export class InversionesModule extends BaseModule {
           </div>
         </div>
 
-        <!-- Right (40%): Monitor de Cartera & Estrategia -->
+        <!-- Right (40%): Estrategia & Cartera (Activos de la cartera filtrables por la dona) -->
         <div class="finset-card" id="inv-widget-side-panel">
-          <div class="finset-card-header">
+          <div class="finset-card-header" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <div class="finset-card-title-wrap">
               <h3 class="finset-card-title">Estrategia & Cartera</h3>
-              <span class="finset-card-subtitle">Métricas e inteligencia de inversión</span>
+              <span class="finset-card-subtitle" id="inv-cartera-subtitle">Activos y tenencias en cartera</span>
             </div>
+            <span class="finset-trend-pill trend-neutral" id="inv-cartera-count-pill"><span>0 activos</span></span>
           </div>
-          <div class="finset-submodules-stack" style="display:flex; flex-direction:column; gap:12px; margin-top:12px;">
-            <!-- Submódulo 1: Rendimiento Acumulado -->
-            <div class="finset-submodule-card">
-              <div class="finset-submodule-top">
-                <div class="finset-submodule-info">
-                  <span class="finset-submodule-label">Rendimiento Histórico</span>
-                  <span class="finset-submodule-val" id="inv-side-val-rend" style="font-size:1.15rem; font-weight:700; color:var(--verde);">0.00%</span>
-                </div>
-                <span class="finset-trend-pill trend-up" id="inv-side-pill-rend"><span>Retorno</span></span>
-              </div>
-              <div class="finset-goal-progress-wrap" style="margin-top:8px;">
-                <div class="finset-goal-progress-bar">
-                  <div class="finset-goal-progress-fill" id="inv-side-rend-progress-fill" style="width: 50%; background: var(--verde);"></div>
-                </div>
-              </div>
-              <div style="font-size:0.75rem; color:var(--texto-3); margin-top:6px;">Retorno ponderado sobre capital colocado</div>
-            </div>
 
-            <!-- Submódulo 2: Dólar & Tipos de Cambio de Referencia -->
-            <div class="finset-submodule-card">
-              <div class="finset-submodule-top">
-                <div class="finset-submodule-info">
-                  <span class="finset-submodule-label">Dólar Bolsa (MEP)</span>
-                  <span class="finset-submodule-val" id="inv-side-val-mep" style="font-size:1.1rem; font-weight:700; color:var(--texto);">$ —</span>
-                </div>
-                <span class="ticker-badge" style="font-size:0.68rem; padding:2px 6px;">FX</span>
-              </div>
-              <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:var(--texto-3); margin-top:8px; padding-top:8px; border-top:1px solid var(--borde);">
-                <span>Blue: <strong id="inv-side-val-blue" style="color:var(--texto); font-weight:600;">$ —</strong></span>
-                <span>CCL: <strong id="inv-side-val-ccl" style="color:var(--texto); font-weight:600;">$ —</strong></span>
-              </div>
-            </div>
+          <!-- Badge de Filtro por Porción de la Dona -->
+          <div id="inv-asset-filter-badge" class="hidden" style="margin: 10px 0 6px; padding: 6px 10px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem;">
+            <span style="color: var(--primario); font-weight: 600;" id="inv-asset-filter-text">Filtrando por tipo</span>
+            <button id="inv-btn-clear-asset-filter" style="border: none; background: none; cursor: pointer; color: var(--texto-3); font-size: 0.85rem; font-weight: 700; padding: 0 4px;" title="Ver todos los activos">✕ Ver todos</button>
+          </div>
 
-            <!-- Submódulo 3: FluxoAI Asesor Bursátil -->
-            <div class="finset-submodule-card" style="cursor:pointer;" id="inv-side-card-gemini" title="Abrir análisis inteligente con FluxoAI">
-              <div class="finset-submodule-top">
-                <div class="finset-submodule-info">
-                  <span class="finset-submodule-label">Consultor Financiero</span>
-                  <span class="finset-submodule-val" style="font-size:0.95rem; font-weight:600; color:var(--primario);">FluxoAI Portfolio Review</span>
-                </div>
-                <span class="finset-trend-pill trend-neutral"><span>✨ IA</span></span>
-              </div>
-              <p style="font-size:0.75rem; color:var(--texto-3); margin:6px 0 0; line-height:1.4;">Diagnóstico en tiempo real de tu riesgo de cartera, horizonte temporal y recomendaciones.</p>
-            </div>
+          <!-- Listado dinámico de activos de la cartera -->
+          <div class="finset-modules-stack" id="inv-activos-cartera-list" style="margin-top: 10px; max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
           </div>
         </div>
 
@@ -849,6 +817,109 @@ export class InversionesModule extends BaseModule {
     });
   }
 
+  #clasificarInstrumento(ticker) {
+    const t = (ticker || '').toUpperCase().trim();
+    
+    // 1. Bonos Soberanos / Bopreales
+    if (/^(AL|GD|AE|TX|T2X|TO|BP|DICP|PARP|CUAP)[0-9]*/.test(t)) {
+      return 'Bonos Soberanos';
+    }
+    // 2. Letras & LECAPs / BONCAPs
+    if (/^(S[0-9]{2}|X[0-9]{2}|T[0-9]{2}|B[0-9]{2})[A-Z][0-9]/.test(t) || t.startsWith('LECAP')) {
+      return 'Letras & LECAPs';
+    }
+    // 3. Obligaciones Negociables (ONs)
+    const KNOWN_ONS = ['YCA6O', 'YFC2O', 'TLC1O', 'IRCFO', 'MRCEO', 'CP17O', 'MGC9O', 'CS38O', 'VSC3O', 'RUC5O', 'ON'];
+    if (KNOWN_ONS.includes(t) || /^(YC|YF|TL|IR|MR|CS|CP|RU|TE|BA|VT)[A-Z0-9]{2,4}/.test(t) || t.endsWith('O')) {
+      return 'Obligaciones Negociables';
+    }
+    // 4. Criptomonedas
+    if (['BTC', 'ETH', 'USDT', 'USDC', 'SOL', 'ADA', 'BNB', 'DAI'].includes(t)) {
+      return 'Criptomonedas';
+    }
+    // 5. CEDEARs
+    const KNOWN_CEDEARS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'SPY', 'QQQ', 'DIA', 'KO', 'DIS', 'BABA', 'MELI', 'GLOB', 'V', 'WMT', 'JNJ', 'PFE', 'XOM', 'CVX', 'AMD', 'INTC', 'NFLX', 'PYPL', 'SPOT', 'UBER', 'ABNB', 'COIN', 'SHOP', 'SQ', 'IBM', 'GE', 'BA', 'CAT', 'MCD', 'NKE', 'PG', 'JPM', 'GS', 'BAC', 'C', 'WFC', 'DESP', 'BIOX', 'VIST', 'TEN', 'ARCO'];
+    if (KNOWN_CEDEARS.includes(t) || KNOWN_CEDEARS.includes(t.replace(/D$/, ''))) {
+      return 'CEDEARs';
+    }
+    // 6. Acciones Argentinas
+    const ACCIONES_ARG = ['GGAL', 'YPFD', 'PAMP', 'BMA', 'TXAR', 'ALUA', 'CRES', 'TGSU2', 'TGNO4', 'EDN', 'TRAN', 'VALO', 'BYMA', 'SUPV', 'MIRG', 'CEPU', 'LOMA', 'COME', 'BBAR', 'TECO2', 'IRSA', 'AGRO', 'MOLI', 'AUSO'];
+    if (ACCIONES_ARG.includes(t)) {
+      return 'Acciones Argentinas';
+    }
+
+    return 'Otros Activos';
+  }
+
+  #calcularTenenciasActivas() {
+    const portfolio = this.#portfolioData?.portfolio || [];
+    const cotizDolar = this.#cotizDolar?.bolsa?.venta || this.#cotizDolar?.blue?.venta || 1540;
+
+    const tenencias = {};
+    portfolio.forEach(mov => {
+      const ticker = (mov.ticker || '').toUpperCase().trim();
+      if (!ticker) return;
+
+      if (!tenencias[ticker]) {
+        tenencias[ticker] = {
+          ticker,
+          tipoInstrumento: this.#clasificarInstrumento(ticker),
+          cantidad: 0,
+          costoTotalArs: 0,
+          cantCompra: 0,
+          moneda: mov.moneda || 'ARS',
+          precioActual: Number(mov.precio_actual || mov.precio || 0)
+        };
+      }
+
+      const cant = Number(mov.cantidad || 0);
+      const precio = Number(mov.precio || 0);
+      let impArs = cant * precio;
+      if (mov.moneda === 'USD') impArs *= cotizDolar;
+
+      if (mov.tipo_op === 'COMPRA') {
+        tenencias[ticker].cantidad += cant;
+        tenencias[ticker].costoTotalArs += impArs;
+        tenencias[ticker].cantCompra += cant;
+      } else if (mov.tipo_op === 'VENTA') {
+        tenencias[ticker].cantidad -= cant;
+      }
+
+      if (mov.precio_actual && Number(mov.precio_actual) > 0) {
+        tenencias[ticker].precioActual = Number(mov.precio_actual);
+      }
+    });
+
+    const activos = [];
+    Object.values(tenencias).forEach(t => {
+      if (t.cantidad <= 0.0001) return;
+
+      const precioPromArs = t.cantCompra > 0 ? t.costoTotalArs / t.cantCompra : 0;
+      const costoActualArs = precioPromArs * t.cantidad;
+
+      let valorActualArs = t.cantidad * t.precioActual;
+      if (t.moneda === 'USD') valorActualArs *= cotizDolar;
+
+      const gananciaArs = valorActualArs - costoActualArs;
+      const rendPct = costoActualArs > 0 ? (gananciaArs / costoActualArs) * 100 : 0;
+
+      activos.push({
+        ticker: t.ticker,
+        tipoInstrumento: t.tipoInstrumento,
+        cantidad: t.cantidad,
+        moneda: t.moneda,
+        precioProm: t.moneda === 'USD' ? (precioPromArs / cotizDolar) : precioPromArs,
+        precioActual: t.precioActual,
+        costoTotalArs: costoActualArs,
+        valorActualArs: valorActualArs,
+        gananciaArs: gananciaArs,
+        rendPct: rendPct
+      });
+    });
+
+    return activos.sort((a, b) => b.valorActualArs - a.valorActualArs);
+  }
+
   #renderDonutChart() {
     const canvas = document.getElementById('inv-categories-donut-canvas');
     if (!canvas) return;
@@ -858,48 +929,60 @@ export class InversionesModule extends BaseModule {
       this.#donutChartInstance = null;
     }
 
-    const portfolio = this.#portfolioData?.portfolio || [];
+    const activos = this.#calcularTenenciasActivas();
+    const mapTipos = {};
 
-    // Agrupar por Ticker (o tipo de activo)
-    const mapTickers = {};
-    portfolio.forEach(p => {
-      const sym = (p.ticker || 'OTROS').toUpperCase();
-      const val = Number(p.cantidad || 0) * Number(p.precio_actual || p.precio || 0);
-      mapTickers[sym] = (mapTickers[sym] || 0) + val;
+    activos.forEach(a => {
+      const tipo = a.tipoInstrumento || 'Otros Activos';
+      mapTipos[tipo] = (mapTipos[tipo] || 0) + a.valorActualArs;
     });
 
-    const labels = Object.keys(mapTickers);
-    const dataVals = Object.values(mapTickers);
+    const activeEntries = Object.entries(mapTipos).sort((a, b) => b[1] - a[1]);
+    const labels = activeEntries.map(([k]) => k);
+    const dataVals = activeEntries.map(([_, v]) => Math.round(v));
     const total = dataVals.reduce((a, b) => a + b, 0);
 
     const centerValEl = document.getElementById('inv-donut-center-val');
     if (centerValEl) centerValEl.textContent = App.Utils.formatearMoneda(total);
 
-    const PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#F97316'];
+    const legendEl = document.getElementById('inv-categories-legend');
+    const PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#6366F1'];
     const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
 
-    const legendEl = document.getElementById('inv-categories-legend');
-    if (legendEl) {
-      if (!labels.length) {
-        legendEl.innerHTML = '<p style="color:var(--texto-3); font-size:0.8rem; padding:10px;">Sin posiciones en cartera.</p>';
-      } else {
-        legendEl.innerHTML = labels.map((lbl, i) => {
-          const val = dataVals[i];
-          const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
-          return `
-            <div class="fintech-legend-item">
-              <div class="fintech-legend-left">
-                <span class="fintech-legend-dot" style="background: ${colors[i]};"></span>
-                <span class="fintech-legend-label" title="${App.Utils.escapeHtml(lbl)}">${App.Utils.escapeHtml(lbl)}</span>
-              </div>
-              <div class="fintech-legend-right">
-                <span class="fintech-legend-pct">${pct}%</span>
-                <span class="fintech-legend-amount" style="color: var(--texto); font-weight: 600;">${App.Utils.formatearMoneda(val)}</span>
-              </div>
-            </div>
-          `;
-        }).join('');
+    if (!activeEntries.length || total <= 0) {
+      if (legendEl) {
+        legendEl.innerHTML = '<div style="text-align:center;padding:28px 8px;color:var(--texto-3);font-size:0.82rem;">Sin posiciones activas en cartera</div>';
       }
+      return;
+    }
+
+    if (legendEl) {
+      legendEl.innerHTML = labels.map((lbl, i) => {
+        const val = dataVals[i];
+        const pct = ((val / total) * 100).toFixed(1);
+        const isSelected = this.#selectedAssetClass === lbl;
+        return `
+          <div class="fintech-legend-item ${isSelected ? 'active-filter' : ''}" 
+               style="cursor:pointer; ${isSelected ? 'background:rgba(59,130,246,0.1); border-radius:6px; padding:4px 6px;' : ''}" 
+               data-asset-class="${App.Utils.escapeHtml(lbl)}"
+               title="Clic para filtrar activos de ${App.Utils.escapeHtml(lbl)}">
+            <div class="fintech-legend-left">
+              <span class="fintech-legend-dot" style="background: ${colors[i]};"></span>
+              <span class="fintech-legend-label">${App.Utils.escapeHtml(lbl)}</span>
+            </div>
+            <div class="fintech-legend-right">
+              <span class="fintech-legend-pct">${pct}%</span>
+              <span class="fintech-legend-amount" style="color: var(--texto); font-weight: 600;">${App.Utils.formatearMoneda(val)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      legendEl.querySelectorAll('.fintech-legend-item').forEach(el => {
+        el.addEventListener('click', () => {
+          this.#filtrarPorTipoActivo(el.dataset.assetClass);
+        });
+      });
     }
 
     const ctx = canvas.getContext('2d');
@@ -908,11 +991,11 @@ export class InversionesModule extends BaseModule {
       data: {
         labels: labels,
         datasets: [{
-          data: dataVals.length ? dataVals : [1],
-          backgroundColor: dataVals.length ? colors : ['#E2E8F0'],
+          data: dataVals,
+          backgroundColor: colors,
           borderWidth: 2,
           borderColor: 'var(--superficie)',
-          hoverOffset: 4
+          hoverOffset: 6
         }]
       },
       options: {
@@ -922,14 +1005,131 @@ export class InversionesModule extends BaseModule {
         plugins: {
           legend: { display: false },
           tooltip: {
-            enabled: dataVals.length > 0,
             callbacks: {
-              label: (item) => ` ${item.label}: ${App.Utils.formatearMoneda(item.raw)}`
+              label: (item) => ` ${item.label}: ${App.Utils.formatearMoneda(item.raw)} (${((item.raw / total) * 100).toFixed(1)}%)`
             }
+          }
+        },
+        onClick: (event, elements) => {
+          if (elements.length > 0) {
+            const index = elements[0].index;
+            const tipoSelected = labels[index];
+            this.#filtrarPorTipoActivo(tipoSelected);
           }
         }
       }
     });
+  }
+
+  #renderEstrategiaCartera() {
+    const container = document.getElementById('inv-activos-cartera-list');
+    const countPill = document.getElementById('inv-cartera-count-pill');
+    if (!container) return;
+
+    let activos = this.#calcularTenenciasActivas();
+
+    if (this.#selectedAssetClass) {
+      activos = activos.filter(a => a.tipoInstrumento === this.#selectedAssetClass);
+    }
+
+    if (countPill) {
+      countPill.innerHTML = `<span>${activos.length} ${activos.length === 1 ? 'activo' : 'activos'}</span>`;
+    }
+
+    if (!activos.length) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:28px 12px; color:var(--texto-3);">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.6;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <p style="font-weight:600; margin:0 0 4px; color:var(--texto-2); font-size:0.88rem;">Sin activos para mostrar</p>
+          <p style="font-size:0.75rem; margin:0;">${this.#selectedAssetClass ? `No hay posiciones activas en ${this.#selectedAssetClass}.` : 'No hay activos en cartera actualmente.'}</p>
+        </div>
+      `;
+      return;
+    }
+
+    const BADGES = {
+      'CEDEARs': 'badge-ing',
+      'Bonos Soberanos': 'badge-recur',
+      'Obligaciones Negociables': 'badge-all',
+      'Letras & LECAPs': 'badge-ing',
+      'Acciones Argentinas': 'badge-recur',
+      'Criptomonedas': 'badge-egr',
+      'Otros Activos': 'badge-all'
+    };
+
+    container.innerHTML = activos.map(a => {
+      const badgeCls = BADGES[a.tipoInstrumento] || 'badge-all';
+      const plSign = a.gananciaArs >= 0 ? '+' : '';
+      const plColor = a.gananciaArs >= 0 ? 'var(--verde)' : 'var(--rojo)';
+      const fmt = a.moneda === 'USD' ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
+
+      return `
+        <div class="finset-submodule-card inv-activo-card" 
+             data-inv-ticker="${App.Utils.escapeHtml(a.ticker)}"
+             data-inv-name="${App.Utils.escapeHtml(a.ticker)}"
+             data-inv-price="${fmt(a.precioActual)}"
+             data-inv-tipo="${App.Utils.escapeHtml(a.tipoInstrumento)}"
+             title="Clic para consultar análisis de ${App.Utils.escapeHtml(a.ticker)} con FluxoAI"
+             style="cursor:pointer; transition:all 0.15s ease;">
+          <div class="fsc-header" style="align-items:center;">
+            <div class="fsc-tag-wrap" style="align-items:center;">
+              <div class="fsc-icon-box icon-blue">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              <div class="fsc-text-block">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <strong style="font-size:0.92rem; color:var(--texto);">${App.Utils.escapeHtml(a.ticker)}</strong>
+                  <span class="dh-item-badge ${badgeCls}" style="font-size:0.65rem; padding:1px 5px; border-radius:4px;">${App.Utils.escapeHtml(a.tipoInstrumento)}</span>
+                </div>
+                <div class="fsc-sub" style="font-size:0.72rem; color:var(--texto-3); margin-top:2px;">
+                  ${Number(a.cantidad).toLocaleString('es-AR')} un. @ ${fmt(a.precioActual)}
+                </div>
+              </div>
+            </div>
+            <div class="fsc-right-block" style="text-align:right;">
+              <div class="fsc-value" style="font-size:0.95rem; font-weight:700; color:var(--texto);">${App.Utils.formatearMoneda(a.valorActualArs)}</div>
+              <div style="font-size:0.72rem; font-weight:700; color:${plColor};">
+                ${plSign}${App.Utils.formatearMoneda(a.gananciaArs)} (${plSign}${a.rendPct.toFixed(1)}%)
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.inv-activo-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const sym = card.dataset.invTicker;
+        const nom = card.dataset.invName;
+        const precio = card.dataset.invPrice;
+        const tipo = card.dataset.invTipo;
+        window.App?.Gemini?.consultarInstrumento({ symbol: sym, name: nom, price: precio, tipo });
+      });
+    });
+  }
+
+  #filtrarPorTipoActivo(tipo) {
+    if (this.#selectedAssetClass === tipo) {
+      this.#limpiarFiltroTipoActivo();
+      return;
+    }
+    this.#selectedAssetClass = tipo;
+    const badge = document.getElementById('inv-asset-filter-badge');
+    const badgeText = document.getElementById('inv-asset-filter-text');
+    if (badge) badge.classList.remove('hidden');
+    if (badgeText) badgeText.textContent = `Filtrado por: ${tipo}`;
+
+    this.#renderDonutChart();
+    this.#renderEstrategiaCartera();
+  }
+
+  #limpiarFiltroTipoActivo() {
+    this.#selectedAssetClass = null;
+    const badge = document.getElementById('inv-asset-filter-badge');
+    if (badge) badge.classList.add('hidden');
+
+    this.#renderDonutChart();
+    this.#renderEstrategiaCartera();
   }
 
   // --- SECCIÓN 5: FILTRADO Y LISTA DE OPERACIONES ---
@@ -1265,6 +1465,11 @@ export class InversionesModule extends BaseModule {
       mercWrap?.classList.remove('hidden');
       portList?.classList.add('hidden');
       portControls?.classList.add('hidden');
+    });
+
+    // Botón Limpiar Filtro Tipo de Activo
+    document.getElementById('inv-btn-clear-asset-filter')?.addEventListener('click', () => {
+      this.#limpiarFiltroTipoActivo();
     });
 
     // Pestañas de filtrado (Todos / Compras / Ventas)

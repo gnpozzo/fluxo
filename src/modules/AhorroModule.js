@@ -28,6 +28,7 @@ export class AhorroModule extends BaseModule {
   #flowPeriod         = '6M';  // '6M' | '12M' | 'YTD'
   #chartInstance      = null;
   #donutChartInstance = null;
+  #subcuentaFiltro    = null;
 
   // --- SECCIÓN 1: CICLO DE VIDA ---
 
@@ -140,6 +141,7 @@ export class AhorroModule extends BaseModule {
     // Renderizar Gráficos y Lista
     this.#renderMoneyFlowChart();
     this.#renderDonutChart();
+    this.#renderMisAlcancias();
     this.#filterAndRenderMovimientos();
 
     App.log('AhorroModule', '_render', 'Datos de ahorro renderizados');
@@ -297,7 +299,7 @@ export class AhorroModule extends BaseModule {
               <!-- Único Botón Contextual Primario -->
               <button class="btn btn-primary btn-sm" id="aho-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span>+ Movimiento</span>
+                <span>Nuevo Movimiento</span>
               </button>
             </div>
           </div>
@@ -307,56 +309,27 @@ export class AhorroModule extends BaseModule {
           </div>
         </div>
 
-        <!-- Right (40%): Mis Alcancías & Metas -->
+        <!-- Right (40%): Mis Alcancías (Listado de Subcuentas con saldo y metas) -->
         <div class="finset-card" id="aho-widget-side-panel">
-          <div class="finset-card-header" style="justify-content:space-between; align-items:center;">
+          <div class="finset-card-header" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <div class="finset-card-title-wrap">
               <h3 class="finset-card-title">Mis Alcancías</h3>
-              <span class="finset-card-subtitle">Objetivos de ahorro activos</span>
+              <span class="finset-card-subtitle" id="aho-alcancias-subtitle">Objetivos y saldos por subcuenta</span>
             </div>
+            <button class="btn btn-outline btn-xs" id="aho-btn-nueva-alcancia" style="display:inline-flex; align-items:center; gap:4px; font-size:0.75rem; padding:4px 10px; border-radius:6px;" title="Crear nueva subcuenta de ahorro">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>+ Alcancía</span>
+            </button>
           </div>
 
-          <div class="finset-modules-stack" style="margin-top: 10px;">
-            <!-- 1. Alcancías Activas -->
-            <div class="finset-submodule-card">
-              <div class="fsc-header">
-                <div class="fsc-tag-wrap">
-                  <div class="fsc-icon-box icon-yellow">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                  </div>
-                  <div class="fsc-text-block">
-                    <div class="fsc-title">Alcancías Activas</div>
-                    <div class="fsc-sub" id="aho-kpi-sub-meta">Depósitos este mes</div>
-                  </div>
-                </div>
-                <div class="fsc-right-block">
-                  <span class="fsc-value" id="aho-kpi-val-meta">—</span>
-                </div>
-              </div>
-              <div class="finset-goal-progress-wrap" style="margin-top:8px;">
-                <div class="finset-goal-progress-bar">
-                  <div class="finset-goal-progress-fill" id="aho-meta-progress-fill" style="width: 50%; background: var(--verde);"></div>
-                </div>
-              </div>
-            </div>
+          <!-- Badge de Filtro por Alcancía -->
+          <div id="aho-alcancia-filter-badge" class="hidden" style="margin: 10px 0 6px; padding: 6px 10px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem;">
+            <span style="color: var(--primario); font-weight: 600;" id="aho-alcancia-filter-text">Filtrando por alcancía</span>
+            <button id="aho-btn-clear-alcancia-filter" style="border: none; background: none; cursor: pointer; color: var(--texto-3); font-size: 0.9rem; font-weight: 700; padding: 0 4px;" title="Ver todas las alcancías">✕</button>
+          </div>
 
-            <!-- 2. Patrimonio en Alcancías -->
-            <div class="finset-submodule-card">
-              <div class="fsc-header">
-                <div class="fsc-tag-wrap">
-                  <div class="fsc-icon-box icon-purple">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
-                  </div>
-                  <div class="fsc-text-block">
-                    <div class="fsc-title">Reserva Total</div>
-                    <div class="fsc-sub">Pesos + Dólares</div>
-                  </div>
-                </div>
-                <div class="fsc-right-block">
-                  <span class="fsc-value" id="aho-subcard-reserva">$ 0,00</span>
-                </div>
-              </div>
-            </div>
+          <!-- Listado dinámico de alcancías -->
+          <div class="finset-modules-stack" id="aho-subcuentas-list" style="margin-top: 10px; max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
           </div>
         </div>
 
@@ -505,62 +478,76 @@ export class AhorroModule extends BaseModule {
     }
 
     const transferencias = this.#dataCompleta?.transferencias || [];
+    const subcuentas = this.#dataCompleta?.subcuentas || [];
     const isUSD = this.#vistaActual === 'USD';
     const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
 
-    // Agrupar depósitos por subcuenta
+    // Calcular saldos reales por subcuenta acumulados
     const mapSubcuentas = {};
+    subcuentas.forEach(s => {
+      if (!s.moneda || s.moneda === this.#vistaActual) {
+        mapSubcuentas[s.nombre] = Number(s.saldo || 0);
+      }
+    });
+
     transferencias
-      .filter(t => t.moneda === this.#vistaActual && t.tipo_mov === 'DEPOSITO')
+      .filter(t => t.moneda === this.#vistaActual)
       .forEach(t => {
         const nom = t.subcuenta_nombre || 'General';
-        mapSubcuentas[nom] = (mapSubcuentas[nom] || 0) + Number(t.importe || 0);
+        const imp = Number(t.importe || 0);
+        if (t.tipo_mov === 'DEPOSITO') {
+          mapSubcuentas[nom] = (mapSubcuentas[nom] || 0) + imp;
+        } else if (t.tipo_mov === 'RETIRO') {
+          mapSubcuentas[nom] = Math.max(0, (mapSubcuentas[nom] || 0) - imp);
+        }
       });
 
-    // Si no hay depósitos, usar la lista de subcuentas cargadas
-    if (Object.keys(mapSubcuentas).length === 0) {
-      const subcuentas = this.#dataCompleta?.subcuentas || [];
-      subcuentas
-        .filter(s => !s.moneda || s.moneda === this.#vistaActual)
-        .forEach(s => {
-          mapSubcuentas[s.nombre] = 1; // placeholder equitativo para mostrar el gráfico
-        });
-    }
-
-    const labels = Object.keys(mapSubcuentas);
-    const dataVals = Object.values(mapSubcuentas);
+    // Filtrar subcuentas con saldo > 0
+    const activeEntries = Object.entries(mapSubcuentas).filter(([_, val]) => val > 0);
+    const labels = activeEntries.map(([k]) => k);
+    const dataVals = activeEntries.map(([_, v]) => v);
     const total = dataVals.reduce((a, b) => a + b, 0);
 
-    const totalDisplay = this.#dataCompleta?.kpis?.[isUSD ? 'usdTotal' : 'arsTotal'] || total;
     const centerValEl = document.getElementById('aho-donut-center-val');
-    if (centerValEl) centerValEl.textContent = fmt(totalDisplay);
+    if (centerValEl) centerValEl.textContent = fmt(total);
 
+    const legendEl = document.getElementById('aho-categories-legend');
     const PALETTE = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
     const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
 
-    // Legend items con importes neutros negrita
-    const legendEl = document.getElementById('aho-categories-legend');
-    if (legendEl) {
-      if (!labels.length) {
-        legendEl.innerHTML = '<p style="color:var(--texto-3); font-size:0.8rem; padding:10px;">Sin datos de alcancías.</p>';
-      } else {
-        legendEl.innerHTML = labels.map((lbl, i) => {
-          const val = dataVals[i];
-          const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
-          return `
-            <div class="fintech-legend-item">
-              <div class="fintech-legend-left">
-                <span class="fintech-legend-dot" style="background: ${colors[i]};"></span>
-                <span class="fintech-legend-label" title="${App.Utils.escapeHtml(lbl)}">${App.Utils.escapeHtml(lbl)}</span>
-              </div>
-              <div class="fintech-legend-right">
-                <span class="fintech-legend-pct">${pct}%</span>
-                <span class="fintech-legend-amount" style="color: var(--texto); font-weight: 600;">${fmt(val)}</span>
-              </div>
-            </div>
-          `;
-        }).join('');
+    if (!activeEntries.length || total <= 0) {
+      if (legendEl) {
+        legendEl.innerHTML = '<div style="text-align:center;padding:28px 8px;color:var(--texto-3);font-size:0.82rem;">No hay depósitos en este período</div>';
       }
+      return;
+    }
+
+    if (legendEl) {
+      legendEl.innerHTML = labels.map((lbl, i) => {
+        const val = dataVals[i];
+        const pct = ((val / total) * 100).toFixed(1);
+        const isSelected = this.#subcuentaFiltro === lbl;
+        return `
+          <div class="fintech-legend-item ${isSelected ? 'active-filter' : ''}" 
+               style="cursor:pointer; ${isSelected ? 'background:rgba(59,130,246,0.1); border-radius:6px; padding:4px 6px;' : ''}" 
+               data-subcuenta="${App.Utils.escapeHtml(lbl)}">
+            <div class="fintech-legend-left">
+              <span class="fintech-legend-dot" style="background: ${colors[i]};"></span>
+              <span class="fintech-legend-label" title="${App.Utils.escapeHtml(lbl)}">${App.Utils.escapeHtml(lbl)}</span>
+            </div>
+            <div class="fintech-legend-right">
+              <span class="fintech-legend-pct">${pct}%</span>
+              <span class="fintech-legend-amount" style="color: var(--texto); font-weight: 600;">${fmt(val)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      legendEl.querySelectorAll('.fintech-legend-item').forEach(el => {
+        el.addEventListener('click', () => {
+          this.#filtrarPorAlcancía(el.dataset.subcuenta);
+        });
+      });
     }
 
     const ctx = canvas.getContext('2d');
@@ -569,11 +556,11 @@ export class AhorroModule extends BaseModule {
       data: {
         labels: labels,
         datasets: [{
-          data: dataVals.length ? dataVals : [1],
-          backgroundColor: dataVals.length ? colors : ['#E2E8F0'],
+          data: dataVals,
+          backgroundColor: colors,
           borderWidth: 2,
           borderColor: 'var(--superficie)',
-          hoverOffset: 4
+          hoverOffset: 5
         }]
       },
       options: {
@@ -583,14 +570,146 @@ export class AhorroModule extends BaseModule {
         plugins: {
           legend: { display: false },
           tooltip: {
-            enabled: dataVals.length > 0,
             callbacks: {
-              label: (item) => ` ${item.label}: ${fmt(item.raw)}`
+              label: (item) => ` ${item.label}: ${fmt(item.raw)} (${((item.raw / total) * 100).toFixed(1)}%)`
             }
+          }
+        },
+        onClick: (event, elements) => {
+          if (elements.length > 0) {
+            const index = elements[0].index;
+            const subcuentaSelected = labels[index];
+            this.#filtrarPorAlcancía(subcuentaSelected);
           }
         }
       }
     });
+  }
+
+  #renderMisAlcancias() {
+    const container = document.getElementById('aho-subcuentas-list');
+    if (!container) return;
+
+    const subcuentas = this.#dataCompleta?.subcuentas || [];
+    const transferencias = this.#dataCompleta?.transferencias || [];
+    const isUSD = this.#vistaActual === 'USD';
+    const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
+
+    // Calcular saldos y actividad por cada subcuenta
+    const mapSaldos = {};
+    const mapDepositosMes = {};
+    transferencias
+      .filter(t => t.moneda === this.#vistaActual)
+      .forEach(t => {
+        const nom = t.subcuenta_nombre || 'General';
+        const imp = Number(t.importe || 0);
+        if (t.tipo_mov === 'DEPOSITO') {
+          mapSaldos[nom] = (mapSaldos[nom] || 0) + imp;
+          mapDepositosMes[nom] = (mapDepositosMes[nom] || 0) + imp;
+        } else if (t.tipo_mov === 'RETIRO') {
+          mapSaldos[nom] = Math.max(0, (mapSaldos[nom] || 0) - imp);
+        }
+      });
+
+    const relevantSubcuentas = subcuentas.filter(s => !s.moneda || s.moneda === this.#vistaActual);
+
+    if (!relevantSubcuentas.length) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:24px 12px; color:var(--texto-3);">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.6;"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          <p style="font-weight:600; margin:0 0 4px; color:var(--texto-2); font-size:0.88rem;">No tenés alcancías en ${this.#vistaActual}</p>
+          <p style="font-size:0.75rem; margin:0 0 12px;">Creá una alcancía con tu objetivo de ahorro para empezar.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const ICONS = ['icon-green', 'icon-blue', 'icon-purple', 'icon-yellow'];
+
+    container.innerHTML = relevantSubcuentas.map((sc, idx) => {
+      const nom = sc.nombre || 'Alcancía';
+      const saldo = mapSaldos[nom] != null ? mapSaldos[nom] : Number(sc.saldo || 0);
+      const meta = Number(sc.meta || sc.objetivo || 0);
+      const depMes = mapDepositosMes[nom] || 0;
+      const isSelected = this.#subcuentaFiltro === nom;
+      const iconClass = ICONS[idx % ICONS.length];
+
+      let progressHtml = '';
+      if (meta > 0) {
+        const pct = Math.min(100, Math.round((saldo / meta) * 100));
+        progressHtml = `
+          <div style="margin-top:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:var(--texto-3); margin-bottom:4px;">
+              <span>Meta: ${fmt(meta)}</span>
+              <strong style="color:var(--texto);">${pct}%</strong>
+            </div>
+            <div class="finset-goal-progress-wrap" style="margin:0;">
+              <div class="finset-goal-progress-bar">
+                <div class="finset-goal-progress-fill" style="width: ${pct}%; background: ${pct >= 100 ? 'var(--verde)' : 'var(--primario)'};"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="finset-submodule-card aho-subcuenta-card ${isSelected ? 'active-filter-card' : ''}" 
+             data-subcuenta-nom="${App.Utils.escapeHtml(nom)}"
+             style="cursor:pointer; transition:all 0.15s ease; ${isSelected ? 'border-color:var(--primario); background:rgba(59,130,246,0.05); box-shadow:0 0 0 1px var(--primario);' : ''}">
+          <div class="fsc-header" style="align-items:center;">
+            <div class="fsc-tag-wrap" style="align-items:center;">
+              <div class="fsc-icon-box ${iconClass}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              </div>
+              <div class="fsc-text-block">
+                <div class="fsc-title" style="font-size:0.88rem; font-weight:700; color:var(--texto);">${App.Utils.escapeHtml(nom)}</div>
+                <div class="fsc-sub" style="font-size:0.72rem; color:var(--texto-3);">
+                  ${depMes > 0 ? `Depósitos mes: +${fmt(depMes)}` : 'Sin depósitos este mes'}
+                </div>
+              </div>
+            </div>
+            <div class="fsc-right-block" style="text-align:right;">
+              <span class="fsc-value" style="font-size:0.95rem; font-weight:700; color:var(--texto);">${fmt(saldo)}</span>
+              <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3); display:block;">${this.#vistaActual}</span>
+            </div>
+          </div>
+          ${progressHtml}
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.aho-subcuenta-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const nom = card.dataset.subcuentaNom;
+        this.#filtrarPorAlcancía(nom);
+      });
+    });
+  }
+
+  #filtrarPorAlcancía(nombre) {
+    if (this.#subcuentaFiltro === nombre) {
+      this.#limpiarFiltroAlcancia();
+      return;
+    }
+    this.#subcuentaFiltro = nombre;
+    const badge = document.getElementById('aho-alcancia-filter-badge');
+    const badgeText = document.getElementById('aho-alcancia-filter-text');
+    if (badge) badge.classList.remove('hidden');
+    if (badgeText) badgeText.textContent = `Filtrado por: ${nombre}`;
+
+    this.#renderMisAlcancias();
+    this.#renderDonutChart();
+    this.#filterAndRenderMovimientos();
+  }
+
+  #limpiarFiltroAlcancia() {
+    this.#subcuentaFiltro = null;
+    const badge = document.getElementById('aho-alcancia-filter-badge');
+    if (badge) badge.classList.add('hidden');
+
+    this.#renderMisAlcancias();
+    this.#renderDonutChart();
+    this.#filterAndRenderMovimientos();
   }
 
   // --- SECCIÓN 5: FILTRADO Y GRILLA DE MOVIMIENTOS ---
@@ -600,10 +719,11 @@ export class AhorroModule extends BaseModule {
     const isUSD = this.#vistaActual === 'USD';
     const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
 
-    // Filtro por moneda, tipo (ALL / DEPOSITO / RETIRO) y búsqueda
+    // Filtro por moneda, tipo (ALL / DEPOSITO / RETIRO), subcuenta activa y búsqueda
     const filtered = transferencias.filter(t => {
       if (t.moneda !== this.#vistaActual) return false;
       if (this.#tipoFiltro !== 'ALL' && t.tipo_mov !== this.#tipoFiltro) return false;
+      if (this.#subcuentaFiltro && (t.subcuenta_nombre || 'General') !== this.#subcuentaFiltro) return false;
       if (this.#busqueda) {
         const q = this.#busqueda.toLowerCase();
         const desc = (t.descripcion || '').toLowerCase();
@@ -619,9 +739,10 @@ export class AhorroModule extends BaseModule {
     const summaryEl = document.getElementById('aho-movimientos-summary');
 
     if (badgeTitleEl) {
-      if (this.#tipoFiltro === 'DEPOSITO') badgeTitleEl.textContent = `Depósitos en ${this.#vistaActual}`;
-      else if (this.#tipoFiltro === 'RETIRO') badgeTitleEl.textContent = `Retiros en ${this.#vistaActual}`;
-      else badgeTitleEl.textContent = `Todos los Movimientos (${this.#vistaActual})`;
+      const subTag = this.#subcuentaFiltro ? ` • ${this.#subcuentaFiltro}` : '';
+      if (this.#tipoFiltro === 'DEPOSITO') badgeTitleEl.textContent = `Depósitos en ${this.#vistaActual}${subTag}`;
+      else if (this.#tipoFiltro === 'RETIRO') badgeTitleEl.textContent = `Retiros en ${this.#vistaActual}${subTag}`;
+      else badgeTitleEl.textContent = `Movimientos (${this.#vistaActual})${subTag}`;
     }
     if (badgeEl) {
       badgeEl.className = 'dh-drilldown-badge ' + (this.#tipoFiltro === 'DEPOSITO' ? 'badge-ing' : (this.#tipoFiltro === 'RETIRO' ? 'badge-egr' : 'badge-all'));
@@ -924,10 +1045,13 @@ export class AhorroModule extends BaseModule {
 
     const switchCurrency = (moneda) => {
       this.#vistaActual = moneda;
+      this.#subcuentaFiltro = null;
+      document.getElementById('aho-alcancia-filter-badge')?.classList.add('hidden');
       btnArs?.classList.toggle('active', moneda === 'ARS');
       btnUsd?.classList.toggle('active', moneda === 'USD');
       this.#renderMoneyFlowChart();
       this.#renderDonutChart();
+      this.#renderMisAlcancias();
       this.#filterAndRenderMovimientos();
     };
 
@@ -935,6 +1059,16 @@ export class AhorroModule extends BaseModule {
     btnUsd?.addEventListener('click', () => switchCurrency('USD'));
     filterArs?.addEventListener('click', () => switchCurrency('ARS'));
     filterUsd?.addEventListener('click', () => switchCurrency('USD'));
+
+    // Botón Nueva Alcancía
+    document.getElementById('aho-btn-nueva-alcancia')?.addEventListener('click', () => {
+      this.#abrirModalNuevaAlcancia();
+    });
+
+    // Botón Limpiar Filtro Alcancía
+    document.getElementById('aho-btn-clear-alcancia-filter')?.addEventListener('click', () => {
+      this.#limpiarFiltroAlcancia();
+    });
 
     // Pestañas de filtrado (Todos / Depósitos / Retiros)
     const tabs = document.getElementById('aho-movimientos-tabs');
@@ -975,6 +1109,71 @@ export class AhorroModule extends BaseModule {
     const btnNuevo = document.getElementById('aho-btn-nuevo');
     btnNuevo?.addEventListener('click', () => {
       this.#abrirModalAlta('DEPOSITO');
+    });
+  }
+
+  #abrirModalNuevaAlcancia() {
+    const modal = new App.Modal('modal-aho-nueva-subcuenta');
+    const body = `
+      <form id="form-nueva-subcuenta" class="form-grid">
+        <div class="form-group full-width">
+          <label>Nombre de la Alcancía <span class="required-mark">*</span></label>
+          <input class="input" type="text" name="nombre" placeholder="Ej: Fondo de Emergencia, Vacaciones, Auto..." required>
+        </div>
+        <div class="form-group">
+          <label>Moneda <span class="required-mark">*</span></label>
+          <select class="input" name="moneda" required>
+            <option value="ARS" ${this.#vistaActual === 'ARS' ? 'selected' : ''}>ARS (Pesos)</option>
+            <option value="USD" ${this.#vistaActual === 'USD' ? 'selected' : ''}>USD (Dólares)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Meta / Objetivo (Opcional)</label>
+          <input class="input" type="number" name="meta" min="0" step="1" placeholder="0.00">
+        </div>
+      </form>
+    `;
+
+    modal.open({
+      titulo: 'Nueva Alcancía / Objetivo de Ahorro',
+      icono: 'savings',
+      body,
+      confirmLabel: 'Crear Alcancía',
+      onConfirm: async (m) => {
+        const form = m.getForm();
+        if (!form) return;
+        const fd = new FormData(form);
+        const nombre = fd.get('nombre')?.trim();
+        const moneda = fd.get('moneda') || this.#vistaActual;
+        const meta = Number(fd.get('meta')) || null;
+
+        if (!nombre) {
+          App.Toast.warning('Ingresá el nombre de la alcancía.');
+          return;
+        }
+
+        m.setLoading(true);
+        try {
+          const res = await App.API.call('api_admin_saveAhorroSubcuenta', [{
+            nombre,
+            moneda,
+            id_cuenta_principal: App.Store.cuenta,
+            meta
+          }]);
+          if (res?.success) {
+            App.Toast.success(`Alcancía "${nombre}" creada.`);
+            m.close();
+            App.API.invalidatePattern('api_getAhorros');
+            this.destruir();
+            await this.cargar();
+          } else {
+            throw new Error(res?.error || 'Error al guardar alcancía');
+          }
+        } catch (err) {
+          App.Toast.error(err.message || 'Error al crear alcancía');
+          m.setLoading(false);
+        }
+      }
     });
   }
 
