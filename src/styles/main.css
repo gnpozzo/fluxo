@@ -636,7 +636,7 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   position: relative;
 }
 .main-content > .vista-container.active {
-  max-width: var(--max-w, 1280px);
+  max-width: var(--max-w, 1760px);
   margin: 0 auto;
 }
 .main-content::-webkit-scrollbar { width: 6px; }
@@ -2775,7 +2775,7 @@ body {
 }
 
 .main-content > .vista-container.active {
-  max-width: 1320px !important;
+  max-width: 1760px !important;
   width: 100% !important;
   margin: 0 auto !important;
 }
@@ -3053,7 +3053,7 @@ body {
   flex-direction: column;
   gap: 22px;
   width: 100%;
-  max-width: 1320px;
+  max-width: 1760px;
   margin: 0 auto;
   padding-bottom: 40px;
 }
