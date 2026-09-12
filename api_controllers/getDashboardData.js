@@ -93,13 +93,17 @@ export default async function handler(req, res) {
     // Hasta fin de año en curso para proyecciones
     const endRange = `${yNum}-12-31`;
 
-    const { data: histMovs } = await supabase
+    const { data: histMovs, error: histError } = await supabase
       .from('movimientos')
-      .select('fecha, tipo_mov, importe, tipo_egreso')
+      .select('fecha, tipo_mov, importe')
       .eq('id_cuenta_principal', cuenta)
       .eq('user_id', userId)
       .gte('fecha', startRange)
       .lte('fecha', endRange);
+
+    if (histError) {
+      console.error('[getDashboardData] Error fetching histMovs:', histError);
+    }
 
     // Identificar todos los meses desde startRange hasta fin de año en curso
     const mesesBuckets = {};
