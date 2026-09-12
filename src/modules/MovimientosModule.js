@@ -389,6 +389,20 @@ export class MovimientosModule extends BaseModule {
         <input type="hidden" name="tipo" value="${tipo}">
         <input type="hidden" name="id_movimiento" value="${data?.id_movimiento || ''}">
 
+        <!-- Selector Rápido de Tipo: Gasto vs Ingreso -->
+        <div class="form-group full-width" style="margin-bottom: 6px;">
+          <div style="display:flex; background:var(--bg-2, #f1f5f9); border:1px solid var(--borde); border-radius:10px; padding:3px; gap:4px;">
+            <button type="button" class="btn-mov-tipo-toggle ${!esIngreso ? 'active' : ''}" data-tipo="EGRESO" style="flex:1; padding:8px 12px; border-radius:8px; font-size:0.84rem; font-weight:700; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.15s; ${!esIngreso ? 'background:var(--rojo, #ef4444); color:#fff; box-shadow:0 2px 6px rgba(239,68,68,0.25);' : 'background:transparent; color:var(--texto-2);'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+              Gasto / Egreso
+            </button>
+            <button type="button" class="btn-mov-tipo-toggle ${esIngreso ? 'active' : ''}" data-tipo="INGRESO" style="flex:1; padding:8px 12px; border-radius:8px; font-size:0.84rem; font-weight:700; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.15s; ${esIngreso ? 'background:var(--verde, #10b981); color:#fff; box-shadow:0 2px 6px rgba(16,185,129,0.25);' : 'background:transparent; color:var(--texto-2);'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+              Ingreso
+            </button>
+          </div>
+        </div>
+
         ${!esIngreso ? `
         <!-- Modalidad de Cálculo para Gastos -->
         <div class="form-group full-width" style="margin-bottom:var(--space-1)">
@@ -586,6 +600,34 @@ export class MovimientosModule extends BaseModule {
   }
 
   #postOpenForm() {
+    // Alternar dinámicamente entre Gasto e Ingreso dentro del modal
+    document.querySelectorAll('.btn-mov-tipo-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nuevoTipo = btn.dataset.tipo;
+        const form = this.#modal.getForm();
+        let currentData = null;
+        if (form) {
+          const fd = new FormData(form);
+          currentData = {
+            importe: fd.get('importe') || '',
+            fecha: fd.get('fecha') || '',
+            descripcion: fd.get('descripcion') || '',
+            id_cuenta_principal: fd.get('id_cuenta_destino') || App.Store?.cuenta
+          };
+        }
+        const esIng = nuevoTipo === 'INGRESO';
+        const titleSpan = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:var(--primary);">${App.Icons.get(esIng ? 'trending_up' : 'trending_down')}</span>${esIng ? 'Nuevo Ingreso' : 'Nuevo Gasto'}`;
+        this.#modal.el.querySelector('.modal-title').innerHTML = titleSpan;
+        this.#modal.el.querySelector('.modal-body').innerHTML = this.#buildFormHtml(nuevoTipo, currentData);
+        const confirmBtn = this.#modal.el.querySelector('.modal-confirm');
+        if (confirmBtn) {
+          confirmBtn.textContent = esIng ? 'Guardar Ingreso' : 'Guardar Gasto';
+          confirmBtn.className = `btn ${esIng ? 'btn-primary' : 'btn-danger'} modal-confirm`;
+        }
+        this.#postOpenForm();
+      });
+    });
+
     const selTipoConsumo = document.getElementById('mov-tipo-consumo');
     if (selTipoConsumo) {
       selTipoConsumo.addEventListener('change', () => {

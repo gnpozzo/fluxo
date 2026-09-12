@@ -30,6 +30,7 @@ export class DashboardModule extends BaseModule {
   #topeTC = null;
   #tcConsumosSubtotal = 0;
   #evolucionMensual = [];
+  #moneyFlowPeriod = '6M'; // '6M' | '12M' | 'YTD'
   #kpisData = {};
 
   get movData() { return this.#movData; }
@@ -484,11 +485,18 @@ export class DashboardModule extends BaseModule {
               <div class="finset-card-header">
                 <div class="finset-card-title-wrap">
                   <h3 class="finset-card-title">Flujo de Fondos</h3>
-                  <span class="finset-card-subtitle">Evolución histórica últimos 6 meses</span>
+                  <span class="finset-card-subtitle" id="dash-moneyflow-sub">Evolución histórica últimos 6 meses</span>
                 </div>
-                <div class="fintech-pill-switch" id="dash-moneyflow-switch">
-                  <button class="fintech-pill-btn active" data-mode="ingresos_vs_gastos">Ingresos vs Gastos</button>
-                  <button class="fintech-pill-btn" data-mode="balance">Balance</button>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <div class="fintech-pill-switch" id="dash-moneyflow-period">
+                    <button class="fintech-pill-btn active" data-period="6M">6M</button>
+                    <button class="fintech-pill-btn" data-period="12M">12M</button>
+                    <button class="fintech-pill-btn" data-period="YTD">Año actual</button>
+                  </div>
+                  <div class="fintech-pill-switch" id="dash-moneyflow-switch">
+                    <button class="fintech-pill-btn active" data-mode="ingresos_vs_gastos">Ingresos vs Gastos</button>
+                    <button class="fintech-pill-btn" data-mode="balance">Balance</button>
+                  </div>
                 </div>
               </div>
               <div style="position:relative; width:100%; height:230px; margin: 4px 0;">
@@ -497,7 +505,7 @@ export class DashboardModule extends BaseModule {
               <div class="finset-chart-summary" id="dash-moneyflow-summary"></div>
             </div>
 
-            <!-- Right (40%): Top Categorías -->
+            <!-- Right (40%): Top Categorías (FinSet Side-by-Side) -->
             <div class="finset-card" id="dash-widget-categories">
               <div class="finset-card-header">
                 <div class="finset-card-title-wrap">
@@ -510,15 +518,19 @@ export class DashboardModule extends BaseModule {
                 </div>
               </div>
               
-              <div class="fintech-donut-wrapper" style="height:190px;">
-                <canvas id="dash-categories-donut-canvas"></canvas>
-                <div class="fintech-donut-center" id="dash-categories-donut-center">
-                  <span class="fintech-donut-center-label" id="dash-donut-center-label">Total Gastos</span>
-                  <span class="fintech-donut-center-val" id="dash-donut-center-val" style="color:var(--primary); font-size:1.1rem;">$ 0,00</span>
+              <div class="finset-categories-side-wrap">
+                <!-- Left: Categories list with % and amount -->
+                <div class="fintech-legend-list" id="dash-categories-legend" style="margin-top:0;"></div>
+
+                <!-- Right: Donut Chart with central total -->
+                <div class="fintech-donut-wrapper" style="height:180px; margin:0;">
+                  <canvas id="dash-categories-donut-canvas"></canvas>
+                  <div class="fintech-donut-center" id="dash-categories-donut-center">
+                    <span class="fintech-donut-center-label" id="dash-donut-center-label">Total Gastos</span>
+                    <span class="fintech-donut-center-val" id="dash-donut-center-val" style="font-size:1.05rem;">$ 0,00</span>
+                  </div>
                 </div>
               </div>
-
-              <div class="fintech-legend-list" id="dash-categories-legend" style="margin-top:12px;"></div>
             </div>
 
           </div>
@@ -572,14 +584,20 @@ export class DashboardModule extends BaseModule {
                 <div class="finset-submodule-card" id="dash-card-tarjetas">
                   <div class="fsc-header">
                     <div class="fsc-tag-wrap">
-                      <div class="bc-icon icon-blue" style="width:28px;height:28px;border-radius:8px;">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                      <div class="fsc-icon-box icon-blue">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
                       </div>
-                      <span style="font-weight:700;font-size:0.85rem;color:var(--texto);">Tarjetas de Crédito</span>
+                      <div class="fsc-text-block">
+                        <div class="fsc-title">Tarjetas de Crédito</div>
+                        <div class="fsc-sub">Consumos y vencimientos</div>
+                      </div>
                     </div>
-                    <button class="finset-arrow-btn" id="dash-tc-ver-consumos" title="Ver detalle en módulo Tarjetas">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-                    </button>
+                    <div class="fsc-right-block">
+                      <span class="fsc-value" id="dash-tc-total">—</span>
+                      <button class="finset-arrow-btn" id="dash-tc-ver-consumos" title="Ver detalle en módulo Tarjetas">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Interactive Plastic Card Carousel -->
@@ -590,13 +608,13 @@ export class DashboardModule extends BaseModule {
                       <button class="dash-tc-arrow" id="dash-tc-next" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
                     </div>
                   </div>
-                  <div class="bc-footer" id="dash-tc-subtotal" style="font-size:0.78rem;font-weight:600;color:var(--texto-2);margin-top:4px;">Subtotal: —</div>
+                  <div class="bc-footer" id="dash-tc-subtotal" style="font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:600;color:var(--texto-2);margin-top:4px;">Subtotal: —</div>
                   
                   <!-- Credit card limit tracking (Salud financiera) -->
                   <div class="dash-tc-limit-wrap" id="dash-tc-limit-wrap" style="cursor:pointer;" title="Clic para configurar tu tope de tarjeta de crédito">
                     <div class="dash-tc-limit-header">
-                      <span style="color:var(--texto-3);">Tope TC (<strong id="dash-tc-limit-pct">25%</strong> de ingresos)</span>
-                      <span id="dash-tc-limit-status" style="font-weight:700; color:var(--verde);">En rango</span>
+                      <span style="color:var(--texto-3);font-size:0.73rem;">Tope TC (<strong id="dash-tc-limit-pct">25%</strong> de ingresos)</span>
+                      <span id="dash-tc-limit-status" style="font-weight:700;font-size:0.73rem;color:var(--verde);">En rango</span>
                     </div>
                     <div class="dash-tc-limit-bar-bg">
                       <div class="dash-tc-limit-bar-fill status-ok" id="dash-tc-limit-bar" style="width: 0%;"></div>
@@ -608,16 +626,16 @@ export class DashboardModule extends BaseModule {
                 <div class="finset-submodule-card" id="dash-card-cc">
                   <div class="fsc-header">
                     <div class="fsc-tag-wrap">
-                      <div class="bc-icon icon-purple" style="width:28px;height:28px;border-radius:8px;">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      <div class="fsc-icon-box icon-purple">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                       </div>
-                      <div>
-                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Gastos Compartidos</div>
-                        <div style="font-size:0.72rem;color:var(--texto-3);">Saldo neto a liquidar</div>
+                      <div class="fsc-text-block">
+                        <div class="fsc-title">Gastos Compartidos</div>
+                        <div class="fsc-sub">Saldo neto a liquidar</div>
                       </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:10px;">
-                      <span class="bc-value" id="dash-cc-saldo" style="font-size:1.05rem;font-weight:800;">—</span>
+                    <div class="fsc-right-block">
+                      <span class="fsc-value" id="dash-cc-saldo">—</span>
                       <button class="finset-arrow-btn" id="dash-cc-detail" title="Ver detalle de gastos compartidos">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                       </button>
@@ -629,16 +647,16 @@ export class DashboardModule extends BaseModule {
                 <div class="finset-submodule-card" id="dash-card-ahorro">
                   <div class="fsc-header">
                     <div class="fsc-tag-wrap">
-                      <div class="bc-icon icon-yellow" style="width:28px;height:28px;border-radius:8px;">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                      <div class="fsc-icon-box icon-yellow">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
                       </div>
-                      <div>
-                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Ahorro</div>
-                        <div style="font-size:0.72rem;color:var(--texto-3);">Fondo en alcancías y reservas</div>
+                      <div class="fsc-text-block">
+                        <div class="fsc-title">Ahorro</div>
+                        <div class="fsc-sub">Fondo en alcancías y reservas</div>
                       </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:10px;">
-                      <span class="bc-value positivo" id="dash-ahorro-total" style="font-size:1.05rem;font-weight:800;">—</span>
+                    <div class="fsc-right-block">
+                      <span class="fsc-value positivo" id="dash-ahorro-total">—</span>
                       <button class="finset-arrow-btn" id="dash-ahorro-detail" title="Ver alcancías de ahorro">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                       </button>
@@ -650,16 +668,16 @@ export class DashboardModule extends BaseModule {
                 <div class="finset-submodule-card" id="dash-card-inversiones">
                   <div class="fsc-header">
                     <div class="fsc-tag-wrap">
-                      <div class="bc-icon icon-cyan" style="width:28px;height:28px;border-radius:8px;">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                      <div class="fsc-icon-box icon-cyan">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                       </div>
-                      <div>
-                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Inversiones</div>
-                        <div style="font-size:0.72rem;color:var(--texto-3);">Cartera viva de activos</div>
+                      <div class="fsc-text-block">
+                        <div class="fsc-title">Inversiones</div>
+                        <div class="fsc-sub">Cartera viva de activos</div>
                       </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:10px;">
-                      <span class="bc-value" id="dash-inversiones-valor" style="font-size:1.05rem;font-weight:800;">—</span>
+                    <div class="fsc-right-block">
+                      <span class="fsc-value" id="dash-inversiones-valor">—</span>
                       <button class="finset-arrow-btn" id="dash-inversiones-detail" title="Ver portafolio de inversiones">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                       </button>
@@ -737,7 +755,17 @@ export class DashboardModule extends BaseModule {
       this.#abrirModalTopeTC();
     });
 
-    // Money Flow switch
+    // Money Flow Period switch (6M / 12M / Año actual)
+    document.getElementById('dash-moneyflow-period')?.querySelectorAll('.fintech-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#dash-moneyflow-period .fintech-pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.#moneyFlowPeriod = btn.dataset.period;
+        this.#renderMoneyFlowChart();
+      });
+    });
+
+    // Money Flow mode switch (Ingresos vs Gastos / Balance)
     document.getElementById('dash-moneyflow-switch')?.querySelectorAll('.fintech-pill-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('#dash-moneyflow-switch .fintech-pill-btn').forEach(b => b.classList.remove('active'));
@@ -1169,7 +1197,7 @@ export class DashboardModule extends BaseModule {
       const el = document.getElementById('dash-cc-saldo');
       if (el) {
         el.textContent = App.Utils.formatearMoneda(saldo);
-        el.className = 'dash-mc-kpi-value ' + (saldo >= 0 ? 'positivo' : 'negativo');
+        el.className = 'fsc-value ' + (saldo >= 0 ? 'positivo' : 'negativo');
       }
     };
     try {
@@ -1442,29 +1470,66 @@ export class DashboardModule extends BaseModule {
   #renderMoneyFlowChart() {
     const canvas = document.getElementById('dash-moneyflow-canvas');
     if (!canvas) return;
-    const hist = this.#evolucionMensual || [];
-    if (!hist.length) return;
+    const allHist = this.#evolucionMensual || [];
+    if (!allHist.length) return;
+
+    const currentMes = App.Store.mes || new Date().toISOString().substring(0, 7);
+    const currentYear = currentMes.substring(0, 4);
+
+    // Filter data based on selected period
+    let filtered = [];
+    const currIdx = allHist.findIndex(h => h.mes === currentMes);
+
+    if (this.#moneyFlowPeriod === 'YTD') {
+      filtered = allHist.filter(h => h.mes.startsWith(currentYear));
+      if (!filtered.length) filtered = allHist.slice(-6);
+    } else if (this.#moneyFlowPeriod === '12M') {
+      const endIdx = currIdx !== -1 ? currIdx + 1 : allHist.length;
+      filtered = allHist.slice(Math.max(0, endIdx - 12), endIdx);
+    } else { // '6M' default
+      const endIdx = currIdx !== -1 ? currIdx + 1 : allHist.length;
+      filtered = allHist.slice(Math.max(0, endIdx - 6), endIdx);
+    }
+
+    // Update subtitle
+    const subEl = document.getElementById('dash-moneyflow-sub');
+    if (subEl) {
+      if (this.#moneyFlowPeriod === '6M') {
+        subEl.textContent = 'Evolución histórica últimos 6 meses';
+      } else if (this.#moneyFlowPeriod === '12M') {
+        subEl.textContent = 'Evolución histórica último año (12 meses)';
+      } else {
+        subEl.textContent = `Todo el año en curso (${currentYear}) con proyecciones`;
+      }
+    }
 
     this.#moneyFlowChartInstance?.destroy();
     const ctx = canvas.getContext('2d');
     const isIngVsGas = this.#evolucionMode === 'ingresos_vs_gastos';
-    const labels = hist.map(e => App.Utils.formatearMes(e.mes));
+    const labels = filtered.map(e => {
+      const lbl = App.Utils.formatearMes(e.mes);
+      return e.esProyectado ? `${lbl}*` : lbl;
+    });
 
     let datasets = [];
     if (isIngVsGas) {
       datasets = [
         {
           label: 'Ingresos',
-          data: hist.map(e => Math.round(e.ingresos || 0)),
-          backgroundColor: '#10B981',
+          data: filtered.map(e => Math.round(e.ingresos || 0)),
+          backgroundColor: filtered.map(e => e.esProyectado ? 'rgba(16, 185, 129, 0.4)' : '#10B981'),
+          borderColor: filtered.map(e => e.esProyectado ? '#10B981' : 'transparent'),
+          borderWidth: filtered.map(e => e.esProyectado ? 1.5 : 0),
           borderRadius: 6,
           barPercentage: 0.65,
           categoryPercentage: 0.8
         },
         {
           label: 'Gastos',
-          data: hist.map(e => Math.round(e.egresos || 0)),
-          backgroundColor: '#1D195D',
+          data: filtered.map(e => Math.round(e.egresos || 0)),
+          backgroundColor: filtered.map(e => e.esProyectado ? 'rgba(29, 25, 93, 0.4)' : '#1D195D'),
+          borderColor: filtered.map(e => e.esProyectado ? '#1D195D' : 'transparent'),
+          borderWidth: filtered.map(e => e.esProyectado ? 1.5 : 0),
           borderRadius: 6,
           barPercentage: 0.65,
           categoryPercentage: 0.8
@@ -1474,8 +1539,17 @@ export class DashboardModule extends BaseModule {
       datasets = [
         {
           label: 'Balance Neto',
-          data: hist.map(e => Math.round(e.balance || 0)),
-          backgroundColor: hist.map(e => (e.balance || 0) >= 0 ? '#10B981' : '#EF4444'),
+          data: filtered.map(e => Math.round(e.balance || 0)),
+          backgroundColor: filtered.map(e => {
+            const isPos = (e.balance || 0) >= 0;
+            if (e.esProyectado) return isPos ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+            return isPos ? '#10B981' : '#EF4444';
+          }),
+          borderColor: filtered.map(e => {
+            if (!e.esProyectado) return 'transparent';
+            return (e.balance || 0) >= 0 ? '#10B981' : '#EF4444';
+          }),
+          borderWidth: filtered.map(e => e.esProyectado ? 1.5 : 0),
           borderRadius: 6,
           barPercentage: 0.65,
           categoryPercentage: 0.85
@@ -1505,7 +1579,11 @@ export class DashboardModule extends BaseModule {
           },
           tooltip: {
             callbacks: {
-              label: (context) => ` ${context.dataset.label || ''}: $ ${context.parsed.y.toLocaleString('es-AR')}`
+              label: (context) => {
+                const item = filtered[context.dataIndex];
+                const proyTag = item?.esProyectado ? ' (Proyectado)' : '';
+                return ` ${context.dataset.label || ''}${proyTag}: $ ${context.parsed.y.toLocaleString('es-AR')}`;
+              }
             }
           }
         },
@@ -1529,11 +1607,17 @@ export class DashboardModule extends BaseModule {
     // Update summary text
     const summaryEl = document.getElementById('dash-moneyflow-summary');
     if (summaryEl) {
-      const avgIng = hist.reduce((a, b) => a + (b.ingresos || 0), 0) / hist.length;
-      const avgGas = hist.reduce((a, b) => a + (b.egresos || 0), 0) / hist.length;
-      summaryEl.innerHTML = `
+      const pastMonths = filtered.filter(e => !e.esProyectado);
+      const poolForAvg = pastMonths.length ? pastMonths : filtered;
+      const avgIng = poolForAvg.reduce((a, b) => a + (b.ingresos || 0), 0) / poolForAvg.length;
+      const avgGas = poolForAvg.reduce((a, b) => a + (b.egresos || 0), 0) / poolForAvg.length;
+      let summaryHtml = `
         <span>Promedio mensual: Ingresos <strong>${App.Utils.formatearMoneda(avgIng)}</strong> • Gastos <strong>${App.Utils.formatearMoneda(avgGas)}</strong></span>
       `;
+      if (filtered.some(e => e.esProyectado)) {
+        summaryHtml += `<span style="color:var(--texto-3); font-size:0.7rem; margin-left:auto;">* Meses proyectados</span>`;
+      }
+      summaryEl.innerHTML = summaryHtml;
     }
   }
 

@@ -2775,9 +2775,9 @@ body {
 }
 
 .main-content > .vista-container.active {
-  max-width: 100% !important;
+  max-width: 1320px !important;
   width: 100% !important;
-  margin: 0 !important;
+  margin: 0 auto !important;
 }
 
 @media (max-width: 768px) {
@@ -2809,8 +2809,17 @@ body {
 .app-header-left {
   display: flex;
   align-items: center;
-  gap: 20px;
-  flex-wrap: nowrap;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.app-header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 2;
+  min-width: 0;
 }
 
 .topbar-greeting {
@@ -3044,8 +3053,8 @@ body {
   flex-direction: column;
   gap: 22px;
   width: 100%;
-  max-width: 100%;
-  margin: 0;
+  max-width: 1320px;
+  margin: 0 auto;
   padding-bottom: 40px;
 }
 
@@ -3475,6 +3484,7 @@ body {
   border-radius: 14px;
   padding: 14px 16px;
   transition: all 0.2s ease;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .finset-submodule-card:hover {
@@ -3487,13 +3497,88 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
 .fsc-tag-wrap {
   display: flex;
   align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.fsc-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fsc-icon-box.icon-blue   { background: rgba(37, 99, 235, 0.1); color: #2563EB; }
+.fsc-icon-box.icon-purple { background: rgba(139, 92, 246, 0.1); color: #8B5CF6; }
+.fsc-icon-box.icon-yellow { background: rgba(245, 158, 11, 0.1); color: #D97706; }
+.fsc-icon-box.icon-cyan   { background: rgba(14, 165, 233, 0.1); color: #0284C7; }
+
+.fsc-text-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fsc-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--texto);
+  line-height: 1.25;
+}
+
+.fsc-sub {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 0.72rem;
+  color: var(--texto-3);
+  line-height: 1.25;
+  margin-top: 1px;
+}
+
+.fsc-right-block {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+
+.fsc-value {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--texto);
+  letter-spacing: -0.01em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.fsc-value.positivo { color: var(--verde, #10B981); }
+.fsc-value.negativo { color: var(--rojo, #EF4444); }
+
+/* FinSet Side-by-Side Top Categories Layout */
+.finset-categories-side-wrap {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 16px;
+  align-items: center;
+  margin-top: 4px;
+  min-height: 190px;
+}
+
+@media (max-width: 768px) {
+  .finset-categories-side-wrap {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
 }
 
 .finset-chart-summary {

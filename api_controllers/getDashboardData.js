@@ -81,25 +81,41 @@ export default async function handler(req, res) {
 
     const totalEgrAbs = Math.abs(egresos);
 
-    // Consulta histórica para evolución temporal (últimos 6 meses)
-    const dHist = new Date(fechaInicio + 'T00:00:00Z');
-    dHist.setUTCMonth(dHist.getUTCMonth() - 5);
-    const sixMonthsAgo = `${dHist.getUTCFullYear()}-${String(dHist.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    // Consulta histórica y proyectada para evolución temporal (12 meses móviles + resto del año en curso)
+    const [yNum, mNum] = fechaInicio.split('-').map(Number);
+    const activeMesKey = `${yNum}-${String(mNum).padStart(2, '0')}`;
+
+    // 11 meses atrás para 12M histórico
+    const dHist = new Date(Date.UTC(yNum, mNum - 1, 1));
+    dHist.setUTCMonth(dHist.getUTCMonth() - 11);
+    const startRange = `${dHist.getUTCFullYear()}-${String(dHist.getUTCMonth() + 1).padStart(2, '0')}-01`;
+
+    // Hasta fin de año en curso para proyecciones
+    const endRange = `${yNum}-12-31`;
 
     const { data: histMovs } = await supabase
       .from('movimientos')
-      .select('fecha, tipo_mov, importe')
+      .select('fecha, tipo_mov, importe, tipo_egreso')
       .eq('id_cuenta_principal', cuenta)
       .eq('user_id', userId)
-      .gte('fecha', sixMonthsAgo)
-      .lte('fecha', fechaFin);
+      .gte('fecha', startRange)
+      .lte('fecha', endRange);
 
+    // Identificar todos los meses desde startRange hasta fin de año en curso
     const mesesBuckets = {};
-    for (let i = 5; i >= 0; i--) {
-      const bDate = new Date(fechaInicio + 'T00:00:00Z');
-      bDate.setUTCMonth(bDate.getUTCMonth() - i);
-      const key = `${bDate.getUTCFullYear()}-${String(bDate.getUTCMonth() + 1).padStart(2, '0')}`;
-      mesesBuckets[key] = { mes: key, ingresos: 0, egresos: 0, balance: 0 };
+    const dIter = new Date(Date.UTC(dHist.getUTCFullYear(), dHist.getUTCMonth(), 1));
+    const dEnd = new Date(Date.UTC(yNum, 11, 1)); // Diciembre del año en curso
+
+    while (dIter <= dEnd) {
+      const key = `${dIter.getUTCFullYear()}-${String(dIter.getUTCMonth() + 1).padStart(2, '0')}`;
+      mesesBuckets[key] = {
+        mes: key,
+        ingresos: 0,
+        egresos: 0,
+        balance: 0,
+        esProyectado: key > activeMesKey
+      };
+      dIter.setUTCMonth(dIter.getUTCMonth() + 1);
     }
 
     (histMovs || []).forEach(hm => {
@@ -115,7 +131,8 @@ export default async function handler(req, res) {
       mes: b.mes,
       ingresos: b.ingresos,
       egresos: b.egresos,
-      balance: b.ingresos - b.egresos
+      balance: b.ingresos - b.egresos,
+      esProyectado: b.esProyectado
     }));
 
     return res.status(200).json({

@@ -164,8 +164,10 @@
             <h2 class="topbar-greeting-title">¡Hola, <span id="topbar-user-name">Gaston</span>!</h2>
             <span class="topbar-greeting-sub">Gestión financiera inteligente & patrimonio</span>
           </div>
+        </div>
 
-          <!-- Selectors: Month, Currency, Account -->
+        <!-- Center: Selectors: Month, Currency, Account -->
+        <div class="app-header-center">
           <div class="topbar-selectors-group">
             <!-- Month Selector -->
             <div class="welcome-select-wrap" id="month-select-ui">
@@ -196,7 +198,7 @@
 
         <div class="app-header-actions">
           <!-- Quick Add Button -->
-          <button class="btn btn-primary btn-sm topbar-quick-add" id="topbar-btn-nuevo" onclick="App.Modules.movimientos?.abrirAlta('EGRESO')" title="Registrar nuevo gasto o ingreso">
+          <button class="btn btn-primary btn-sm topbar-quick-add" id="topbar-btn-nuevo" onclick="App.Modules.movimientos?.abrirAlta()" title="Registrar nuevo gasto o ingreso">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             <span>Nuevo</span>
           </button>
