@@ -113,17 +113,42 @@ export class InversionesModule extends BaseModule {
       subResultEl.textContent = ganancia >= 0 ? 'Rendimiento positivo acumulado' : 'Rendimiento negativo acumulado';
     }
 
-    // Scorecard 4: Rendimiento Global %
-    const valRendEl = document.getElementById('inv-kpi-val-rend');
-    const fillRendEl = document.getElementById('inv-rend-progress-fill');
-    if (valRendEl) {
-      valRendEl.textContent = `${rend >= 0 ? '+' : ''}${rend.toFixed(2)}%`;
-      valRendEl.style.color = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
+    // Side Panel: Rendimiento Global % & FX
+    const sideRendEl = document.getElementById('inv-side-val-rend');
+    const sideFillRendEl = document.getElementById('inv-side-rend-progress-fill');
+    const sidePillRendEl = document.getElementById('inv-side-pill-rend');
+    if (sideRendEl) {
+      sideRendEl.textContent = `${rend >= 0 ? '+' : ''}${rend.toFixed(2)}%`;
+      sideRendEl.style.color = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
     }
-    if (fillRendEl) {
+    if (sideFillRendEl) {
       const pctWidth = Math.min(100, Math.max(10, Math.abs(rend) * 2));
-      fillRendEl.style.width = `${pctWidth}%`;
-      fillRendEl.style.background = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
+      sideFillRendEl.style.width = `${pctWidth}%`;
+      sideFillRendEl.style.background = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
+    }
+    if (sidePillRendEl) {
+      sidePillRendEl.className = 'finset-trend-pill ' + (rend >= 0 ? 'trend-up' : 'trend-down');
+    }
+
+    if (this.#cotizDolar) {
+      const mepEl = document.getElementById('inv-side-val-mep');
+      const blueEl = document.getElementById('inv-side-val-blue');
+      const cclEl = document.getElementById('inv-side-val-ccl');
+      if (mepEl && this.#cotizDolar.bolsa?.venta) mepEl.textContent = `$ ${App.Utils.formatearMoneda(this.#cotizDolar.bolsa.venta, false)}`;
+      if (blueEl && this.#cotizDolar.blue?.venta) blueEl.textContent = `$ ${App.Utils.formatearMoneda(this.#cotizDolar.blue.venta, false)}`;
+      if (cclEl && this.#cotizDolar.contadoconliqui?.venta) cclEl.textContent = `$ ${App.Utils.formatearMoneda(this.#cotizDolar.contadoconliqui.venta, false)}`;
+    }
+
+    const geminiCard = document.getElementById('inv-side-card-gemini');
+    if (geminiCard) {
+      geminiCard.onclick = () => {
+        window.App?.Gemini?.consultarInstrumento?.({
+          symbol: 'PORTFOLIO',
+          name: 'Mi Portafolio Global',
+          price: App.Utils.formatearMoneda(kpis.valorActual),
+          tipo: 'PORTFOLIO'
+        });
+      };
     }
 
     // Renderizar Gráficos y Lista
@@ -532,31 +557,6 @@ export class InversionesModule extends BaseModule {
           </div>
         </div>
 
-        <!-- Card 4: Rendimiento Global % -->
-        <div class="finset-kpi-card" id="inv-card-kpi-rend">
-          <div class="finset-kpi-header">
-            <div class="finset-kpi-title-wrap">
-              <div class="finset-kpi-icon icon-yellow">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              </div>
-              <div style="display:flex; flex-direction:column; line-height:1.2;">
-                <span class="finset-kpi-title">Rendimiento</span>
-                <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3);">Retorno sobre capital</span>
-              </div>
-            </div>
-          </div>
-          <div class="finset-kpi-value" id="inv-kpi-val-rend" style="font-size:1.35rem;">0.00%</div>
-          <div class="finset-goal-progress-wrap">
-            <div class="finset-goal-progress-bar">
-              <div class="finset-goal-progress-fill" id="inv-rend-progress-fill" style="width: 50%; background: var(--verde);"></div>
-            </div>
-          </div>
-          <div class="finset-kpi-footer">
-            <span class="finset-kpi-subtext">Retorno de cartera</span>
-            <span class="finset-trend-pill trend-up"><span>Retorno</span></span>
-          </div>
-        </div>
-
       </div>
 
       <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Evolución + Asset Allocation) ═══ -->
@@ -608,55 +608,115 @@ export class InversionesModule extends BaseModule {
       <!-- Live Ticker de Mercados & Dólar -->
       <div id="inv-dolar-info" style="margin-bottom: 24px;"></div>
 
-      <!-- ═══ ROW 3: OPERATIONS & POSICIONES / MONITOR GLOBAL ═══ -->
-      <div class="finset-card" id="inv-widget-operaciones">
-        <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
-          <div class="dh-drilldown-left" style="min-width:200px;">
-            <div class="dh-drilldown-badge badge-all" id="inv-operaciones-badge">
-              <span class="dh-badge-dot"></span>
-              <span class="dh-badge-title" id="inv-operaciones-title">Posiciones & Operaciones</span>
-            </div>
-            <div class="dh-drilldown-summary" id="inv-operaciones-summary">—</div>
-          </div>
-
-          <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
-            <!-- Switch Portfolio vs Monitor -->
-            <div class="currency-pills" id="inv-view-switch" style="display:flex;">
-              <button class="currency-pill active" id="inv-btn-portfolio" data-view="portfolio">Mi Portfolio</button>
-              <button class="currency-pill" id="inv-btn-mercados" data-view="mercados">Monitor Global</button>
+      <!-- ═══ ROW 3: OPERATIONS & POSICIONES + ESTRATEGIA (FinSet 2-Col Grid) ═══ -->
+      <div class="finset-grid-2col" style="margin-bottom: 24px;">
+        
+        <!-- Left (60%): Posiciones & Operaciones / Monitor -->
+        <div class="finset-card" id="inv-widget-operaciones">
+          <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+            <div class="dh-drilldown-left" style="min-width:180px;">
+              <div class="dh-drilldown-badge badge-all" id="inv-operaciones-badge">
+                <span class="dh-badge-dot"></span>
+                <span class="dh-badge-title" id="inv-operaciones-title">Posiciones & Operaciones</span>
+              </div>
+              <div class="dh-drilldown-summary" id="inv-operaciones-summary">—</div>
             </div>
 
-            <div id="inv-portfolio-controls" style="display:flex; align-items:center; gap:10px;">
-              <!-- Pestañas de Filtrado -->
-              <div class="dh-filter-tabs" id="inv-operaciones-tabs">
-                <button class="dh-tab-btn active" data-filter="ALL" id="inv-tab-all">Todos</button>
-                <button class="dh-tab-btn" data-filter="COMPRA" id="inv-tab-compras">Compras</button>
-                <button class="dh-tab-btn" data-filter="VENTA" id="inv-tab-ventas">Ventas</button>
+            <div class="finset-card-actions" style="margin-left:auto; gap:8px; align-items:center; flex-wrap:wrap;">
+              <!-- Switch Portfolio vs Monitor -->
+              <div class="currency-pills" id="inv-view-switch" style="display:flex;">
+                <button class="currency-pill active" id="inv-btn-portfolio" data-view="portfolio">Mi Portfolio</button>
+                <button class="currency-pill" id="inv-btn-mercados" data-view="mercados">Monitor Global</button>
               </div>
 
-              <!-- Buscador -->
-              <div class="dh-search-box" style="margin:0;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="inv-search-input" placeholder="Buscar ticker..." class="finset-search-input" style="width:140px;">
-              </div>
+              <div id="inv-portfolio-controls" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <!-- Pestañas de Filtrado -->
+                <div class="dh-filter-tabs" id="inv-operaciones-tabs">
+                  <button class="dh-tab-btn active" data-filter="ALL" id="inv-tab-all">Todos</button>
+                  <button class="dh-tab-btn" data-filter="COMPRA" id="inv-tab-compras">Compras</button>
+                  <button class="dh-tab-btn" data-filter="VENTA" id="inv-tab-ventas">Ventas</button>
+                </div>
 
-              <!-- Único Botón Contextual Primario -->
-              <button class="btn btn-primary btn-sm" id="inv-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span>+ Operación</span>
-              </button>
+                <!-- Buscador -->
+                <div class="dh-search-box" style="margin:0;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input type="text" id="inv-search-input" placeholder="Buscar ticker..." class="finset-search-input" style="width:110px;">
+                </div>
+
+                <!-- Botón Contextual Primario -->
+                <button class="btn btn-primary btn-sm" id="inv-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>+ Operación</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lista de operaciones interactiva estilo movimientos -->
+          <div class="dh-drilldown-list dh-side-main" id="inv-operaciones-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
+          </div>
+
+          <!-- Contenedor del Monitor Global de Mercados -->
+          <div class="hidden" id="inv-mercados-wrap" style="margin-top:12px;">
+             <div style="padding:2rem;color:var(--texto-3);text-align:center">Cargando mercados...</div>
+          </div>
+        </div>
+
+        <!-- Right (40%): Monitor de Cartera & Estrategia -->
+        <div class="finset-card" id="inv-widget-side-panel">
+          <div class="finset-card-header">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Estrategia & Cartera</h3>
+              <span class="finset-card-subtitle">Métricas e inteligencia de inversión</span>
+            </div>
+          </div>
+          <div class="finset-submodules-stack" style="display:flex; flex-direction:column; gap:12px; margin-top:12px;">
+            <!-- Submódulo 1: Rendimiento Acumulado -->
+            <div class="finset-submodule-card">
+              <div class="finset-submodule-top">
+                <div class="finset-submodule-info">
+                  <span class="finset-submodule-label">Rendimiento Histórico</span>
+                  <span class="finset-submodule-val" id="inv-side-val-rend" style="font-size:1.15rem; font-weight:700; color:var(--verde);">0.00%</span>
+                </div>
+                <span class="finset-trend-pill trend-up" id="inv-side-pill-rend"><span>Retorno</span></span>
+              </div>
+              <div class="finset-goal-progress-wrap" style="margin-top:8px;">
+                <div class="finset-goal-progress-bar">
+                  <div class="finset-goal-progress-fill" id="inv-side-rend-progress-fill" style="width: 50%; background: var(--verde);"></div>
+                </div>
+              </div>
+              <div style="font-size:0.75rem; color:var(--texto-3); margin-top:6px;">Retorno ponderado sobre capital colocado</div>
+            </div>
+
+            <!-- Submódulo 2: Dólar & Tipos de Cambio de Referencia -->
+            <div class="finset-submodule-card">
+              <div class="finset-submodule-top">
+                <div class="finset-submodule-info">
+                  <span class="finset-submodule-label">Dólar Bolsa (MEP)</span>
+                  <span class="finset-submodule-val" id="inv-side-val-mep" style="font-size:1.1rem; font-weight:700; color:var(--texto);">$ —</span>
+                </div>
+                <span class="ticker-badge" style="font-size:0.68rem; padding:2px 6px;">FX</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:var(--texto-3); margin-top:8px; padding-top:8px; border-top:1px solid var(--borde);">
+                <span>Blue: <strong id="inv-side-val-blue" style="color:var(--texto); font-weight:600;">$ —</strong></span>
+                <span>CCL: <strong id="inv-side-val-ccl" style="color:var(--texto); font-weight:600;">$ —</strong></span>
+              </div>
+            </div>
+
+            <!-- Submódulo 3: FluxoAI Asesor Bursátil -->
+            <div class="finset-submodule-card" style="cursor:pointer;" id="inv-side-card-gemini" title="Abrir análisis inteligente con FluxoAI">
+              <div class="finset-submodule-top">
+                <div class="finset-submodule-info">
+                  <span class="finset-submodule-label">Consultor Financiero</span>
+                  <span class="finset-submodule-val" style="font-size:0.95rem; font-weight:600; color:var(--primario);">FluxoAI Portfolio Review</span>
+                </div>
+                <span class="finset-trend-pill trend-neutral"><span>✨ IA</span></span>
+              </div>
+              <p style="font-size:0.75rem; color:var(--texto-3); margin:6px 0 0; line-height:1.4;">Diagnóstico en tiempo real de tu riesgo de cartera, horizonte temporal y recomendaciones.</p>
             </div>
           </div>
         </div>
 
-        <!-- Lista de operaciones interactiva estilo movimientos -->
-        <div class="dh-drilldown-list dh-side-main" id="inv-operaciones-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
-        </div>
-
-        <!-- Contenedor del Monitor Global de Mercados -->
-        <div class="hidden" id="inv-mercados-wrap" style="margin-top:12px;">
-           <div style="padding:2rem;color:var(--texto-3);text-align:center">Cargando mercados...</div>
-        </div>
       </div>
     `;
   }

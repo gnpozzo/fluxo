@@ -3254,22 +3254,25 @@ body {
   margin-top: 2px;
 }
 
-/* Row 1: 4 KPI Cards */
-.finset-kpi-row {
+/* Row 1: 3 Scorecards in 3 Columns */
+.finset-kpi-row,
+.finset-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 18px;
   width: 100%;
 }
 
-@media (max-width: 1100px) {
-  .finset-kpi-row {
+@media (max-width: 960px) {
+  .finset-kpi-row,
+  .finset-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 600px) {
-  .finset-kpi-row {
+  .finset-kpi-row,
+  .finset-kpi-grid {
     grid-template-columns: 1fr;
   }
 }

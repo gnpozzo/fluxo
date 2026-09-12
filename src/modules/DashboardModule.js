@@ -441,40 +441,6 @@ export class DashboardModule extends BaseModule {
               </div>
             </div>
 
-            <!-- Card 4: Objetivo de Ahorro / Meta Activa -->
-            <div class="finset-kpi-card" id="dash-kpi-card-meta" style="cursor:pointer;" title="Clic para configurar tu objetivo de ahorro">
-              <div class="finset-kpi-header">
-                <div class="finset-kpi-title-wrap">
-                  <div class="finset-kpi-icon icon-purple">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                  </div>
-                  <div style="display:flex; flex-direction:column; line-height:1.2;">
-                    <span class="finset-kpi-title" id="dash-meta-kpi-title">Objetivo de Ahorro</span>
-                    <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3);" id="dash-meta-kpi-target">Meta: $ 3.000.000</span>
-                  </div>
-                </div>
-                <button class="finset-arrow-btn" id="btn-edit-meta" title="Configurar objetivo de ahorro">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                </button>
-              </div>
-
-              <div class="finset-kpi-value" id="dash-meta-kpi-val">$ 0,00</div>
-
-              <!-- Progress Bar -->
-              <div class="finset-goal-progress-wrap">
-                <div class="finset-goal-progress-bar">
-                  <div class="finset-goal-progress-fill" id="dash-meta-progress-fill" style="width: 0%;"></div>
-                </div>
-              </div>
-
-              <div class="finset-kpi-footer">
-                <span class="finset-kpi-subtext" id="dash-meta-kpi-sub">0% completado</span>
-                <span class="finset-trend-pill trend-neutral" id="dash-meta-deadline-pill" style="font-size:0.68rem; padding:2px 8px;">
-                  <span id="dash-meta-deadline-text">Sin vencimiento</span>
-                </span>
-              </div>
-            </div>
-
           </div>
 
           <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Money Flow + Top Categories) ═══ -->

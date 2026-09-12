@@ -212,31 +212,6 @@ export class AhorroModule extends BaseModule {
           </div>
         </div>
 
-        <!-- Card 4: Metas / Alcancías -->
-        <div class="finset-kpi-card" id="aho-card-kpi-meta">
-          <div class="finset-kpi-header">
-            <div class="finset-kpi-title-wrap">
-              <div class="finset-kpi-icon icon-yellow">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-              </div>
-              <div style="display:flex; flex-direction:column; line-height:1.2;">
-                <span class="finset-kpi-title">Alcancías Activas</span>
-                <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3);">Objetivos de ahorro</span>
-              </div>
-            </div>
-          </div>
-          <div class="finset-kpi-value" id="aho-kpi-val-meta" style="font-size:1.35rem;">—</div>
-          <div class="finset-goal-progress-wrap">
-            <div class="finset-goal-progress-bar">
-              <div class="finset-goal-progress-fill" id="aho-meta-progress-fill" style="width: 50%; background: var(--verde);"></div>
-            </div>
-          </div>
-          <div class="finset-kpi-footer">
-            <span class="finset-kpi-subtext" id="aho-kpi-sub-meta">Depósitos este mes</span>
-            <span class="finset-trend-pill trend-up"><span>Alcancía</span></span>
-          </div>
-        </div>
-
       </div>
 
       <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Money Flow + Distribución por Alcancías) ═══ -->
@@ -285,48 +260,106 @@ export class AhorroModule extends BaseModule {
 
       </div>
 
-      <!-- ═══ ROW 3: OPERATIONS & DRILLDOWN (Grilla de Movimientos de Ahorro) ═══ -->
-      <div class="finset-card" id="aho-widget-movimientos">
-        <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
-          <div class="dh-drilldown-left" style="min-width:200px;">
-            <div class="dh-drilldown-badge badge-all" id="aho-movimientos-badge">
-              <span class="dh-badge-dot"></span>
-              <span class="dh-badge-title" id="aho-movimientos-title">Todos los Movimientos de Ahorro</span>
+      <!-- ═══ ROW 3: OPERATIONS & DRILLDOWN (Grilla 60% + Alcancías 40%) ═══ -->
+      <div class="finset-grid-2col" style="margin-bottom: 24px;">
+        
+        <!-- Left (60%): Grilla de Movimientos (Mismo ancho que Movimientos) -->
+        <div class="finset-card" id="aho-widget-movimientos">
+          <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+            <div class="dh-drilldown-left" style="min-width:200px;">
+              <div class="dh-drilldown-badge badge-all" id="aho-movimientos-badge">
+                <span class="dh-badge-dot"></span>
+                <span class="dh-badge-title" id="aho-movimientos-title">Todos los Movimientos de Ahorro</span>
+              </div>
+              <div class="dh-drilldown-summary" id="aho-movimientos-summary">—</div>
             </div>
-            <div class="dh-drilldown-summary" id="aho-movimientos-summary">—</div>
+
+            <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
+              <!-- Selector Moneda (ARS / USD) -->
+              <div class="currency-pills" id="aho-currency-switch" style="display:flex;">
+                <button class="currency-pill active" id="aho-btn-ars" data-moneda="ARS">ARS</button>
+                <button class="currency-pill" id="aho-btn-usd" data-moneda="USD">USD</button>
+              </div>
+
+              <!-- Pestañas de Filtrado -->
+              <div class="dh-filter-tabs" id="aho-movimientos-tabs">
+                <button class="dh-tab-btn active" data-filter="ALL" id="aho-tab-all">Todos</button>
+                <button class="dh-tab-btn" data-filter="DEPOSITO" id="aho-tab-deposito">Depósitos</button>
+                <button class="dh-tab-btn" data-filter="RETIRO" id="aho-tab-retiro">Retiros</button>
+              </div>
+
+              <!-- Buscador -->
+              <div class="dh-search-box" style="margin:0;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="aho-search-input" placeholder="Buscar ahorro..." class="finset-search-input" style="width:140px;">
+              </div>
+
+              <!-- Único Botón Contextual Primario -->
+              <button class="btn btn-primary btn-sm" id="aho-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>+ Movimiento</span>
+              </button>
+            </div>
           </div>
 
-          <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
-            <!-- Selector Moneda (ARS / USD) -->
-            <div class="currency-pills" id="aho-currency-switch" style="display:flex;">
-              <button class="currency-pill active" id="aho-btn-ars" data-moneda="ARS">ARS</button>
-              <button class="currency-pill" id="aho-btn-usd" data-moneda="USD">USD</button>
-            </div>
-
-            <!-- Pestañas de Filtrado -->
-            <div class="dh-filter-tabs" id="aho-movimientos-tabs">
-              <button class="dh-tab-btn active" data-filter="ALL" id="aho-tab-all">Todos</button>
-              <button class="dh-tab-btn" data-filter="DEPOSITO" id="aho-tab-deposito">Depósitos</button>
-              <button class="dh-tab-btn" data-filter="RETIRO" id="aho-tab-retiro">Retiros</button>
-            </div>
-
-            <!-- Buscador -->
-            <div class="dh-search-box" style="margin:0;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="aho-search-input" placeholder="Buscar ahorro..." class="finset-search-input" style="width:140px;">
-            </div>
-
-            <!-- Único Botón Contextual Primario -->
-            <button class="btn btn-primary btn-sm" id="aho-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>+ Movimiento</span>
-            </button>
+          <!-- Lista de movimientos interactiva estilo movimientos -->
+          <div class="dh-drilldown-list dh-side-main" id="aho-movimientos-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
           </div>
         </div>
 
-        <!-- Lista de movimientos interactiva estilo movimientos -->
-        <div class="dh-drilldown-list dh-side-main" id="aho-movimientos-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
+        <!-- Right (40%): Mis Alcancías & Metas -->
+        <div class="finset-card" id="aho-widget-side-panel">
+          <div class="finset-card-header" style="justify-content:space-between; align-items:center;">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Mis Alcancías</h3>
+              <span class="finset-card-subtitle">Objetivos de ahorro activos</span>
+            </div>
+          </div>
+
+          <div class="finset-modules-stack" style="margin-top: 10px;">
+            <!-- 1. Alcancías Activas -->
+            <div class="finset-submodule-card">
+              <div class="fsc-header">
+                <div class="fsc-tag-wrap">
+                  <div class="fsc-icon-box icon-yellow">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                  </div>
+                  <div class="fsc-text-block">
+                    <div class="fsc-title">Alcancías Activas</div>
+                    <div class="fsc-sub" id="aho-kpi-sub-meta">Depósitos este mes</div>
+                  </div>
+                </div>
+                <div class="fsc-right-block">
+                  <span class="fsc-value" id="aho-kpi-val-meta">—</span>
+                </div>
+              </div>
+              <div class="finset-goal-progress-wrap" style="margin-top:8px;">
+                <div class="finset-goal-progress-bar">
+                  <div class="finset-goal-progress-fill" id="aho-meta-progress-fill" style="width: 50%; background: var(--verde);"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Patrimonio en Alcancías -->
+            <div class="finset-submodule-card">
+              <div class="fsc-header">
+                <div class="fsc-tag-wrap">
+                  <div class="fsc-icon-box icon-purple">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+                  </div>
+                  <div class="fsc-text-block">
+                    <div class="fsc-title">Reserva Total</div>
+                    <div class="fsc-sub">Pesos + Dólares</div>
+                  </div>
+                </div>
+                <div class="fsc-right-block">
+                  <span class="fsc-value" id="aho-subcard-reserva">$ 0,00</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
       </div>
     `;
   }

@@ -184,14 +184,14 @@
         <div class="app-header-actions">
           <!-- Quick Add Dropdown Button -->
           <div class="topbar-quick-add-wrap" id="topbar-quick-add-wrap">
-            <button class="btn btn-primary btn-sm topbar-quick-add" id="topbar-btn-nuevo" aria-haspopup="true" aria-expanded="false" title="Registrar nuevo movimiento">
+            <button class="btn btn-primary btn-sm topbar-quick-add" id="topbar-btn-nuevo" onclick="window.toggleQuickAddMenu(event)" aria-haspopup="true" aria-expanded="false" title="Registrar nuevo movimiento">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               <span>Nuevo</span>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="topbar-qa-chevron"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="topbar-quick-add-menu hidden" id="topbar-quick-add-menu">
               <div class="qa-menu-header">¿Qué querés registrar?</div>
-              <button class="qa-menu-item" data-qa-action="egreso">
+              <button class="qa-menu-item" onclick="window.handleQuickAdd('egreso')" data-qa-action="egreso">
                 <span class="qa-item-icon icon-red">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
                 </span>
@@ -200,7 +200,7 @@
                   <span class="qa-item-sub">Efectivo, débito o transferencia</span>
                 </div>
               </button>
-              <button class="qa-menu-item" data-qa-action="ingreso">
+              <button class="qa-menu-item" onclick="window.handleQuickAdd('ingreso')" data-qa-action="ingreso">
                 <span class="qa-item-icon icon-green">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                 </span>
@@ -209,7 +209,7 @@
                   <span class="qa-item-sub">Sueldo, cobro o rendimientos</span>
                 </div>
               </button>
-              <button class="qa-menu-item" data-qa-action="tarjeta">
+              <button class="qa-menu-item" onclick="window.handleQuickAdd('tarjeta')" data-qa-action="tarjeta">
                 <span class="qa-item-icon icon-blue">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
                 </span>
@@ -218,7 +218,7 @@
                   <span class="qa-item-sub">Pago único o cuotas futuras</span>
                 </div>
               </button>
-              <button class="qa-menu-item" data-qa-action="cc">
+              <button class="qa-menu-item" onclick="window.handleQuickAdd('cc')" data-qa-action="cc">
                 <span class="qa-item-icon icon-purple">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </span>
@@ -227,7 +227,7 @@
                   <span class="qa-item-sub">División de gastos con contactos</span>
                 </div>
               </button>
-              <button class="qa-menu-item" data-qa-action="ahorro">
+              <button class="qa-menu-item" onclick="window.handleQuickAdd('ahorro')" data-qa-action="ahorro">
                 <span class="qa-item-icon icon-yellow">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
                 </span>
@@ -236,7 +236,7 @@
                   <span class="qa-item-sub">Depósito o retiro en alcancía</span>
                 </div>
               </button>
-              <button class="qa-menu-item" data-qa-action="inversion">
+              <button class="qa-menu-item" onclick="window.handleQuickAdd('inversion')" data-qa-action="inversion">
                 <span class="qa-item-icon icon-cyan">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 </span>
@@ -561,6 +561,70 @@
       // --- Config header button (same as sidebar Ajustes) ---
       document.getElementById('btn-admin-header')?.addEventListener('click', () => {
         document.getElementById('btn-admin')?.click();
+      });
+
+      // --- Topbar Quick Add (+ Nuevo) Menu ---
+      window.toggleQuickAddMenu = function(e) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        const wrap = document.getElementById('topbar-quick-add-wrap');
+        const menu = document.getElementById('topbar-quick-add-menu');
+        const btn = document.getElementById('topbar-btn-nuevo');
+        if (!menu) return;
+        const isHidden = menu.classList.contains('hidden');
+        if (isHidden) {
+          menu.classList.remove('hidden');
+          wrap?.classList.add('open');
+          btn?.setAttribute('aria-expanded', 'true');
+        } else {
+          menu.classList.add('hidden');
+          wrap?.classList.remove('open');
+          btn?.setAttribute('aria-expanded', 'false');
+        }
+      };
+
+      window.handleQuickAdd = function(action) {
+        const wrap = document.getElementById('topbar-quick-add-wrap');
+        const menu = document.getElementById('topbar-quick-add-menu');
+        const btn = document.getElementById('topbar-btn-nuevo');
+        menu?.classList.add('hidden');
+        wrap?.classList.remove('open');
+        btn?.setAttribute('aria-expanded', 'false');
+
+        if (!window.App || !window.App.Modules) return;
+
+        switch (action) {
+          case 'egreso':
+            window.App.Modules.movimientos?.abrirAlta('EGRESO');
+            break;
+          case 'ingreso':
+            window.App.Modules.movimientos?.abrirAlta('INGRESO');
+            break;
+          case 'tarjeta':
+            window.App.Modules.tarjetas?.abrirAlta();
+            break;
+          case 'cc':
+            window.App.Modules.cc?.abrirAlta();
+            break;
+          case 'ahorro':
+            window.App.Modules.ahorro?.abrirAlta('DEPOSITO');
+            break;
+          case 'inversion':
+            window.App.Modules.inversiones?.abrirAlta('COMPRA');
+            break;
+        }
+      };
+
+      document.addEventListener('click', (e) => {
+        const wrap = document.getElementById('topbar-quick-add-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+          const menu = document.getElementById('topbar-quick-add-menu');
+          menu?.classList.add('hidden');
+          wrap?.classList.remove('open');
+          document.getElementById('topbar-btn-nuevo')?.setAttribute('aria-expanded', 'false');
+        }
       });
     })();
     </script>

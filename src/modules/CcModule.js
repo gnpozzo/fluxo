@@ -122,9 +122,29 @@ export class CCModule extends BaseModule {
       subNetoEl.textContent = saldoNeto > 0 ? 'Te deben' : (saldoNeto < 0 ? 'Debes liquidar' : 'Cuentas al día');
     }
 
-    // 4. Total Compartido
+    // 4. Total Compartido & Subcards
     const valTotalEl = document.getElementById('cc-kpi-val-total');
     if (valTotalEl) valTotalEl.textContent = App.Utils.formatearMoneda(totalCompartido);
+
+    const subTotalEl = document.getElementById('cc-subcard-total');
+    if (subTotalEl) subTotalEl.textContent = App.Utils.formatearMoneda(totalCompartido);
+
+    const subLiqEl = document.getElementById('cc-subcard-liquidacion');
+    if (subLiqEl) {
+      if (saldoNeto > 0) {
+        subLiqEl.innerHTML = `<span style="color:var(--verde);font-weight:700;">+${App.Utils.formatearMoneda(saldoNeto)}</span> (A favor)`;
+      } else if (saldoNeto < 0) {
+        subLiqEl.innerHTML = `<span style="color:var(--rojo);font-weight:700;">-${App.Utils.formatearMoneda(Math.abs(saldoNeto))}</span> (A pagar)`;
+      } else {
+        subLiqEl.innerHTML = `<span style="color:var(--texto-2);font-weight:700;">$ 0,00</span> (Al día)`;
+      }
+    }
+
+    const subContEl = document.getElementById('cc-subcard-contactos');
+    if (subContEl) {
+      const distinctUsers = new Set(this.#allConsumos.map(c => c.contacto_nombre || c.usuario_nombre).filter(Boolean));
+      subContEl.textContent = distinctUsers.size > 0 ? `${distinctUsers.size} activos` : 'Sin contactos';
+    }
 
     this.#filterConsumos();
     this.#renderMoneyFlowChart();
@@ -139,7 +159,7 @@ export class CCModule extends BaseModule {
     if (!vista) return;
 
     vista.innerHTML = `
-      <!-- ═══ ROW 1: SCORECARDS FINSET ═══ -->
+      <!-- ═══ ROW 1: SCORECARDS FINSET (3 Columns) ═══ -->
       <div class="finset-kpi-grid" id="cc-scorecards-grid" style="margin-bottom: 24px;">
         
         <!-- Card 1: Mis Gastos -->
@@ -199,23 +219,6 @@ export class CCModule extends BaseModule {
           </div>
         </div>
 
-        <!-- Card 4: Total Conjunto -->
-        <div class="finset-kpi-card" id="cc-card-kpi-total">
-          <div class="finset-kpi-header">
-            <div class="finset-kpi-title-wrap">
-              <div class="finset-kpi-icon icon-yellow">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-              </div>
-              <span class="finset-kpi-title">Total Compartido</span>
-            </div>
-          </div>
-          <div class="finset-kpi-value" id="cc-kpi-val-total">$ 0,00</div>
-          <div class="finset-kpi-footer">
-            <span class="finset-kpi-subtext">Volumen total conjunto</span>
-            <span class="finset-trend-pill trend-up"><span>100% Gastos</span></span>
-          </div>
-        </div>
-
       </div>
 
       <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Money Flow + Top Categorías) ═══ -->
@@ -264,39 +267,110 @@ export class CCModule extends BaseModule {
 
       </div>
 
-      <!-- ═══ ROW 3: OPERATIONS & DRILLDOWN (Grilla de Gastos Compartidos) ═══ -->
-      <div class="finset-card" id="cc-widget-consumos">
-        <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
-          <div class="dh-drilldown-left" style="min-width:200px;">
-            <div class="dh-drilldown-badge badge-all" id="cc-consumos-badge">
-              <span class="dh-badge-dot"></span>
-              <span class="dh-badge-title" id="cc-consumos-title">Todos los Gastos Compartidos</span>
+      <!-- ═══ ROW 3: OPERATIONS & DRILLDOWN (Grilla 60% + Liquidación 40%) ═══ -->
+      <div class="finset-grid-2col" style="margin-bottom: 24px;">
+        
+        <!-- Left (60%): Grilla de Gastos (Mismo ancho que Movimientos) -->
+        <div class="finset-card" id="cc-widget-consumos">
+          <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+            <div class="dh-drilldown-left" style="min-width:200px;">
+              <div class="dh-drilldown-badge badge-all" id="cc-consumos-badge">
+                <span class="dh-badge-dot"></span>
+                <span class="dh-badge-title" id="cc-consumos-title">Todos los Gastos Compartidos</span>
+              </div>
+              <div class="dh-drilldown-summary" id="cc-consumos-summary">—</div>
             </div>
-            <div class="dh-drilldown-summary" id="cc-consumos-summary">—</div>
+
+            <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
+              <div class="dh-filter-tabs" id="cc-consumos-tabs">
+                <button class="dh-tab-btn active" data-filter="ALL" id="cc-tab-all">Todos</button>
+                <button class="dh-tab-btn" data-filter="YO" id="cc-tab-yo">Pagué Yo</button>
+                <button class="dh-tab-btn" data-filter="OTRO" id="cc-tab-otro">Pagó Contacto</button>
+              </div>
+
+              <div class="dh-search-box" style="margin:0;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="cc-consumos-search" placeholder="Buscar gasto..." class="finset-search-input" style="width:140px;">
+              </div>
+
+              <button class="btn btn-primary btn-sm" id="cc-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Nuevo Gasto</span>
+              </button>
+            </div>
           </div>
 
-          <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
-            <div class="dh-filter-tabs" id="cc-consumos-tabs">
-              <button class="dh-tab-btn active" data-filter="ALL" id="cc-tab-all">Todos</button>
-              <button class="dh-tab-btn" data-filter="YO" id="cc-tab-yo">Pagué Yo</button>
-              <button class="dh-tab-btn" data-filter="OTRO" id="cc-tab-otro">Pagó Contacto</button>
-            </div>
-
-            <div class="dh-search-box" style="margin:0;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="cc-consumos-search" placeholder="Buscar gasto..." class="finset-search-input" style="width:140px;">
-            </div>
-
-            <button class="btn btn-primary btn-sm" id="cc-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Nuevo Gasto</span>
-            </button>
+          <!-- Lista de gastos interactiva estilo movimientos -->
+          <div class="dh-drilldown-list dh-side-main" id="cc-consumos-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
           </div>
         </div>
 
-        <!-- Lista de gastos interactiva estilo movimientos -->
-        <div class="dh-drilldown-list dh-side-main" id="cc-consumos-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
+        <!-- Right (40%): Panel de Liquidación & Contactos -->
+        <div class="finset-card" id="cc-widget-side-panel">
+          <div class="finset-card-header" style="justify-content:space-between; align-items:center;">
+            <div class="finset-card-title-wrap">
+              <h3 class="finset-card-title">Liquidación & Contactos</h3>
+              <span class="finset-card-subtitle">Balances y cuentas claras</span>
+            </div>
+          </div>
+
+          <div class="finset-modules-stack" style="margin-top: 10px;">
+            <!-- 1. Total Compartido -->
+            <div class="finset-submodule-card">
+              <div class="fsc-header">
+                <div class="fsc-tag-wrap">
+                  <div class="fsc-icon-box icon-yellow">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                  </div>
+                  <div class="fsc-text-block">
+                    <div class="fsc-title">Total Compartido</div>
+                    <div class="fsc-sub">Volumen total conjunto</div>
+                  </div>
+                </div>
+                <div class="fsc-right-block">
+                  <span class="fsc-value" id="cc-subcard-total">$ 0,00</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Estado de Liquidación -->
+            <div class="finset-submodule-card">
+              <div class="fsc-header">
+                <div class="fsc-tag-wrap">
+                  <div class="fsc-icon-box icon-green">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                  </div>
+                  <div class="fsc-text-block">
+                    <div class="fsc-title">Estado de Liquidación</div>
+                    <div class="fsc-sub">Balance neto del período</div>
+                  </div>
+                </div>
+                <div class="fsc-right-block">
+                  <span class="fsc-value" id="cc-subcard-liquidacion" style="font-size:0.85rem;">Al día</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Contactos Activos -->
+            <div class="finset-submodule-card">
+              <div class="fsc-header">
+                <div class="fsc-tag-wrap">
+                  <div class="fsc-icon-box icon-purple">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
+                  <div class="fsc-text-block">
+                    <div class="fsc-title">Contactos con División</div>
+                    <div class="fsc-sub">Personas involucradas</div>
+                  </div>
+                </div>
+                <div class="fsc-right-block">
+                  <span class="fsc-value" id="cc-subcard-contactos">0 activos</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
       </div>
     `;
   }
