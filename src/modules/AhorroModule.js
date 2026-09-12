@@ -990,13 +990,13 @@ export class AhorroModule extends BaseModule {
     }
 
     const payload = {
-      idCuenta    : App.Store.cuenta,
-      tipo        : tipo,
-      fecha       : d.fecha,
-      moneda      : d.moneda,
-      idSubcuenta : d.id_subcuenta,
-      importe     : Number(d.importe),
-      descripcion : d.descripcion || ''
+      idCuenta       : App.Store.cuenta,
+      tipo_transfer  : tipo,
+      fecha          : d.fecha,
+      moneda         : d.moneda,
+      idSubcuenta    : d.id_subcuenta,
+      importe        : Number(d.importe),
+      descripcion    : d.descripcion || ''
     };
 
     modal.setLoading(true);
@@ -1022,12 +1022,12 @@ export class AhorroModule extends BaseModule {
       confirmLabel: 'Eliminar',
       danger      : true,
       onConfirm   : async () => {
-        try {
-          await this._handleDelete(row.id_ahorro);
-          this.destruir();
-          await this.cargar();
-        } catch (_) {}
-      }
+         try {
+           await this._handleDelete(row.id_ahorro);
+         } catch (_) {} finally {
+           confirmModal.close();
+         }
+       }
     });
   }
 

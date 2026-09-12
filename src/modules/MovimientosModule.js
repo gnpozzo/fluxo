@@ -934,8 +934,10 @@ export class MovimientosModule extends BaseModule {
           try {
             await this._handleDelete(row.id_movimiento);
           } catch (err) {
-          if (err) App.Toast.error(err.message || 'Error al eliminar.');
-        }
+            if (err) App.Toast.error(err.message || 'Error al eliminar.');
+          } finally {
+            confirmModal.close();
+          }
         }
       });
     } else {

@@ -755,9 +755,9 @@ export class TarjetasModule extends BaseModule {
       onConfirm   : async () => {
         try {
           await this._handleDelete(row.id_consumo_tc);
-          this.destruir();
-          await this.cargar();
-        } catch (_) {}
+        } catch (_) {} finally {
+          confirmModal.close();
+        }
       }
     });
   }

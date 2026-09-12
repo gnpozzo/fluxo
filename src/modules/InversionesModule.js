@@ -1612,6 +1612,8 @@ export class InversionesModule extends BaseModule {
           await this.cargar();
         } catch (err) {
           App.Toast.error('Error: ' + err.message);
+        } finally {
+          m.close();
         }
       }
     });
