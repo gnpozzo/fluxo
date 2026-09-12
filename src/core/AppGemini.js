@@ -401,6 +401,72 @@ export class GeminiChatController {
       }
     }
 
+    // 1b. Extraer bloque de acción para definir meta de ahorro: [ACCION_DEFINIR_META: {...}]
+    let metaActionHtml = '';
+    const metaActionMatch = cleanText.match(/\[ACCION_DEFINIR_META:\s*(\{.+?\})\]/s);
+    if (metaActionMatch) {
+      try {
+        const metaData = JSON.parse(metaActionMatch[1]);
+        const titulo = metaData.titulo || 'Objetivo de Ahorro';
+        const monto = Number(metaData.montoObjetivo) || 3000000;
+        const fecha = metaData.fechaLimite || null;
+
+        const objMeta = { titulo, montoObjetivo: monto, fechaLimite: fecha };
+        localStorage.setItem('fluxo_meta_ahorro', JSON.stringify(objMeta));
+        if (window.App?.Events) {
+          window.App.Events.emit('meta:updated', objMeta);
+        }
+
+        const fechaLabel = fecha ? `Vence: ${fecha.split('-').reverse().join('/')}` : 'Objetivo definitivo';
+        metaActionHtml = `
+          <div class="gemini-meta-card" style="margin-top:14px; padding:12px 14px; background:linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%); border:1.5px solid rgba(124, 58, 237, 0.3); border-radius:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:1.4rem;">🎯</span>
+              <div>
+                <strong style="display:block; color:var(--texto); font-size:0.9rem;">Objetivo Actualizado en Dashboard</strong>
+                <span style="font-size:0.78rem; color:var(--texto-2);">${App.Utils.escapeHtml(titulo)} • Meta: <strong>${App.Utils.formatearMoneda(monto)}</strong> • ${fechaLabel}</span>
+              </div>
+            </div>
+          </div>
+        `;
+        cleanText = cleanText.replace(metaActionMatch[0], '').trim();
+      } catch (err) {
+        console.warn('[FluxoAI] Error parsing ACCION_DEFINIR_META:', err);
+      }
+    }
+
+    // 1c. Extraer bloque de acción para definir tope TC: [ACCION_DEFINIR_TOPE_TC: {...}]
+    let topeActionHtml = '';
+    const topeActionMatch = cleanText.match(/\[ACCION_DEFINIR_TOPE_TC:\s*(\{.+?\})\]/s);
+    if (topeActionMatch) {
+      try {
+        const topeData = JSON.parse(topeActionMatch[1]);
+        const topePct = Number(topeData.topePorcentaje) || 25;
+        const topeMonto = topeData.topeMonto ? Number(topeData.topeMonto) : null;
+
+        const objTope = { topePorcentaje: topePct, topeMonto };
+        localStorage.setItem('fluxo_tope_tc', JSON.stringify(objTope));
+        if (window.App?.Events) {
+          window.App.Events.emit('tope_tc:updated', objTope);
+        }
+
+        topeActionHtml = `
+          <div class="gemini-meta-card" style="margin-top:14px; padding:12px 14px; background:linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(59, 130, 246, 0.05) 100%); border:1.5px solid rgba(16, 185, 129, 0.3); border-radius:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:1.4rem;">💳</span>
+              <div>
+                <strong style="display:block; color:var(--texto); font-size:0.9rem;">Tope de Tarjeta de Crédito Actualizado</strong>
+                <span style="font-size:0.78rem; color:var(--texto-2);">Límite fijado: <strong>${topePct}%</strong> de tus ingresos mensuales</span>
+              </div>
+            </div>
+          </div>
+        `;
+        cleanText = cleanText.replace(topeActionMatch[0], '').trim();
+      } catch (err) {
+        console.warn('[FluxoAI] Error parsing ACCION_DEFINIR_TOPE_TC:', err);
+      }
+    }
+
     // 2. Extraer bloque de opciones interactivas si existe
     let optionsHtml = '';
     const optionsMatch = cleanText.match(/\[OPCIONES:\s*(.+?)\]/i);
@@ -493,7 +559,7 @@ export class GeminiChatController {
       }
     }
 
-    return finalHtml + optionsHtml + importActionHtml;
+    return finalHtml + optionsHtml + importActionHtml + metaActionHtml + topeActionHtml;
   }
 
   async #handleUserMessage(message) {
@@ -537,6 +603,15 @@ export class GeminiChatController {
     this.#scrollToBottom();
 
     try {
+      let metaStorage = null;
+      let topeStorage = null;
+      try {
+        const sM = localStorage.getItem('fluxo_meta_ahorro');
+        if (sM) metaStorage = JSON.parse(sM);
+        const sT = localStorage.getItem('fluxo_tope_tc');
+        if (sT) topeStorage = JSON.parse(sT);
+      } catch (_) {}
+
       const payload = {
         message: message,
         chatHistory: this.#chatHistory.slice(0, -1),
@@ -544,6 +619,8 @@ export class GeminiChatController {
         mes: App.Store?.mes || null,
         globalCurrency: App.Store?.globalCurrency || 'ARS',
         riskProfile: this.#riskProfile,
+        metaAhorro: metaStorage,
+        topeTC: topeStorage,
         fileBase64: fileInfo?.base64 || null,
         mimeType: fileInfo?.type || null,
         fileName: fileInfo?.name || null

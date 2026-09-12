@@ -13,6 +13,8 @@ export default async function handler(req, res) {
       globalCurrency = 'ARS',
       riskProfile = 'MODERADO', 
       projectGoal = null,
+      metaAhorro = null,
+      topeTC = null,
       fileBase64 = null,
       mimeType = null,
       fileName = null
@@ -37,6 +39,12 @@ export default async function handler(req, res) {
       egresosMes: 0,
       gastosPorCategoria: {},
       gastosRecurrentes: [],
+      gastosFijosTotal: 0,
+      gastosVariablesTotal: 0,
+      margenAhorroReal: 0,
+      consumoTCPctSobreIngresos: 0,
+      metaAhorroActual: metaAhorro || null,
+      topeTCActual: topeTC || null,
       deudaTarjetasTotal: 0,
       ahorroTotalARS: 0,
       ahorroTotalUSD: 0,
@@ -97,6 +105,17 @@ export default async function handler(req, res) {
               } else {
                 financialContext.egresosMes += imp;
                 financialContext.gastosPorCategoria[cat] = (financialContext.gastosPorCategoria[cat] || 0) + imp;
+                
+                const esFijo = (mov.tipo_egreso === 'RECURRENTE') || 
+                  /impuesto|servicio|luz|gas|agua|internet|telef|cable|expensa|alquiler|vivienda|colegio|educaci|cuota social|prepaga|obra social|salud|seguro/i.test(cat) ||
+                  /alquiler|expensa|seguro|colegio|prepaga|osde|swiss medical|galeno|edenor|edesur|metrogas|aysa|fibertel|telecentro|flow|personal flow/i.test(mov.descripcion || '');
+
+                if (esFijo) {
+                  financialContext.gastosFijosTotal += imp;
+                } else {
+                  financialContext.gastosVariablesTotal += imp;
+                }
+
                 if (mov.tipo_egreso === 'RECURRENTE' || mov.tipo_egreso === 'CUOTA') {
                   financialContext.gastosRecurrentes.push({
                     descripcion: mov.descripcion,
@@ -107,6 +126,8 @@ export default async function handler(req, res) {
                 }
               }
             });
+
+            financialContext.margenAhorroReal = Math.max(0, financialContext.ingresosMes - financialContext.gastosFijosTotal);
 
             // Desglose analítico con doble métrica: % sobre gastos y % sobre ingresos
             const desgloseCats = {};
@@ -152,6 +173,9 @@ export default async function handler(req, res) {
 
           if (tcConsumos) {
             financialContext.deudaTarjetasTotal = tcConsumos.reduce((acc, c) => acc + Number(c.importe || 0), 0);
+            financialContext.consumoTCPctSobreIngresos = financialContext.ingresosMes > 0 
+              ? Math.round((financialContext.deudaTarjetasTotal / financialContext.ingresosMes) * 100 * 10) / 10 
+              : 0;
           }
 
           // Ahorros
@@ -288,13 +312,35 @@ TUS PRINCIPIOS Y PERSONALIDAD:
      * Seguro del Auto: Se categoriza SIEMPRE como "Transporte" y se imputa a la cuenta "Personal" (habitualmente en ciclos de 3 cuotas, póliza 8758204).
    - Cuando analices resúmenes, planillas o archivos adjuntos, debes dirimir inteligentemente que se trata de la continuidad del consumo del mes anterior, asignando la categoría y cuenta correspondiente a cada póliza sin duplicar ni confundirlas.
 
+6. PLANIFICACIÓN DE METAS DE AHORRO Y SALUD FINANCIERA (AUDITORÍA FIJOS VS VARIABLES):
+   - Cuando el usuario converse sobre definir, ajustar o evaluar una meta de ahorro (ej. "ahorrar 3.000.000", "armar fondo de emergencia", "ahorro para vacaciones"):
+     a) Realiza una auditoría rigurosa distinguiendo GASTOS FIJOS INELUDIBLES (impuestos, servicios, vivienda/alquiler, educación, salud, seguros) de sus GASTOS VARIABLES (salidas, compras, ocio).
+     b) Advierte contundentemente que los gastos fijos NO se pueden recortar para ahorrar. El ahorro debe provenir de optimizar gastos variables o del margen real libre.
+     c) Evalúa la viabilidad temporal del objetivo (ej. calculando cuántos meses tomará según su margen de ahorro mensual real) y cuestiona plazos irreales proponiendo alternativas alcanzables o metas escalonadas.
+     d) Cuando definan o acuerden el objetivo con el usuario (o el usuario te pida fijarlo), DEBES EMITIR AL FINAL DE TU RESPUESTA la siguiente acción técnica para actualizar el dashboard inmediatamente:
+     [ACCION_DEFINIR_META: {"titulo": "Objetivo acordado", "montoObjetivo": 3000000, "fechaLimite": "YYYY-MM-DD"}]
+     (Si el objetivo no tiene vencimiento o es definitivo, coloca "fechaLimite": null).
+
+7. CONTROL DE SALUD FINANCIERA Y TOPE DE TARJETA DE CRÉDITO:
+   - Monitorea constantemente los consumos en tarjetas de crédito respecto a los ingresos.
+   - Si el consumo en tarjeta supera o se aproxima al tope (por defecto 25% de ingresos), advierte proactivamente al usuario sobre el riesgo de liquidez y el alto costo de financiamiento.
+   - Si el usuario acuerda o te pide fijar o modificar su tope de tarjeta (ej. "fijar un tope del 25%"), DEBES EMITIR AL FINAL DE TU RESPUESTA la siguiente acción técnica:
+     [ACCION_DEFINIR_TOPE_TC: {"topePorcentaje": 25, "topeMonto": null}]
+
 DATOS DEL USUARIO Y CONTEXTO PATRIMONIAL ACTUAL:
 - Cuenta Activa: ${financialContext.cuentaNombre} (ID: ${financialContext.cuentaId}) | Período: ${mes || 'Actual'} | Moneda base: ${globalCurrency}
 - Cuentas del Usuario: ${cuentasTxt}
 - Perfil de Riesgo: ${riskProfile}
 - Ingresos del Mes: $${financialContext.ingresosMes.toLocaleString('es-AR')} | Egresos Totales: $${financialContext.egresosMes.toLocaleString('es-AR')} | Balance Neto: $${balanceMes.toLocaleString('es-AR')}
+- Desglose Fijos vs Variables (Auditoría de Salud Financiera):
+  * Gastos Fijos Ineludibles (Impuestos, Servicios, Alquiler, Educación, Salud, Seguros): $${financialContext.gastosFijosTotal.toLocaleString('es-AR')}
+  * Gastos Variables Discrecionales (Ocio, Salidas, Compras): $${financialContext.gastosVariablesTotal.toLocaleString('es-AR')}
+  * Margen Real de Ahorro (Ingresos - Gastos Fijos): $${financialContext.margenAhorroReal.toLocaleString('es-AR')}
+- Tarjetas de Crédito y Salud Financiera:
+  * Consumo TC este mes: $${financialContext.deudaTarjetasTotal.toLocaleString('es-AR')} (${financialContext.consumoTCPctSobreIngresos}% de ingresos)
+  * Tope TC actual configurado: ${financialContext.topeTCActual?.topePorcentaje || 25}%
+- Meta de Ahorro Activa en Dashboard: ${financialContext.metaAhorroActual ? `${financialContext.metaAhorroActual.titulo} (Meta: $${Number(financialContext.metaAhorroActual.montoObjetivo || 3000000).toLocaleString('es-AR')}${financialContext.metaAhorroActual.fechaLimite ? `, Vence: ${financialContext.metaAhorroActual.fechaLimite}` : ', Sin vencimiento'})` : 'Meta: $ 3.000.000'}
 - Estado de Pagos del Mes: Ya Saldados/Abonados: $${(financialContext.egresosSaldados || 0).toLocaleString('es-AR')} | Pendientes de Pago: $${(financialContext.egresosPendientes || 0).toLocaleString('es-AR')}
-- Deuda en Tarjetas este mes: $${financialContext.deudaTarjetasTotal.toLocaleString('es-AR')}
 - Fondo en Chanchito (Ahorro líquido): $${financialContext.ahorroTotalARS.toLocaleString('es-AR')} ARS | US$ ${financialContext.ahorroTotalUSD.toLocaleString('es-AR')} USD
 - Gastos por Categoría (% sobre gastos y % sobre ingresos): ${JSON.stringify(financialContext.desgloseCategorias || financialContext.gastosPorCategoria, null, 2)}
 - Gastos Recurrentes / Cuotas: ${JSON.stringify(financialContext.gastosRecurrentes.slice(0, 8), null, 2)}

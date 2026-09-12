@@ -26,6 +26,9 @@ export class DashboardModule extends BaseModule {
   #donutMetric = 'gastos'; // 'gastos' | 'ingresos'
   #ahorroTotal = 0;
   #inversionesTotal = 0;
+  #metaAhorro = null;
+  #topeTC = null;
+  #tcConsumosSubtotal = 0;
   #evolucionMensual = [];
   #kpisData = {};
 
@@ -334,6 +337,8 @@ export class DashboardModule extends BaseModule {
     this.#renderMoneyFlowChart();
     this.#renderTopCategoriesWidget();
     this.#renderMovimientos();
+    this.#updateMetaKpi();
+    this.#updateTcLimitKpi();
   }
 
   // --- SECCIÓN 3: BUILD DOM ---
@@ -435,24 +440,36 @@ export class DashboardModule extends BaseModule {
               </div>
             </div>
 
-            <!-- Card 4: Ahorro & Metas -->
-            <div class="finset-kpi-card" id="dash-kpi-card-ahorro">
+            <!-- Card 4: Objetivo de Ahorro / Meta Activa -->
+            <div class="finset-kpi-card" id="dash-kpi-card-meta" style="cursor:pointer;" title="Clic para configurar tu objetivo de ahorro">
               <div class="finset-kpi-header">
                 <div class="finset-kpi-title-wrap">
                   <div class="finset-kpi-icon icon-purple">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                   </div>
-                  <span class="finset-kpi-title">Ahorro & Metas</span>
+                  <div style="display:flex; flex-direction:column; line-height:1.2;">
+                    <span class="finset-kpi-title" id="dash-meta-kpi-title">Objetivo de Ahorro</span>
+                    <span style="font-size:0.68rem; font-weight:600; color:var(--texto-3);" id="dash-meta-kpi-target">Meta: $ 3.000.000</span>
+                  </div>
                 </div>
-                <button class="finset-arrow-btn" id="btn-expand-ahorro" title="Ver alcancías de ahorro">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                <button class="finset-arrow-btn" id="btn-edit-meta" title="Configurar objetivo de ahorro">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 </button>
               </div>
-              <div class="finset-kpi-value" id="dash-ahorro-kpi-val">$ 0,00</div>
+
+              <div class="finset-kpi-value" id="dash-meta-kpi-val">$ 0,00</div>
+
+              <!-- Progress Bar -->
+              <div class="finset-goal-progress-wrap">
+                <div class="finset-goal-progress-bar">
+                  <div class="finset-goal-progress-fill" id="dash-meta-progress-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+
               <div class="finset-kpi-footer">
-                <span class="finset-kpi-subtext">Alcancías y reservas</span>
-                <span class="finset-trend-pill trend-neutral" id="dash-ahorro-trend">
-                  <span>Metas</span>
+                <span class="finset-kpi-subtext" id="dash-meta-kpi-sub">0% completado</span>
+                <span class="finset-trend-pill trend-neutral" id="dash-meta-deadline-pill" style="font-size:0.68rem; padding:2px 8px;">
+                  <span id="dash-meta-deadline-text">Sin vencimiento</span>
                 </span>
               </div>
             </div>
@@ -574,6 +591,17 @@ export class DashboardModule extends BaseModule {
                     </div>
                   </div>
                   <div class="bc-footer" id="dash-tc-subtotal" style="font-size:0.78rem;font-weight:600;color:var(--texto-2);margin-top:4px;">Subtotal: —</div>
+                  
+                  <!-- Credit card limit tracking (Salud financiera) -->
+                  <div class="dash-tc-limit-wrap" id="dash-tc-limit-wrap" style="cursor:pointer;" title="Clic para configurar tu tope de tarjeta de crédito">
+                    <div class="dash-tc-limit-header">
+                      <span style="color:var(--texto-3);">Tope TC (<strong id="dash-tc-limit-pct">25%</strong> de ingresos)</span>
+                      <span id="dash-tc-limit-status" style="font-weight:700; color:var(--verde);">En rango</span>
+                    </div>
+                    <div class="dash-tc-limit-bar-bg">
+                      <div class="dash-tc-limit-bar-fill status-ok" id="dash-tc-limit-bar" style="width: 0%;"></div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- 2. Gastos Compartidos (Cuentas Claras) -->
@@ -597,7 +625,7 @@ export class DashboardModule extends BaseModule {
                   </div>
                 </div>
 
-                <!-- 3. Chanchito (Alcancías / Ahorro) -->
+                <!-- 3. Ahorro (Alcancías / Reservas) -->
                 <div class="finset-submodule-card" id="dash-card-ahorro">
                   <div class="fsc-header">
                     <div class="fsc-tag-wrap">
@@ -605,8 +633,8 @@ export class DashboardModule extends BaseModule {
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
                       </div>
                       <div>
-                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Chanchito (Ahorro)</div>
-                        <div style="font-size:0.72rem;color:var(--texto-3);">Fondo en alcancías para metas</div>
+                        <div style="font-weight:700;font-size:0.85rem;color:var(--texto);">Ahorro</div>
+                        <div style="font-size:0.72rem;color:var(--texto-3);">Fondo en alcancías y reservas</div>
                       </div>
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;">
@@ -695,6 +723,20 @@ export class DashboardModule extends BaseModule {
       document.querySelector('[data-vista="vista-ahorro"]')?.click();
     });
 
+    // Objetivo de Ahorro modal (Card 4)
+    document.getElementById('dash-kpi-card-meta')?.addEventListener('click', () => {
+      this.#abrirModalMetaAhorro();
+    });
+    document.getElementById('btn-edit-meta')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.#abrirModalMetaAhorro();
+    });
+
+    // Tope TC widget modal
+    document.getElementById('dash-tc-limit-wrap')?.addEventListener('click', () => {
+      this.#abrirModalTopeTC();
+    });
+
     // Money Flow switch
     document.getElementById('dash-moneyflow-switch')?.querySelectorAll('.fintech-pill-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -761,6 +803,14 @@ export class DashboardModule extends BaseModule {
     });
     App.Events.on('data:changed', () => {
       this.cargar();
+    });
+    App.Events.on('meta:updated', (meta) => {
+      this.#metaAhorro = meta || this.#getMetaAhorro();
+      this.#updateMetaKpi();
+    });
+    App.Events.on('tope_tc:updated', (tope) => {
+      this.#topeTC = tope || this.#getTopeTC();
+      this.#updateTcLimitKpi();
     });
   }
 
@@ -883,6 +933,10 @@ export class DashboardModule extends BaseModule {
       }
       totalEl.textContent = tText;
     }
+
+    const dolarOficial = App.Store.dolarOficial || 1535;
+    this.#tcConsumosSubtotal = totalGlobal + (totalGlobalUsd * dolarOficial);
+    this.#updateTcLimitKpi();
 
     // Enable arrows if > 1 tarjeta (meaning consolidado + at least 1 tarjeta, or 2+ cards)
     const prevBtn = document.getElementById('dash-tc-prev');
@@ -1135,6 +1189,214 @@ export class DashboardModule extends BaseModule {
     const el = document.getElementById('dash-ahorro-kpi-val');
     const total = (this.#ahorroTotal || 0) + (this.#inversionesTotal || 0);
     if (el) el.textContent = App.Utils.formatearMoneda(total);
+    this.#updateMetaKpi();
+  }
+
+  // --- SECCIÓN 8B-1: OBJETIVO DE AHORRO Y TOPE DE TARJETA ---
+
+  #getMetaAhorro() {
+    if (!this.#metaAhorro) {
+      try {
+        const stored = localStorage.getItem('fluxo_meta_ahorro');
+        if (stored) this.#metaAhorro = JSON.parse(stored);
+      } catch (_) {}
+    }
+    return this.#metaAhorro || {
+      titulo: 'Objetivo de Ahorro',
+      montoObjetivo: 3000000,
+      fechaLimite: null
+    };
+  }
+
+  #saveMetaAhorro(meta) {
+    this.#metaAhorro = meta;
+    try {
+      localStorage.setItem('fluxo_meta_ahorro', JSON.stringify(meta));
+    } catch (_) {}
+    this.#updateMetaKpi();
+    App.Events.emit('meta:updated', meta);
+  }
+
+  #updateMetaKpi() {
+    const meta = this.#getMetaAhorro();
+    const acumulado = (this.#ahorroTotal || 0) + (this.#inversionesTotal || 0);
+    const target = Number(meta.montoObjetivo) > 0 ? Number(meta.montoObjetivo) : 3000000;
+    const pctRaw = (acumulado / target) * 100;
+    const pctClamped = Math.min(Math.max(Math.round(pctRaw), 0), 100);
+
+    const titleEl = document.getElementById('dash-meta-kpi-title');
+    const targetEl = document.getElementById('dash-meta-kpi-target');
+    const valEl = document.getElementById('dash-meta-kpi-val');
+    const fillEl = document.getElementById('dash-meta-progress-fill');
+    const subEl = document.getElementById('dash-meta-kpi-sub');
+    const deadlinePill = document.getElementById('dash-meta-deadline-pill');
+    const deadlineText = document.getElementById('dash-meta-deadline-text');
+
+    if (titleEl) titleEl.textContent = meta.titulo || 'Objetivo de Ahorro';
+    if (targetEl) targetEl.textContent = `Meta: ${App.Utils.formatearMoneda(target)}`;
+    if (valEl) valEl.textContent = App.Utils.formatearMoneda(acumulado);
+    if (fillEl) fillEl.style.width = `${pctClamped}%`;
+    if (subEl) subEl.textContent = `${pctRaw.toFixed(1)}% completado`;
+
+    if (deadlineText) {
+      if (meta.fechaLimite) {
+        const parts = meta.fechaLimite.split('-');
+        if (parts.length === 3) {
+          deadlineText.textContent = `Vence ${parts[2]}/${parts[1]}/${parts[0]}`;
+        } else {
+          deadlineText.textContent = `Vence ${meta.fechaLimite}`;
+        }
+        const isExpired = new Date(meta.fechaLimite) < new Date(new Date().toDateString());
+        if (deadlinePill) {
+          deadlinePill.className = `finset-trend-pill ${isExpired ? 'trend-down' : 'trend-neutral'}`;
+        }
+      } else {
+        deadlineText.textContent = 'Sin vencimiento';
+        if (deadlinePill) deadlinePill.className = 'finset-trend-pill trend-neutral';
+      }
+    }
+  }
+
+  #abrirModalMetaAhorro() {
+    const meta = this.#getMetaAhorro();
+    const modal = new App.Modal('modal-dash-meta-ahorro');
+    const body = `
+      <form id="form-meta-ahorro" style="display:flex; flex-direction:column; gap:14px;">
+        <div class="form-group">
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Título del objetivo</label>
+          <input class="input" type="text" name="titulo" value="${App.Utils.escapeHtml(meta.titulo || 'Objetivo de Ahorro')}" placeholder="Ej: Ahorro para vacaciones, Fondo de emergencia" required>
+        </div>
+        <div class="form-group">
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Monto objetivo (ARS)</label>
+          <input class="input" type="number" name="montoObjetivo" step="1000" min="1" value="${meta.montoObjetivo || 3000000}" required>
+        </div>
+        <div class="form-group">
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Fecha límite (opcional)</label>
+          <input class="input" type="date" name="fechaLimite" value="${meta.fechaLimite || ''}">
+          <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Dejar vacío si no tiene fecha de vencimiento (objetivo definitivo).</span>
+        </div>
+        <div style="background:var(--card-bg, #f8fafc); border:1px solid var(--borde); border-radius:10px; padding:12px; font-size:0.82rem; color:var(--texto-2);">
+          💡 <em>El progreso se mide automáticamente sumando tus fondos en <strong>Ahorro</strong> y el valor de tus <strong>Inversiones</strong>. También puedes definir o ajustar metas conversando con <strong>FluxoAI</strong>.</em>
+        </div>
+      </form>
+    `;
+
+    modal.open({
+      titulo: 'Configurar Objetivo de Ahorro',
+      body,
+      confirmLabel: 'Guardar Meta',
+      onConfirm: (m) => {
+        const fd = new FormData(m.getForm());
+        const titulo = (fd.get('titulo') || '').trim() || 'Objetivo de Ahorro';
+        const montoObjetivo = Number(fd.get('montoObjetivo')) || 3000000;
+        const fechaLimite = fd.get('fechaLimite') || null;
+
+        this.#saveMetaAhorro({ titulo, montoObjetivo, fechaLimite });
+        App.Toast.success('Objetivo de ahorro actualizado.');
+        m.close();
+      }
+    });
+  }
+
+  #getTopeTC() {
+    if (!this.#topeTC) {
+      try {
+        const stored = localStorage.getItem('fluxo_tope_tc');
+        if (stored) this.#topeTC = JSON.parse(stored);
+      } catch (_) {}
+    }
+    return this.#topeTC || {
+      topePorcentaje: 25,
+      topeMonto: null
+    };
+  }
+
+  #saveTopeTC(tope) {
+    this.#topeTC = tope;
+    try {
+      localStorage.setItem('fluxo_tope_tc', JSON.stringify(tope));
+    } catch (_) {}
+    this.#updateTcLimitKpi();
+    App.Events.emit('tope_tc:updated', tope);
+  }
+
+  #updateTcLimitKpi() {
+    const tope = this.#getTopeTC();
+    const ingresos = Number(this.#kpisData?.ingresos) || 0;
+    const tcTotal = Number(this.#tcConsumosSubtotal) || 0;
+
+    const pctEl = document.getElementById('dash-tc-limit-pct');
+    const statusEl = document.getElementById('dash-tc-limit-status');
+    const barEl = document.getElementById('dash-tc-limit-bar');
+    if (!statusEl || !barEl) return;
+
+    const topePct = Number(tope.topePorcentaje) || 25;
+    if (pctEl) pctEl.textContent = `${topePct}%`;
+
+    let actualPct = 0;
+    let ratio = 0;
+    if (ingresos > 0) {
+      actualPct = (tcTotal / ingresos) * 100;
+      ratio = actualPct / topePct;
+    } else if (tcTotal > 0) {
+      ratio = 1.0;
+    }
+
+    const fillWidth = Math.min(Math.round(ratio * 100), 100);
+    barEl.style.width = `${fillWidth}%`;
+
+    barEl.classList.remove('status-ok', 'status-warn', 'status-danger');
+
+    if (ingresos === 0 && tcTotal > 0) {
+      statusEl.textContent = `Sin ingresos reg.`;
+      statusEl.style.color = 'var(--amarillo, #f59e0b)';
+      barEl.classList.add('status-warn');
+    } else if (ratio <= 0.8) {
+      statusEl.textContent = `En rango (${actualPct.toFixed(0)}% de ing.)`;
+      statusEl.style.color = 'var(--verde, #10b981)';
+      barEl.classList.add('status-ok');
+    } else if (ratio <= 1.0) {
+      statusEl.textContent = `Cerca del tope (${actualPct.toFixed(0)}% de ing.)`;
+      statusEl.style.color = 'var(--amarillo, #f59e0b)';
+      barEl.classList.add('status-warn');
+    } else {
+      statusEl.textContent = `⚠️ Superado (${actualPct.toFixed(0)}% de ing.)`;
+      statusEl.style.color = 'var(--rojo, #ef4444)';
+      barEl.classList.add('status-danger');
+    }
+  }
+
+  #abrirModalTopeTC() {
+    const tope = this.#getTopeTC();
+    const modal = new App.Modal('modal-dash-tope-tc');
+    const body = `
+      <form id="form-tope-tc" style="display:flex; flex-direction:column; gap:14px;">
+        <div class="form-group">
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Tope de gasto con Tarjetas (% de tus ingresos mensuales)</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input class="input" type="number" name="topePorcentaje" min="5" max="100" step="1" value="${tope.topePorcentaje || 25}" required style="width:120px;">
+            <span style="font-size:0.95rem; font-weight:700; color:var(--texto);">%</span>
+          </div>
+          <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Recomendación financiera saludable: 20% a 30% como máximo de tus ingresos.</span>
+        </div>
+        <div style="background:var(--card-bg, #f8fafc); border:1px solid var(--borde); border-radius:10px; padding:12px; font-size:0.82rem; color:var(--texto-2);">
+          💡 <em>FluxoAI te alertará automáticamente en el chat si tus consumos proyectados con tarjeta se acercan o superan este porcentaje para proteger tu liquidez.</em>
+        </div>
+      </form>
+    `;
+
+    modal.open({
+      titulo: 'Configurar Tope de Tarjeta de Crédito',
+      body,
+      confirmLabel: 'Guardar Tope',
+      onConfirm: (m) => {
+        const fd = new FormData(m.getForm());
+        const topePorcentaje = Number(fd.get('topePorcentaje')) || 25;
+        this.#saveTopeTC({ topePorcentaje, topeMonto: null });
+        App.Toast.success('Tope de tarjeta actualizado.');
+        m.close();
+      }
+    });
   }
 
   async #loadAhorro(cuenta, fechaInicio, fechaFin) {
