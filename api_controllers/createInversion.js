@@ -29,17 +29,28 @@ export default async function handler(req, res) {
       if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
 
-    const ticker = operacionData.ticker.toUpperCase().trim();
-    const cantidad = Number(operacionData.cantidad);
-    const precio = Number(operacionData.precio);
+    const ticker = (operacionData.ticker || 'ACTIVO').toUpperCase().trim();
+    const cantidad = Number(operacionData.cantidad) || 0;
+    const precio = Number(operacionData.precio) || 0;
     
     const ID_CATEGORIA_INVERSION = 'CAT_INVERSION';
     let importe_total_ars = cantidad * precio;
     
     if (moneda === 'USD') {
-      const { data: cotizData } = await supabase.from('cotizaciones_dolar').select('*').order('fecha', { ascending: false }).limit(1).single();
-      const venta = cotizData ? cotizData.venta : 1000;
+      let venta = 1400;
+      try {
+        const { data: cotizData } = await supabase.from('cotizaciones_dolar').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
+        if (cotizData) {
+          venta = Number(cotizData.valor || cotizData.venta || 1400) || 1400;
+        }
+      } catch (_) {
+        venta = 1400;
+      }
       importe_total_ars = importe_total_ars * venta;
+    }
+
+    if (!Number.isFinite(importe_total_ars) || importe_total_ars <= 0) {
+      importe_total_ars = (cantidad * precio) || 0;
     }
     
     const tipo_mov_principal = (tipoOp === 'COMPRA') ? 'EGRESO' : 'INGRESO';
@@ -62,10 +73,9 @@ export default async function handler(req, res) {
     });
     if (movResult.error) throw movResult.error;
     
-    const invResult = await supabase.from('inversiones_movimientos').insert({
+    const invRow = {
       id_inversion_mov: idInversion,
       id_movimiento_origen: idMovimiento,
-      id_cuenta_principal: idCuenta,
       user_id: userId,
       ticker: ticker,
       fecha: fecha,
@@ -74,7 +84,9 @@ export default async function handler(req, res) {
       cantidad_nominales: cantidad,
       precio_compra: precio,
       importe_total_ars: importe_total_ars
-    });
+    };
+    
+    const invResult = await supabase.from('inversiones_movimientos').insert(invRow);
     if (invResult.error) throw invResult.error;
     
     return res.status(200).json({ success: true, data: { id_operacion: idInversion } });

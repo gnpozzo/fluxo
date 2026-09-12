@@ -35,11 +35,21 @@ export default async function handler(req, res) {
     let desc_principal = `${tipo_transfer} de Ahorro (${moneda}) - ${descripcion || ''}`;
     
     if (moneda === 'USD') {
-      // Fetch Dolar cotizacion
-      const { data: cotizData } = await supabase.from('cotizaciones_dolar').select('*').order('fecha', { ascending: false }).limit(1).single();
-      const venta = cotizData ? cotizData.venta : 1000;
+      let venta = 1400;
+      try {
+        const { data: cotizData } = await supabase.from('cotizaciones_dolar').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
+        if (cotizData) {
+          venta = Number(cotizData.valor || cotizData.venta || 1400) || 1400;
+        }
+      } catch (_) {
+        venta = 1400;
+      }
       importePrincipal = importe * venta;
       desc_principal = `${tipo_transfer} de Ahorro (USD ${importe.toFixed(2)} @ ${venta}) - ${descripcion || ''}`;
+    }
+    
+    if (!Number.isFinite(importePrincipal) || importePrincipal <= 0) {
+      importePrincipal = importe || 0;
     }
     
     const tipo_mov_principal = (tipo_transfer === 'DEPOSITO') ? 'EGRESO' : 'INGRESO';
@@ -61,8 +71,8 @@ export default async function handler(req, res) {
     });
     if (movResult.error) throw movResult.error;
     
-    // Insert into ahorros
-    const ahResult = await supabase.from('ahorros').insert({
+    // Insert into ahorros with fallback if id_subcuenta column does not exist in schema cache
+    const ahorroRow = {
       id_ahorro: idAhorro,
       user_id: userId,
       id_movimiento_origen: idMovimiento,
@@ -70,9 +80,15 @@ export default async function handler(req, res) {
       tipo_transfer: tipo_transfer,
       moneda: moneda,
       importe: importe,
-      id_subcuenta: idSubcuenta,
       descripcion: descripcion
-    });
+    };
+    if (idSubcuenta) ahorroRow.id_subcuenta = idSubcuenta;
+
+    let ahResult = await supabase.from('ahorros').insert(ahorroRow);
+    if (ahResult.error && ahResult.error.message && ahResult.error.message.includes('id_subcuenta')) {
+      delete ahorroRow.id_subcuenta;
+      ahResult = await supabase.from('ahorros').insert(ahorroRow);
+    }
     if (ahResult.error) throw ahResult.error;
     
     return res.status(200).json({ success: true, data: { id_ahorro: idAhorro } });

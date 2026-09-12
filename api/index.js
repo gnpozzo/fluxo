@@ -47,6 +47,7 @@ import admin_getRecordatorios from '../api_controllers/admin_getRecordatorios.js
 import admin_saveRecordatorio from '../api_controllers/admin_saveRecordatorio.js';
 import admin_deleteRecordatorio from '../api_controllers/admin_deleteRecordatorio.js';
 import togglePago from '../api_controllers/togglePago.js';
+import searchTickers from '../api_controllers/searchTickers.js';
 import { authenticateUser } from '../api_lib/auth.js';
 
 
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
     const endpoint = req.query?.endpoint || req.url.split('?')[0].split('/').pop();
     
     // Public endpoints exempt from user JWT check
-    const publicEndpoints = ['getConfig', 'telegramWebhook', 'sendReminders'];
+    const publicEndpoints = ['getConfig', 'telegramWebhook', 'sendReminders', 'searchTickers', 'api_searchTickers'];
     if (!publicEndpoints.includes(endpoint)) {
       const user = await authenticateUser(req, res);
       if (!user) return; // 401 response already handled by authenticateUser
@@ -113,6 +114,8 @@ export default async function handler(req, res) {
       case 'aiAdvisor': return await aiAdvisor(req, res);
       case 'togglePago':
       case 'api_togglePago': return await togglePago(req, res);
+      case 'searchTickers':
+      case 'api_searchTickers': return await searchTickers(req, res);
 
       default:
         return res.status(404).json({ success: false, error: 'Endpoint not found: ' + endpoint });
