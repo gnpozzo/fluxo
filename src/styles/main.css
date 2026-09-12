@@ -3625,54 +3625,59 @@ body {
   display: inline-flex !important;
   align-items: center !important;
   position: relative !important;
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: var(--fondo) !important;
+  border: 1px solid var(--borde) !important;
   border-radius: var(--r-full, 9999px) !important;
-  padding: 0 !important;
+  height: 36px !important;
+  padding: 0 10px !important;
   margin: 0 !important;
   transition: all 0.15s ease;
+  box-sizing: border-box !important;
 }
 
 .app-header .welcome-select-wrap:hover {
-  background: rgba(255, 255, 255, 0.14) !important;
-  border-color: rgba(255, 255, 255, 0.35) !important;
+  background: var(--superficie) !important;
+  border-color: var(--borde-fuerte) !important;
 }
 
 .app-header .welcome-select-wrap select {
   background: transparent !important;
   border: none !important;
-  color: #ffffff !important;
-  padding: 6px 32px 6px 14px !important;
+  color: var(--texto) !important;
+  padding: 0 24px 0 6px !important;
   margin: 0 !important;
   outline: none !important;
-  font-size: 0.84rem !important;
+  font-size: 0.8rem !important;
   font-weight: 600 !important;
   cursor: pointer !important;
   appearance: none !important;
   -webkit-appearance: none !important;
   width: auto !important;
+  height: 100% !important;
 }
 
 .app-header .welcome-select-wrap select option {
-  background: #1D195D !important;
-  color: #ffffff !important;
+  background: var(--superficie) !important;
+  color: var(--texto) !important;
 }
 
 .app-header .welcome-select-wrap input[type="month"] {
   background: transparent !important;
   border: none !important;
-  color: #ffffff !important;
-  padding: 6px 14px 6px 32px !important;
+  color: var(--texto) !important;
+  padding: 0 6px 0 22px !important;
   margin: 0 !important;
   outline: none !important;
-  font-size: 0.84rem !important;
+  font-size: 0.8rem !important;
   font-weight: 600 !important;
   cursor: pointer !important;
   width: auto !important;
+  height: 100% !important;
 }
 
 .app-header .welcome-select-wrap input[type="month"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) !important;
+  filter: none !important;
+  opacity: 0.55 !important;
   cursor: pointer !important;
 }
 
@@ -3682,7 +3687,7 @@ body {
   left: auto !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
-  color: rgba(255, 255, 255, 0.7) !important;
+  color: var(--texto-3) !important;
   pointer-events: none !important;
 }
 
@@ -3692,7 +3697,7 @@ body {
   right: auto !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
-  color: rgba(255, 255, 255, 0.7) !important;
+  color: var(--texto-3) !important;
   pointer-events: none !important;
 }
 
@@ -3700,29 +3705,48 @@ body {
 .app-header .currency-pills {
   display: inline-flex !important;
   align-items: center !important;
-  background: rgba(0, 0, 0, 0.25) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  vertical-align: middle !important;
+  background: var(--fondo) !important;
+  border: 1px solid var(--borde) !important;
   border-radius: var(--r-full, 9999px) !important;
-  padding: 2px !important;
+  padding: 3px !important;
   gap: 2px !important;
+  height: 36px !important;
+  box-sizing: border-box !important;
 }
 
 .app-header .currency-pill {
   background: transparent !important;
   border: none !important;
   border-radius: var(--r-full, 9999px) !important;
-  color: rgba(255, 255, 255, 0.6) !important;
-  font-size: 0.78rem !important;
+  color: var(--texto-3) !important;
+  font-size: 0.75rem !important;
   font-weight: 700 !important;
-  padding: 4px 10px !important;
+  padding: 4px 12px !important;
   cursor: pointer !important;
-  transition: all 0.2s ease !important;
+  transition: all 0.15s ease !important;
+  line-height: 1 !important;
+  height: 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
-.app-header .currency-pill.active {
-  background: #ffffff !important;
-  color: #1D195D !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+.app-header .currency-pill:hover:not(.active) {
+  color: var(--texto) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+.app-header .currency-pill.active#pill-ars {
+  background: #1D195D !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 5px rgba(29, 25, 93, 0.25) !important;
+}
+
+.app-header .currency-pill.active#pill-usd {
+  background: #10B981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 5px rgba(16, 185, 129, 0.25) !important;
 }
 
 /* Header AI Advisor Button */
@@ -3731,45 +3755,77 @@ body {
   align-items: center !important;
   gap: 6px !important;
   width: auto !important;
-  padding: 6px 14px !important;
+  height: 36px !important;
+  padding: 0 14px !important;
   border-radius: var(--r-full, 9999px) !important;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(168, 85, 247, 0.25)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  color: #ffffff !important;
+  background: var(--fondo) !important;
+  border: 1px solid var(--borde) !important;
+  color: #1D195D !important;
   cursor: pointer !important;
   transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
 }
 
 .btn-gemini-header:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(168, 85, 247, 0.4)) !important;
-  border-color: #ffffff !important;
+  background: #EEF2FF !important;
+  border-color: #6366F1 !important;
   transform: translateY(-1px);
 }
 
 .btn-gemini-text {
   font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  color: #1D195D;
 }
 
+/* Notification Bell in Topbar */
 .header-bell-btn {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: var(--fondo) !important;
+  border: 1px solid var(--borde) !important;
   border-radius: 50% !important;
-  color: #ffffff !important;
+  color: var(--texto-2) !important;
   width: 36px !important;
   height: 36px !important;
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
   transition: all 0.15s ease !important;
   padding: 0 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
 }
 
 .header-bell-btn:hover {
-  background: rgba(255, 255, 255, 0.18) !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
+  background: var(--superficie) !important;
+  border-color: var(--borde-fuerte) !important;
+  color: var(--texto) !important;
+}
+
+.header-bell-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  stroke: var(--texto-2) !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+  display: block !important;
+}
+
+.header-bell-btn:hover svg {
+  stroke: var(--texto) !important;
+}
+
+#badge-notifications {
+  position: absolute !important;
+  top: -1px !important;
+  right: -1px !important;
+  width: 9px !important;
+  height: 9px !important;
+  background: #EF4444 !important;
+  border-radius: 50% !important;
+  border: 2px solid var(--superficie, #ffffff) !important;
+  z-index: 2 !important;
 }
 
 /* 2. Top Row: Hero Saldo & Quick Actions Grid */

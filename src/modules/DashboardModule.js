@@ -18,17 +18,12 @@ export class DashboardModule extends BaseModule {
 
   #movData     = [];
   #viewMode = 'detail'; // 'portfolio' | 'detail'
-  #drilldownOpen = false;
-  #drilldownFilter = 'ALL'; // 'ALL' | 'INGRESO' | 'EGRESO'
-  #drilldownSearch = '';
-  #donutChartInstance = null;
-  #evolucionChartInstance = null;
+  #movFilter = 'ALL'; // 'ALL' | 'INGRESO' | 'EGRESO'
+  #movSearch = '';
   #moneyFlowChartInstance = null;
   #categoriesDonutInstance = null;
   #evolucionMode = 'ingresos_vs_gastos'; // 'ingresos_vs_gastos' | 'balance'
   #donutMetric = 'gastos'; // 'gastos' | 'ingresos'
-  #recentsFilter = 'ALL'; // 'ALL' | 'INGRESO' | 'EGRESO'
-  #recentsSearch = '';
   #ahorroTotal = 0;
   #inversionesTotal = 0;
   #evolucionMensual = [];
@@ -48,8 +43,6 @@ export class DashboardModule extends BaseModule {
   destruir() {
     this.#moneyFlowChartInstance?.destroy();
     this.#categoriesDonutInstance?.destroy();
-    this.#donutChartInstance?.destroy();
-    this.#evolucionChartInstance?.destroy();
     super.destruir();
   }
 
@@ -340,11 +333,7 @@ export class DashboardModule extends BaseModule {
     // Render FinSet Widgets
     this.#renderMoneyFlowChart();
     this.#renderTopCategoriesWidget();
-    this.#renderRecentTransactions();
-
-    if (this.#drilldownOpen) {
-      this.#renderDrilldown();
-    }
+    this.#renderMovimientos();
   }
 
   // --- SECCIÓN 3: BUILD DOM ---
@@ -520,32 +509,35 @@ export class DashboardModule extends BaseModule {
           <!-- ═══ ROW 3: OPERATIONS & MODULES (Recent Transactions + Fintech Widgets) ═══ -->
           <div class="finset-grid-2col">
             
-            <!-- Left (60%): Movimientos Recientes -->
-            <div class="finset-card" id="dash-widget-recents">
-              <div class="finset-card-header">
-                <div class="finset-card-title-wrap">
-                  <h3 class="finset-card-title">Movimientos Recientes</h3>
-                  <span class="finset-card-subtitle">Últimas operaciones del mes</span>
+            <!-- Left (60%): Módulo Unificado de Movimientos -->
+            <div class="finset-card" id="dash-widget-movimientos">
+              <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+                <div class="dh-drilldown-left" style="min-width:180px;">
+                  <div class="dh-drilldown-badge badge-all" id="dash-mov-badge">
+                    <span class="dh-badge-dot"></span>
+                    <span class="dh-badge-title" id="dash-mov-title">Todos los Movimientos</span>
+                  </div>
+                  <div class="dh-drilldown-summary" id="dash-mov-summary">—</div>
                 </div>
-                <div class="finset-card-actions">
+
+                <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
+                  <div class="dh-filter-tabs" id="dash-mov-tabs">
+                    <button class="dh-tab-btn active" data-filter="ALL" id="dash-mov-tab-all">Todos</button>
+                    <button class="dh-tab-btn" data-filter="INGRESO" id="dash-mov-tab-ing">Ingresos</button>
+                    <button class="dh-tab-btn" data-filter="EGRESO" id="dash-mov-tab-egr">Gastos</button>
+                  </div>
+
                   <div class="dh-search-box" style="margin:0;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input type="text" id="dash-recents-search" placeholder="Buscar..." class="finset-search-input">
+                    <input type="text" id="dash-mov-search" placeholder="Buscar..." class="finset-search-input" style="width:130px;">
                   </div>
-                  <div class="dh-filter-tabs">
-                    <button class="dh-tab-btn active" data-filter="ALL" id="dash-recents-tab-all">Todos</button>
-                    <button class="dh-tab-btn" data-filter="INGRESO" id="dash-recents-tab-ing">Ingresos</button>
-                    <button class="dh-tab-btn" data-filter="EGRESO" id="dash-recents-tab-egr">Gastos</button>
-                  </div>
-                  <button class="btn btn-ghost btn-sm" id="dash-recents-expand-btn" title="Ver consola completa de movimientos" style="font-weight:700;font-size:0.75rem;padding:4px 10px;gap:4px;">
-                    <span>Ver todos</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
-                  </button>
                 </div>
               </div>
 
-              <!-- Compact Recent List -->
-              <div class="finset-recents-body" id="dash-recents-body"></div>
+              <!-- Lista de movimientos -->
+              <div class="dh-drilldown-list dh-side-main" id="dash-mov-list" style="margin-top:12px; max-height:510px; overflow-y:auto; padding-right:4px;">
+                <!-- Rendered dynamically -->
+              </div>
             </div>
 
             <!-- Right (40%): Módulos Fintech Rápidos -->
@@ -652,48 +644,6 @@ export class DashboardModule extends BaseModule {
 
           </div>
 
-          <!-- ═══ EXPANDABLE FULL DRILLDOWN CONSOLE ═══ -->
-          <div class="dash-hero-drilldown" id="dash-hero-drilldown" style="display: none;">
-            <div class="dh-drilldown-header">
-              <div class="dh-drilldown-left">
-                <div class="dh-drilldown-badge" id="drilldown-badge">
-                  <span class="dh-badge-dot"></span>
-                  <span class="dh-badge-title" id="drilldown-title">Consola de Movimientos</span>
-                </div>
-                <div class="dh-drilldown-summary" id="drilldown-summary">—</div>
-              </div>
-
-              <div class="dh-drilldown-center">
-                <div class="dh-filter-tabs">
-                  <button class="dh-tab-btn active" data-filter="ALL" id="drilldown-tab-all">Todos</button>
-                  <button class="dh-tab-btn" data-filter="INGRESO" id="drilldown-tab-ing">Ingresos</button>
-                  <button class="dh-tab-btn" data-filter="EGRESO" id="drilldown-tab-egr">Gastos</button>
-                </div>
-              </div>
-
-              <div class="dh-drilldown-right">
-                <div class="dh-search-box">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  <input type="text" id="drilldown-search-input" placeholder="Buscar concepto o categoría..." autocomplete="off">
-                </div>
-                <button class="dh-close-btn" id="drilldown-close-btn" title="Cerrar consola de movimientos" aria-label="Cerrar">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Layout Side-by-Side: Grilla a la izquierda + Analítica a la derecha -->
-            <div class="analytics-side-layout dh-side-layout">
-              <div class="analytics-main-col dh-side-main">
-                <div class="dh-drilldown-body dh-drilldown-list" id="drilldown-body-container"></div>
-              </div>
-              <div class="analytics-side-col dh-side-analytics">
-                <div class="table-card fintech-card" id="dash-drill-donut-wrap"></div>
-                <div class="table-card fintech-card" id="dash-drill-evolucion-wrap"></div>
-              </div>
-            </div>
-          </div>
-
         </div>
       </div>
     `;
@@ -723,10 +673,24 @@ export class DashboardModule extends BaseModule {
       }
     });
 
-    // KPI Expand Buttons
-    document.getElementById('btn-expand-balance')?.addEventListener('click', () => this.#openDrilldown('ALL'));
-    document.getElementById('btn-expand-ingresos')?.addEventListener('click', () => this.#openDrilldown('INGRESO'));
-    document.getElementById('btn-expand-gastos')?.addEventListener('click', () => this.#openDrilldown('EGRESO'));
+    // KPI Expand Buttons -> Filter Movimientos & Scroll
+    const scrollToMov = () => {
+      const el = document.getElementById('dash-widget-movimientos');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    document.getElementById('btn-expand-balance')?.addEventListener('click', () => {
+      this.#setMovFilter('ALL');
+      scrollToMov();
+    });
+    document.getElementById('btn-expand-ingresos')?.addEventListener('click', () => {
+      this.#setMovFilter('INGRESO');
+      scrollToMov();
+    });
+    document.getElementById('btn-expand-gastos')?.addEventListener('click', () => {
+      this.#setMovFilter('EGRESO');
+      scrollToMov();
+    });
     document.getElementById('btn-expand-ahorro')?.addEventListener('click', () => {
       document.querySelector('[data-vista="vista-ahorro"]')?.click();
     });
@@ -751,18 +715,14 @@ export class DashboardModule extends BaseModule {
       });
     });
 
-    // Recent Transactions Filters & Search
-    document.getElementById('dash-recents-tab-all')?.addEventListener('click', () => this.#setRecentsFilter('ALL'));
-    document.getElementById('dash-recents-tab-ing')?.addEventListener('click', () => this.#setRecentsFilter('INGRESO'));
-    document.getElementById('dash-recents-tab-egr')?.addEventListener('click', () => this.#setRecentsFilter('EGRESO'));
+    // Movimientos Tabs & Search
+    document.getElementById('dash-mov-tab-all')?.addEventListener('click', () => this.#setMovFilter('ALL'));
+    document.getElementById('dash-mov-tab-ing')?.addEventListener('click', () => this.#setMovFilter('INGRESO'));
+    document.getElementById('dash-mov-tab-egr')?.addEventListener('click', () => this.#setMovFilter('EGRESO'));
 
-    document.getElementById('dash-recents-search')?.addEventListener('input', (e) => {
-      this.#recentsSearch = e.target.value;
-      this.#renderRecentTransactions();
-    });
-
-    document.getElementById('dash-recents-expand-btn')?.addEventListener('click', () => {
-      this.#toggleDrilldown(this.#recentsFilter);
+    document.getElementById('dash-mov-search')?.addEventListener('input', (e) => {
+      this.#movSearch = e.target.value;
+      this.#renderMovimientos();
     });
 
     // Tarjetas carousel
@@ -785,17 +745,6 @@ export class DashboardModule extends BaseModule {
     // Inversiones detail
     document.getElementById('dash-inversiones-detail')?.addEventListener('click', () => {
       document.querySelector('[data-vista="vista-inversiones"]')?.click();
-    });
-
-    // Drilldown Controls
-    document.getElementById('drilldown-close-btn')?.addEventListener('click', () => this.#closeDrilldown());
-    document.getElementById('drilldown-tab-all')?.addEventListener('click', () => this.#setDrilldownFilter('ALL'));
-    document.getElementById('drilldown-tab-ing')?.addEventListener('click', () => this.#setDrilldownFilter('INGRESO'));
-    document.getElementById('drilldown-tab-egr')?.addEventListener('click', () => this.#setDrilldownFilter('EGRESO'));
-
-    document.getElementById('drilldown-search-input')?.addEventListener('input', (e) => {
-      this.#drilldownSearch = e.target.value;
-      this.#renderDrilldown();
     });
   }
 
@@ -1228,20 +1177,6 @@ export class DashboardModule extends BaseModule {
 
   // --- SECCIÓN 8B-2: FINSET WIDGETS RENDERING ---
 
-  #setRecentsFilter(tipo) {
-    this.#recentsFilter = tipo;
-    ['all', 'ing', 'egr'].forEach(k => {
-      const btn = document.getElementById(`dash-recents-tab-${k}`);
-      if (btn) {
-        const isAct = (k === 'all' && tipo === 'ALL') ||
-                      (k === 'ing' && tipo === 'INGRESO') ||
-                      (k === 'egr' && tipo === 'EGRESO');
-        btn.classList.toggle('active', isAct);
-      }
-    });
-    this.#renderRecentTransactions();
-  }
-
   #renderMoneyFlowChart() {
     const canvas = document.getElementById('dash-moneyflow-canvas');
     if (!canvas) return;
@@ -1446,157 +1381,31 @@ export class DashboardModule extends BaseModule {
     }
   }
 
-  #renderRecentTransactions() {
-    const bodyEl = document.getElementById('dash-recents-body');
-    if (!bodyEl) return;
+  // --- SECCIÓN 8C: MÓDULO UNIFICADO DE MOVIMIENTOS ---
 
-    let list = this.#movData || [];
-    if (this.#recentsFilter === 'INGRESO') {
-      list = list.filter(m => m.tipo_mov === 'INGRESO');
-    } else if (this.#recentsFilter === 'EGRESO') {
-      list = list.filter(m => m.tipo_mov === 'EGRESO');
-    }
-
-    if (this.#recentsSearch.trim()) {
-      const q = this.#recentsSearch.toLowerCase().trim();
-      list = list.filter(m => {
-        const desc = (m.descripcion || '').toLowerCase();
-        const cat = (m.categoria_nombre || '').toLowerCase();
-        const medio = (m.medio_pago || '').toLowerCase();
-        return desc.includes(q) || cat.includes(q) || medio.includes(q);
-      });
-    }
-
-    if (!list.length) {
-      bodyEl.innerHTML = `
-        <div style="padding: 28px 16px; text-align: center; color: var(--texto-3); font-size: 0.85rem;">
-          No hay movimientos recientes registrados
-        </div>
-      `;
-      return;
-    }
-
-    // Take top 6
-    const recents = list.slice(0, 6);
-
-    const getCategoryIconSvg = (catName, tipo) => {
-      const cat = (catName || '').toLowerCase();
-      if (tipo === 'INGRESO') {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
-      }
-      if (cat.includes('super') || cat.includes('alimen') || cat.includes('comida')) {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
-      }
-      if (cat.includes('serv') || cat.includes('luz') || cat.includes('gas') || cat.includes('internet')) {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
-      }
-      if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
-      }
-      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
-    };
-
-    bodyEl.innerHTML = recents.map(r => {
-      const esIngreso = r.tipo_mov === 'INGRESO';
-      const iconClass = esIngreso ? 'icon-green' : 'icon-subtle';
-      const sign = esIngreso ? '+' : '-';
-      const valClass = esIngreso ? 'positivo' : 'negativo';
-      const catName = r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General');
-      const desc = r.descripcion || catName;
-      const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
-
-      return `
-        <div class="finset-recents-row" data-id="${r.id_movimiento || r.id}">
-          <div class="finset-recents-icon ${iconClass}">
-            ${getCategoryIconSvg(catName, r.tipo_mov)}
-          </div>
-          <div class="finset-recents-info">
-            <span class="finset-recents-desc">${App.Utils.escapeHtml(desc)}</span>
-            <span class="finset-recents-date">${fechaStr}</span>
-          </div>
-          <span class="finset-recents-cat">${App.Utils.escapeHtml(catName)}</span>
-          <span class="finset-recents-amount ${valClass}">${sign} ${App.Utils.formatearMoneda(r.importe)}</span>
-          <button class="finset-arrow-btn" style="width:24px;height:24px;border:none;" title="Ver detalle">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-        </div>
-      `;
-    }).join('');
-
-    bodyEl.querySelectorAll('.finset-recents-row').forEach(rowEl => {
-      rowEl.addEventListener('click', () => {
-        const id = rowEl.dataset.id;
-        const row = this.#movData.find(m => (m.id_movimiento || m.id) == id);
-        if (row) this.#abrirModalDetalleMov(row);
-      });
-    });
+  #setMovFilter(tipo) {
+    this.#movFilter = tipo || 'ALL';
+    this.#renderMovimientos();
   }
 
-  // --- SECCIÓN 8C: DRILL-DOWN DE MOVIMIENTOS EN VIVO ---
-
-  #toggleDrilldown(tipo = 'ALL') {
-    if (this.#drilldownOpen && (!tipo || this.#drilldownFilter === tipo)) {
-      this.#closeDrilldown();
-    } else {
-      this.#openDrilldown(tipo || 'ALL');
-    }
-  }
-
-  #openDrilldown(tipo = 'ALL') {
-    this.#drilldownOpen = true;
-    this.#drilldownFilter = tipo || 'ALL';
-    this.#drilldownSearch = '';
-    const searchInput = document.getElementById('drilldown-search-input');
-    if (searchInput) searchInput.value = '';
-
-    const el = document.getElementById('dash-hero-drilldown');
-    if (el) {
-      el.style.display = 'block';
-      this.#renderDrilldown();
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-
-    const toggleRow = document.getElementById('dash-breakdown-toggle');
-    if (toggleRow) toggleRow.classList.add('is-active');
-    const arrowIcon = document.getElementById('dash-hero-arrow-icon');
-    if (arrowIcon) arrowIcon.classList.add('rotated');
-  }
-
-  #closeDrilldown() {
-    this.#drilldownOpen = false;
-    const el = document.getElementById('dash-hero-drilldown');
-    if (el) el.style.display = 'none';
-
-    const toggleRow = document.getElementById('dash-breakdown-toggle');
-    if (toggleRow) toggleRow.classList.remove('is-active');
-    const arrowIcon = document.getElementById('dash-hero-arrow-icon');
-    if (arrowIcon) arrowIcon.classList.remove('rotated');
-  }
-
-  #setDrilldownFilter(tipo) {
-    this.#drilldownFilter = tipo;
-    this.#renderDrilldown();
-  }
-
-  #renderDrilldown() {
-    const drilldownEl = document.getElementById('dash-hero-drilldown');
-    const bodyEl = document.getElementById('drilldown-body-container');
-    const titleEl = document.getElementById('drilldown-title');
-    const badgeEl = document.getElementById('drilldown-badge');
-    const summaryEl = document.getElementById('drilldown-summary');
-    if (!drilldownEl || !bodyEl) return;
+  #renderMovimientos() {
+    const listEl = document.getElementById('dash-mov-list');
+    const titleEl = document.getElementById('dash-mov-title');
+    const badgeEl = document.getElementById('dash-mov-badge');
+    const summaryEl = document.getElementById('dash-mov-summary');
+    if (!listEl) return;
 
     // Filter by type
     let filtered = this.#movData || [];
-    if (this.#drilldownFilter === 'INGRESO') {
+    if (this.#movFilter === 'INGRESO') {
       filtered = filtered.filter(m => m.tipo_mov === 'INGRESO');
-    } else if (this.#drilldownFilter === 'EGRESO') {
+    } else if (this.#movFilter === 'EGRESO') {
       filtered = filtered.filter(m => m.tipo_mov === 'EGRESO');
     }
 
     // Filter by live search text
-    if (this.#drilldownSearch.trim()) {
-      const q = this.#drilldownSearch.toLowerCase().trim();
+    if (this.#movSearch.trim()) {
+      const q = this.#movSearch.toLowerCase().trim();
       filtered = filtered.filter(m => {
         const desc = (m.descripcion || '').toLowerCase();
         const cat = (m.categoria_nombre || '').toLowerCase();
@@ -1606,15 +1415,15 @@ export class DashboardModule extends BaseModule {
     }
 
     // Calculate sum of filtered
-    const totalFiltered = filtered.reduce((acc, m) => acc + Number(m.importe || 0), 0);
+    const totalFiltered = filtered.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
 
     // Update Header Badge and Title
     if (badgeEl) {
-      badgeEl.className = 'dh-drilldown-badge badge-' + this.#drilldownFilter.toLowerCase();
+      badgeEl.className = 'dh-drilldown-badge badge-' + this.#movFilter.toLowerCase();
     }
     if (titleEl) {
-      if (this.#drilldownFilter === 'INGRESO') titleEl.textContent = 'Movimientos: Ingresos';
-      else if (this.#drilldownFilter === 'EGRESO') titleEl.textContent = 'Movimientos: Gastos';
+      if (this.#movFilter === 'INGRESO') titleEl.textContent = 'Movimientos: Ingresos';
+      else if (this.#movFilter === 'EGRESO') titleEl.textContent = 'Movimientos: Gastos';
       else titleEl.textContent = 'Todos los Movimientos';
     }
     if (summaryEl) {
@@ -1624,24 +1433,18 @@ export class DashboardModule extends BaseModule {
 
     // Update active tab buttons
     ['all', 'ing', 'egr'].forEach(k => {
-      const btn = document.getElementById(`drilldown-tab-${k}`);
+      const btn = document.getElementById(`dash-mov-tab-${k}`);
       if (btn) {
-        const isAct = (k === 'all' && this.#drilldownFilter === 'ALL') ||
-                      (k === 'ing' && this.#drilldownFilter === 'INGRESO') ||
-                      (k === 'egr' && this.#drilldownFilter === 'EGRESO');
+        const isAct = (k === 'all' && this.#movFilter === 'ALL') ||
+                      (k === 'ing' && this.#movFilter === 'INGRESO') ||
+                      (k === 'egr' && this.#movFilter === 'EGRESO');
         btn.classList.toggle('active', isAct);
       }
     });
 
-    // Update active state on hero breakdown toggle & arrow
-    const toggleRow = document.getElementById('dash-breakdown-toggle');
-    if (toggleRow) toggleRow.classList.toggle('is-active', this.#drilldownOpen);
-    const arrowIcon = document.getElementById('dash-hero-arrow-icon');
-    if (arrowIcon) arrowIcon.classList.toggle('rotated', this.#drilldownOpen);
-
     if (filtered.length === 0) {
-      bodyEl.innerHTML = `
-        <div class="dh-empty-state">
+      listEl.innerHTML = `
+        <div class="dh-empty-state" style="padding:32px 16px;">
           <div class="dh-empty-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           </div>
@@ -1654,21 +1457,21 @@ export class DashboardModule extends BaseModule {
     const getCategoryIconSvg = (catName, tipo) => {
       const cat = (catName || '').toLowerCase();
       if (tipo === 'INGRESO') {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
       }
       if (cat.includes('super') || cat.includes('alimen') || cat.includes('comida')) {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
       }
       if (cat.includes('serv') || cat.includes('luz') || cat.includes('gas') || cat.includes('internet')) {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
       }
       if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
       }
       if (cat.includes('salud') || cat.includes('farmacia')) {
-        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
       }
-      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
+      return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
     };
 
     const rowsHtml = filtered.map(r => {
@@ -1710,295 +1513,14 @@ export class DashboardModule extends BaseModule {
       `;
     }).join('');
 
-    bodyEl.innerHTML = `<div class="dh-rows-list">${rowsHtml}</div>`;
+    listEl.innerHTML = `<div class="dh-rows-list" style="max-height:480px; overflow-y:auto; padding-right:4px;">${rowsHtml}</div>`;
 
-    bodyEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
+    listEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
       rowEl.addEventListener('click', () => {
         const id = rowEl.dataset.id;
         const row = this.#movData.find(m => (m.id_movimiento || m.id) == id);
         if (row) this.#abrirModalDetalleMov(row);
       });
-    });
-
-    this.#renderDrilldownAnalytics(filtered);
-  }
-
-  #renderDrilldownAnalytics(filtered) {
-    this.#renderDrilldownDonut(filtered);
-    this.#renderDrilldownEvolucion();
-  }
-
-  #renderDrilldownDonut(filtered) {
-    const wrap = document.getElementById('dash-drill-donut-wrap');
-    if (!wrap) return;
-
-    if (this.#drilldownFilter === 'INGRESO') this.#donutMetric = 'ingresos';
-    else if (this.#drilldownFilter === 'EGRESO') this.#donutMetric = 'gastos';
-
-    const isIngresos = this.#donutMetric === 'ingresos';
-    const targetType = isIngresos ? 'INGRESO' : 'EGRESO';
-    
-    // Agrupar a partir de los movimientos disponibles
-    const pool = (this.#movData || []).filter(m => m.tipo_mov === targetType);
-    const totalMetric = pool.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
-
-    if (pool.length === 0 || totalMetric <= 0) {
-      wrap.innerHTML = `
-        <div class="fintech-card-header">
-          <h3 class="fintech-card-title">Top Categorías</h3>
-          <div class="fintech-pill-switch" id="dash-drill-donut-switch">
-            <button class="fintech-pill-btn ${!isIngresos ? 'active' : ''}" data-metric="gastos">% Gastos</button>
-            <button class="fintech-pill-btn ${isIngresos ? 'active' : ''}" data-metric="ingresos">% Ingresos</button>
-          </div>
-        </div>
-        <div style="padding:2rem 1rem;text-align:center;color:var(--texto-3);font-size:0.85rem;">
-          No hay ${isIngresos ? 'ingresos' : 'gastos'} registrados en este período.
-        </div>`;
-      this.#bindDonutSwitch(filtered);
-      return;
-    }
-
-    const catMap = {};
-    pool.forEach(m => {
-      const cat = m.categoria_nombre || (isIngresos ? 'Ingreso' : 'General');
-      const imp = Math.abs(Number(m.importe || 0));
-      if (!catMap[cat]) catMap[cat] = { total: 0, count: 0 };
-      catMap[cat].total += imp;
-      catMap[cat].count += 1;
-    });
-
-    const sortedCats = Object.entries(catMap)
-      .map(([name, data]) => ({
-        name,
-        total: data.total,
-        count: data.count,
-        pct: (data.total / totalMetric) * 100
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const palette = [
-      '#1D195D', '#2563EB', '#0EA5E9', '#10B981', '#8B5CF6',
-      '#F59E0B', '#F43F5E', '#4F46E5', '#64748B'
-    ];
-
-    wrap.innerHTML = `
-      <div class="fintech-card-header">
-        <div>
-          <h3 class="fintech-card-title">Top Categorías</h3>
-          <span style="font-size:0.75rem;color:var(--texto-3);">${isIngresos ? 'Distribución Ingresos' : 'Distribución Gastos'}</span>
-        </div>
-        <div class="fintech-pill-switch" id="dash-drill-donut-switch">
-          <button class="fintech-pill-btn ${!isIngresos ? 'active' : ''}" data-metric="gastos">% Gastos</button>
-          <button class="fintech-pill-btn ${isIngresos ? 'active' : ''}" data-metric="ingresos">% Ingresos</button>
-        </div>
-      </div>
-
-      <div class="fintech-donut-wrapper">
-        <canvas id="dash-drill-donut-canvas"></canvas>
-        <div class="fintech-donut-center">
-          <span class="fintech-donut-center-label">${isIngresos ? 'Total Ingresos' : 'Total Gastos'}</span>
-          <span class="fintech-donut-center-val" style="color:var(--primary);">${App.Utils.formatearMoneda(totalMetric)}</span>
-        </div>
-      </div>
-
-      <div class="fintech-legend-list">
-        ${sortedCats.map((cat, idx) => {
-          const color = palette[idx % palette.length];
-          return `
-            <div class="fintech-legend-item">
-              <div class="fintech-legend-left" title="${App.Utils.escapeHtml(cat.name)}">
-                <span class="fintech-legend-dot" style="background:${color};"></span>
-                <span style="color:var(--texto);">${App.Utils.escapeHtml(cat.name)}</span>
-              </div>
-              <div class="fintech-legend-right">
-                <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${cat.pct.toFixed(1)}%</span>
-                <span class="${isIngresos ? 'positivo' : 'negativo'}" style="font-size:0.82rem;">${App.Utils.formatearMoneda(cat.total)}</span>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-
-    this.#bindDonutSwitch(filtered);
-
-    const canvas = document.getElementById('dash-drill-donut-canvas');
-    if (canvas) {
-      this.#donutChartInstance?.destroy();
-      const ctx = canvas.getContext('2d');
-      this.#donutChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: sortedCats.map(c => c.name),
-          datasets: [{
-            data: sortedCats.map(c => Math.round(c.total)),
-            backgroundColor: sortedCats.map((_, i) => palette[i % palette.length]),
-            borderColor: '#ffffff',
-            borderWidth: 2,
-            hoverOffset: 5
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '74%',
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (context) => {
-                  const val = context.parsed || 0;
-                  const pct = ((val / totalMetric) * 100).toFixed(1);
-                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pct}%)`;
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-  }
-
-  #bindDonutSwitch(filtered) {
-    const wrap = document.getElementById('dash-drill-donut-wrap');
-    if (!wrap) return;
-    wrap.querySelectorAll('#dash-drill-donut-switch .fintech-pill-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.#donutMetric = btn.dataset.metric;
-        this.#renderDrilldownDonut(filtered);
-      });
-    });
-  }
-
-  #renderDrilldownEvolucion() {
-    const wrap = document.getElementById('dash-drill-evolucion-wrap');
-    if (!wrap) return;
-
-    const hist = this.#evolucionMensual || [];
-    if (!hist.length) {
-      wrap.innerHTML = `
-        <div class="fintech-card-header">
-          <h3 class="fintech-card-title">Evolución Mensual</h3>
-        </div>
-        <div style="padding:1.5rem 1rem;text-align:center;color:var(--texto-3);font-size:0.82rem;">
-          Cargando serie histórica...
-        </div>`;
-      return;
-    }
-
-    const isIngVsGas = this.#evolucionMode === 'ingresos_vs_gastos';
-
-    wrap.innerHTML = `
-      <div class="fintech-card-header">
-        <div>
-          <h3 class="fintech-card-title">Evolución Mensual</h3>
-          <span style="font-size:0.75rem;color:var(--texto-3);">Variación últimos 6 meses</span>
-        </div>
-        <div class="fintech-pill-switch" id="dash-drill-evol-switch">
-          <button class="fintech-pill-btn ${isIngVsGas ? 'active' : ''}" data-mode="ingresos_vs_gastos" title="Comparar Ingresos vs Gastos">Ingresos vs Gastos</button>
-          <button class="fintech-pill-btn ${!isIngVsGas ? 'active' : ''}" data-mode="balance" title="Balance mensual neto">Balance</button>
-        </div>
-      </div>
-      <div style="position:relative;width:100%;height:175px;display:flex;align-items:center;justify-content:center;margin:4px 0;">
-        <canvas id="dash-drill-evolucion-canvas"></canvas>
-      </div>
-    `;
-
-    wrap.querySelectorAll('#dash-drill-evol-switch .fintech-pill-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.#evolucionMode = btn.dataset.mode;
-        this.#renderDrilldownEvolucion();
-      });
-    });
-
-    const canvas = document.getElementById('dash-drill-evolucion-canvas');
-    if (!canvas) return;
-
-    this.#evolucionChartInstance?.destroy();
-    const ctx = canvas.getContext('2d');
-
-    const labels = hist.map(e => App.Utils.formatearMes(e.mes));
-
-    let datasets = [];
-    if (isIngVsGas) {
-      datasets = [
-        {
-          label: 'Ingresos',
-          data: hist.map(e => Math.round(e.ingresos || 0)),
-          backgroundColor: '#10B981',
-          borderRadius: 5,
-          barPercentage: 0.65,
-          categoryPercentage: 0.8
-        },
-        {
-          label: 'Gastos',
-          data: hist.map(e => Math.round(e.egresos || 0)),
-          backgroundColor: '#1D195D',
-          borderRadius: 5,
-          barPercentage: 0.65,
-          categoryPercentage: 0.8
-        }
-      ];
-    } else {
-      datasets = [
-        {
-          label: 'Balance Neto',
-          data: hist.map(e => Math.round(e.balance || 0)),
-          backgroundColor: hist.map(e => (e.balance || 0) >= 0 ? '#10B981' : '#F43F5E'),
-          borderRadius: 5,
-          barPercentage: 0.7,
-          categoryPercentage: 0.85
-        }
-      ];
-    }
-
-    this.#evolucionChartInstance = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: isIngVsGas,
-            position: 'top',
-            align: 'end',
-            labels: {
-              boxWidth: 8,
-              boxHeight: 8,
-              usePointStyle: true,
-              pointStyle: 'circle',
-              font: { size: 10, family: 'Inter, sans-serif' },
-              color: 'var(--texto-2)'
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: (context) => {
-                const val = context.parsed.y || 0;
-                return ` ${context.dataset.label || ''}: $ ${val.toLocaleString('es-AR')}`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
-          },
-          y: {
-            grid: { color: 'rgba(0,0,0,0.04)' },
-            ticks: {
-              font: { size: 9, family: 'Inter, sans-serif' },
-              color: 'var(--texto-3)',
-              callback: (v) => '$ ' + (Math.abs(v) >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : (v / 1000).toFixed(0) + 'k')
-            }
-          }
-        }
-      }
     });
   }
 
