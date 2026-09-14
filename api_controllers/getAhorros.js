@@ -38,32 +38,58 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, ...dbData });
     }
 
-    // Fallback if RPC doesn't exist
+    // Subcuentas
     const { data: subcuentas } = await supabase.from('ahorro_subcuentas').select('*').eq('id_cuenta_principal', cuenta).eq('user_id', userId);
-    const { data: transferencias } = await supabase.from('movimientos').select('*').eq('id_cuenta_principal', cuenta).eq('user_id', userId).not('id_transfer_ahorro', 'is', null).gte('fecha', fechaInicio).lte('fecha', fechaFin);
+
+    // Consultar ahorros directamente con fallback a movimientos
+    const { data: ahData } = await supabase.from('ahorros')
+      .select('*, ahorro_subcuentas(nombre)')
+      .eq('user_id', userId)
+      .gte('fecha', fechaInicio)
+      .lte('fecha', fechaFin)
+      .order('fecha', { ascending: false });
+
+    let transferencias = (ahData || []).map(a => ({
+      ...a,
+      id_ahorro: a.id_ahorro,
+      subcuenta_nombre: a.ahorro_subcuentas?.nombre || a.descripcion || 'Alcancía',
+      tipo_mov: a.tipo_transfer || 'DEPOSITO'
+    }));
+
+    if (!transferencias.length) {
+      const { data: movData } = await supabase.from('movimientos')
+        .select('*')
+        .eq('id_cuenta_principal', cuenta)
+        .eq('user_id', userId)
+        .not('id_transfer_ahorro', 'is', null)
+        .gte('fecha', fechaInicio)
+        .lte('fecha', fechaFin);
+
+      transferencias = (movData || []).map(m => ({
+        ...m,
+        id_ahorro: m.id_transfer_ahorro || m.id_movimiento,
+        subcuenta_nombre: m.descripcion || 'General',
+        tipo_mov: m.tipo_mov === 'EGRESO' ? 'DEPOSITO' : 'RETIRO'
+      }));
+    }
 
     let arsTotal = 0;
     let usdTotal = 0;
 
-    (subcuentas || []).forEach(sc => {
-      // Very naive balance calculation for fallback
-      let saldo = 0;
-      (transferencias || []).forEach(t => {
-        if (t.id_transfer_ahorro === sc.id_subcuenta) {
-          saldo += t.tipo_mov === 'INGRESO' ? Number(t.importe || 0) : -Number(t.importe || 0);
-        }
-      });
-      if (sc.moneda === 'USD') usdTotal += saldo;
-      else arsTotal += saldo;
+    (transferencias || []).forEach(t => {
+      const imp = Number(t.importe || 0);
+      const factor = t.tipo_mov === 'DEPOSITO' ? 1 : -1;
+      if (t.moneda === 'USD') usdTotal += (imp * factor);
+      else arsTotal += (imp * factor);
     });
 
-    let consolidadoArs = arsTotal + (usdTotal * 1000); // 1000 ARS per 1 USD naive fallback
+    let consolidadoArs = arsTotal + (usdTotal * 1000);
 
     return res.status(200).json({
       success: true,
       kpis: { arsTotal, usdTotal, consolidadoArs },
       subcuentas: subcuentas || [],
-      transferencias: transferencias || []
+      transferencias: transferencias
     });
 
   } catch (err) {

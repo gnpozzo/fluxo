@@ -35,22 +35,19 @@ export default async function handler(req, res) {
 
     let movimientos = [];
 
-    // 1. Consultar RPC o tabla
-    const rpcRes = await supabase.rpc('get_inversiones_movimientos', { p_id_cuenta: idCuenta });
-    if (!rpcRes.error && Array.isArray(rpcRes.data)) {
-      movimientos = rpcRes.data;
-    } else {
-      const { data, error } = await supabase
-        .from('inversiones_movimientos')
-        .select('*')
-        .eq('id_cuenta_principal', idCuenta)
-        .eq('user_id', userId)
-        .order('fecha', { ascending: false });
+    // 1. Consultar tabla de inversiones_movimientos (garantiza id_inversion_mov)
+    const { data, error } = await supabase
+      .from('inversiones_movimientos')
+      .select('*')
+      .eq('id_cuenta_principal', idCuenta)
+      .eq('user_id', userId)
+      .order('fecha', { ascending: false });
 
-      if (error) {
-        console.warn('[getPortfolio] Supabase query notice:', error.message);
-      }
-      movimientos = data || [];
+    if (!error && data) {
+      movimientos = data;
+    } else {
+      const rpcRes = await supabase.rpc('get_inversiones_movimientos', { p_id_cuenta: idCuenta });
+      movimientos = rpcRes.data || [];
     }
 
     if (!movimientos || movimientos.length === 0) {
