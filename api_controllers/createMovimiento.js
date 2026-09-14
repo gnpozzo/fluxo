@@ -1,21 +1,22 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
+
+// Mapping frontend UI frequencies to month step intervals
+const FREQ_MAP = {
+  MENSUAL: 1,
+  BIMESTRAL: 2,
+  TRIMESTRAL: 3,
+  SEMESTRAL: 6,
+  ANUAL: 12
+};
 
 function addMonthsSafe(date, months) {
   const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
+  const targetMonth = d.getMonth() + months;
+  d.setMonth(targetMonth);
   return d;
 }
-
-// Map frequency names to month intervals
-const FREQ_MAP = {
-  'MENSUAL': 1,
-  'BIMESTRAL': 2,
-  'TRIMESTRAL': 3,
-  'SEMESTRAL': 6,
-  'ANUAL': 12
-};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -37,11 +38,12 @@ export default async function handler(req, res) {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    // Validate account ownership
-    const isOwner = await verifyCuentaOwnership(supabase, mov.idCuenta, userId);
-    if (!isOwner) {
+    // Validate and resolve account ownership
+    const resolvedCuenta = await resolveUserCuenta(supabase, mov.idCuenta, userId);
+    if (!resolvedCuenta) {
       return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada no pertenece al usuario autenticado.' });
     }
+    mov.idCuenta = resolvedCuenta;
 
     const rows = [];
     const fechaBase = new Date(mov.fecha + 'T12:00:00Z');
@@ -54,13 +56,13 @@ export default async function handler(req, res) {
         if (isNaN(pct) || pct <= 0) throw new Error('Porcentaje de distribución inválido.');
         
         // Verify ownership of destination account
-        const destOwner = await verifyCuentaOwnership(supabase, d.cuenta, userId);
+        const destOwner = await resolveUserCuenta(supabase, d.cuenta, userId);
         if (!destOwner) {
           return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta de destino no pertenece al usuario autenticado.' });
         }
 
         pctRetenido -= pct;
-        destinos.push({ cuenta: d.cuenta, pct: pct / 100 });
+        destinos.push({ cuenta: destOwner, pct: pct / 100 });
       }
       if (pctRetenido < 0) throw new Error('La suma de porcentajes de distribución supera el 100%.');
     }

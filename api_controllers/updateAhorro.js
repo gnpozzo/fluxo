@@ -29,7 +29,9 @@ export default async function handler(req, res) {
 
     const id_ahorro = request.id_ahorro || request.original?.id || rawId;
     const data = (request.data && Object.keys(request.data).length > 0) ? request.data : request;
-    const { fecha, tipo_transfer, moneda, idSubcuenta, descripcion } = data;
+    const tipo_transfer = (data.tipo_transfer || data.tipo || 'DEPOSITO').toUpperCase();
+    const { fecha, idSubcuenta, descripcion } = data;
+    const moneda = data.moneda || 'ARS';
     const importe = Number(data.importe);
     
     let importePrincipal = importe;

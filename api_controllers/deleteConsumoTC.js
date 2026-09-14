@@ -5,16 +5,20 @@ export default async function handler(req, res) {
   try {
     const supabase = getSupabaseClient(req);
     const rawArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
-    let request = req.body || {};
-    if (rawArgs) {
+    let request = (typeof req.body === 'object' && req.body !== null) ? req.body : {};
+    if (typeof req.body === 'string') {
+      try { request = JSON.parse(req.body); } catch (_) {}
+    }
+    if (rawArgs && rawArgs.length > 0) {
       if (typeof rawArgs[0] === 'object' && rawArgs[0] !== null) {
-        request = rawArgs[0];
+        request = { ...request, ...rawArgs[0] };
       } else {
         request = {
+          ...request,
           consumoId: rawArgs[0],
-          scope: rawArgs[1] || 'SINGLE',
-          recurGroupId: rawArgs[2],
-          fecha: rawArgs[3]
+          scope: rawArgs[1] || request.scope || 'SINGLE',
+          recurGroupId: rawArgs[2] || request.recurGroupId,
+          fecha: rawArgs[3] || request.fecha
         };
       }
     }
@@ -23,7 +27,7 @@ export default async function handler(req, res) {
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
     const scope = request.scope || 'SINGLE';
-    const consumoId = request.consumoId || request.id || (rawArgs ? rawArgs[0] : null);
+    const consumoId = request.consumoId || request.id || request.id_consumo_tarjeta || request.id_consumo_tc || (rawArgs ? rawArgs[0] : null);
 
     if (scope === 'SINGLE') {
       if (!consumoId) throw new Error('consumoId requerido');

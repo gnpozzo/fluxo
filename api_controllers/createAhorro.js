@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -22,12 +22,14 @@ export default async function handler(req, res) {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const { idCuenta, fecha, tipo_transfer, moneda, idSubcuenta, descripcion } = ahorroData;
+    const tipo_transfer = (ahorroData.tipo_transfer || ahorroData.tipo || 'DEPOSITO').toUpperCase();
+    const { fecha, idSubcuenta, descripcion } = ahorroData;
+    const moneda = ahorroData.moneda || 'ARS';
     const importe = Number(ahorroData.importe);
     
-    if (idCuenta) {
-      const isOwner = await verifyCuentaOwnership(supabase, idCuenta, userId);
-      if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+    const idCuenta = await resolveUserCuenta(supabase, ahorroData.idCuenta, userId);
+    if (!idCuenta) {
+      return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
 
     const ID_CATEGORIA_AHORRO = 'CAT_AHORRO';

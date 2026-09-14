@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
 
 function parseDateSafe(val) {
@@ -97,10 +97,15 @@ export default async function handler(req, res) {
     const cuentaNombreMap = {};
     (allUserCuentas || []).forEach(c => { cuentaNombreMap[c.id_cuenta_principal] = c.nombre; });
 
+    if (consumo.idCuenta) {
+      consumo.idCuenta = await resolveUserCuenta(supabase, consumo.idCuenta, userId) || consumo.idCuenta;
+    }
+
     // Validate account if imputed
     if (consumo.imputar && consumo.idCuentaImputar) {
-      const isOwner = await verifyCuentaOwnership(supabase, consumo.idCuentaImputar, userId);
-      if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada para imputar no pertenece al usuario autenticado.' });
+      const resolved = await resolveUserCuenta(supabase, consumo.idCuentaImputar, userId);
+      if (!resolved) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada para imputar no pertenece al usuario autenticado.' });
+      consumo.idCuentaImputar = resolved;
     }
 
     const tcRows = [];

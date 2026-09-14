@@ -782,7 +782,8 @@ export class TarjetasModule extends BaseModule {
       danger      : true,
       onConfirm   : async () => {
         try {
-          await this._handleDelete(row.id_consumo_tc || row.id_consumo_tarjeta);
+          const id = row.id_consumo_tc || row.id_consumo_tarjeta || row.id || row.id_consumo;
+          await this._handleDelete(id);
         } catch (_) {} finally {
           confirmModal.close();
         }

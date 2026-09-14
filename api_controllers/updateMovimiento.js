@@ -1,16 +1,22 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
+
+// Mapping frontend UI frequencies to month step intervals
+const FREQ_MAP = {
+  MENSUAL: 1,
+  BIMESTRAL: 2,
+  TRIMESTRAL: 3,
+  SEMESTRAL: 6,
+  ANUAL: 12
+};
 
 function addMonthsSafe(date, months) {
   const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
+  const targetMonth = d.getMonth() + months;
+  d.setMonth(targetMonth);
   return d;
 }
-
-const FREQ_MAP = {
-  'MENSUAL': 1, 'BIMESTRAL': 2, 'TRIMESTRAL': 3, 'SEMESTRAL': 6, 'ANUAL': 12
-};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -23,10 +29,9 @@ export default async function handler(req, res) {
     if (bodyArgs) {
       if (bodyArgs[1] && typeof bodyArgs[1] === 'object') {
         request = bodyArgs[1];
-        rawScope = typeof bodyArgs[2] === 'string' ? bodyArgs[2] : null;
+        rawScope = typeof bodyArgs[3] === 'string' ? bodyArgs[3] : (typeof bodyArgs[2] === 'string' ? bodyArgs[2] : null);
       } else if (bodyArgs[0] && typeof bodyArgs[0] === 'object') {
         request = bodyArgs[0];
-        rawScope = typeof bodyArgs[1] === 'string' ? bodyArgs[1] : null;
       } else {
         request = {};
       }
@@ -44,10 +49,11 @@ export default async function handler(req, res) {
     const mov = (data && Object.keys(data).length > 0) ? data : request;
 
     if (mov?.idCuenta) {
-      const isOwner = await verifyCuentaOwnership(supabase, mov.idCuenta, userId);
-      if (!isOwner) {
+      const resolved = await resolveUserCuenta(supabase, mov.idCuenta, userId);
+      if (!resolved) {
         return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada no pertenece al usuario autenticado.' });
       }
+      mov.idCuenta = resolved;
     }
 
     const isOriginalRecurrente = !!original.recurGroupId;
