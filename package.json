@@ -15,6 +15,7 @@
     "@supabase/supabase-js": "^2.42.0",
     "chart.js": "^4.4.2",
     "pg": "^8.23.0",
+    "puppeteer-core": "^25.11.0",
     "xlsx": "^0.18.5"
   },
   "engines": {

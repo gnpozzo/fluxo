@@ -378,6 +378,11 @@ export class TarjetasModule extends BaseModule {
                 <input type="text" id="tc-consumos-search" placeholder="Buscar..." class="finset-search-input" style="width:130px;">
               </div>
 
+              <button class="btn btn-secondary btn-sm" id="tc-btn-importar-inline" style="display:inline-flex;align-items:center;gap:6px;" title="Importar resumen bancario (PDF o Excel)">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Importar Resumen</span>
+              </button>
+
               <button class="btn btn-primary btn-sm" id="tc-btn-nuevo-inline" style="display:inline-flex;align-items:center;gap:6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 <span>Nuevo Consumo</span>
@@ -802,6 +807,8 @@ export class TarjetasModule extends BaseModule {
         
         if (btn.id === 'tc-btn-nuevo' || btn.id === 'tc-btn-nuevo-inline') {
           this.#abrirModalAlta();
+        } else if (btn.id === 'tc-btn-importar' || btn.id === 'tc-btn-importar-inline') {
+          this.#abrirModalImportar();
         } else if (btn.id === 'tc-btn-pagar-resumen') {
           this.#confirmarPagarResumen();
         } else if (btn.dataset.togglePagoTc) {
@@ -1306,14 +1313,16 @@ export class TarjetasModule extends BaseModule {
     }
 
     // Actualizar resumen y títulos
-    const badgeTitleEl = document.getElementById('tc-consumos-title');
-    const badgeEl = document.getElementById('tc-consumos-badge');
-    const summaryEl = document.getElementById('tc-consumos-summary');
+    const activeCard = this.#selectedTcId ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId) : null;
 
     if (badgeTitleEl) {
-      if (this.#consumosFilter === 'CUOTAS') badgeTitleEl.textContent = 'Consumos en Cuotas';
-      else if (this.#consumosFilter === 'COMUN') badgeTitleEl.textContent = 'Consumos Pago Único';
-      else badgeTitleEl.textContent = 'Todos los Consumos';
+      if (this.#consumosFilter === 'CUOTAS') {
+        badgeTitleEl.textContent = activeCard ? `Cuotas • ${activeCard.nombre}` : 'Consumos en Cuotas';
+      } else if (this.#consumosFilter === 'COMUN') {
+        badgeTitleEl.textContent = activeCard ? `Pago Único • ${activeCard.nombre}` : 'Consumos Pago Único';
+      } else {
+        badgeTitleEl.textContent = activeCard ? `Consumos • ${activeCard.nombre}` : 'Todos los Consumos';
+      }
     }
     if (badgeEl) {
       badgeEl.className = 'dh-drilldown-badge ' + (this.#consumosFilter === 'CUOTAS' ? 'badge-recur' : 'badge-all');
@@ -1432,26 +1441,64 @@ export class TarjetasModule extends BaseModule {
   #updateScorecardTotal() {
     const valArsEl = document.getElementById('tc-kpi-val-ars');
     const subArsEl = document.getElementById('tc-kpi-sub-ars');
+    const valUsdEl = document.getElementById('tc-kpi-val-usd');
+    const subUsdEl = document.getElementById('tc-kpi-sub-usd');
     if (!valArsEl) return;
 
+    const activeCard = this.#selectedTcId ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId) : null;
+
+    let pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
+    if (this.#selectedTcId) {
+      pool = pool.filter(c => c.id_tarjeta === this.#selectedTcId);
+    }
+
     if (this.#selectedCategorias.size > 0) {
-      let pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c) && c.moneda !== 'USD');
-      if (this.#selectedTcId) {
-        pool = pool.filter(c => c.id_tarjeta === this.#selectedTcId);
-      }
-      const filteredSum = pool
-        .filter(c => this.#selectedCategorias.has(c.categoria_nombre || 'General'))
+      const filteredSumArs = pool
+        .filter(c => c.moneda !== 'USD' && this.#selectedCategorias.has(c.categoria_nombre || 'General'))
         .reduce((acc, c) => acc + Number(c.importe || 0), 0);
-      
-      valArsEl.textContent = App.Utils.formatearMoneda(filteredSum);
+      const filteredSumUsd = pool
+        .filter(c => c.moneda === 'USD' && this.#selectedCategorias.has(c.categoria_nombre || 'General'))
+        .reduce((acc, c) => acc + Number(c.importe || 0), 0);
+
+      valArsEl.textContent = App.Utils.formatearMoneda(filteredSumArs);
       if (subArsEl) {
         const count = this.#selectedCategorias.size;
         subArsEl.textContent = `Filtrado por ${count} ${count === 1 ? 'categoría' : 'categorías'}`;
       }
+      if (valUsdEl) {
+        valUsdEl.textContent = 'US$ ' + filteredSumUsd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
     } else {
-      valArsEl.textContent = App.Utils.formatearMoneda(this.#baseSaldoTotal);
-      if (subArsEl) {
-        subArsEl.textContent = 'Liquidación del mes actual';
+      let finalArs = 0;
+      let finalUsd = 0;
+
+      if (activeCard) {
+        const subArs = pool.filter(c => c.moneda !== 'USD').reduce((acc, c) => acc + Number(c.importe || 0), 0);
+        const subUsd = pool.filter(c => c.moneda === 'USD').reduce((acc, c) => acc + Number(c.importe || 0), 0);
+        finalArs = Number(activeCard.total_resumen_ars || 0) > 0 ? Number(activeCard.total_resumen_ars) : subArs;
+        finalUsd = Number(activeCard.total_resumen_usd || 0) > 0 ? Number(activeCard.total_resumen_usd) : subUsd;
+
+        valArsEl.textContent = App.Utils.formatearMoneda(finalArs);
+        if (subArsEl) subArsEl.textContent = `Liquidación ${App.Utils.escapeHtml(activeCard.nombre)}`;
+      } else {
+        finalArs = this.#baseSaldoTotal;
+        finalUsd = (this.#allConsumos || []).filter(c => c.moneda === 'USD').reduce((acc, c) => acc + Number(c.importe || 0), 0);
+        this.#tarjetas.forEach(tc => {
+          if (Number(tc.total_resumen_usd || 0) > 0) finalUsd += Number(tc.total_resumen_usd);
+        });
+
+        valArsEl.textContent = App.Utils.formatearMoneda(finalArs);
+        if (subArsEl) subArsEl.textContent = 'Liquidación del mes actual';
+      }
+
+      if (valUsdEl) {
+        valUsdEl.textContent = 'US$ ' + finalUsd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      if (subUsdEl) {
+        const cotizOficial = App.Store.cotizaciones?.oficial?.venta || 0;
+        subUsdEl.textContent = cotizOficial && finalUsd > 0
+          ? `Equiv. oficial: $ ${Math.round(finalUsd * cotizOficial).toLocaleString('es-AR')}`
+          : 'Equiv. oficial: —';
       }
     }
   }
