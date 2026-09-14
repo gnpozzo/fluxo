@@ -38,6 +38,23 @@ function addMonthsSafe(date, months) {
   return d;
 }
 
+function isTaxConcept(desc) {
+  if (!desc) return false;
+  const d = String(desc).toLowerCase();
+  return d.includes('impuesto de sellos') ||
+         d.includes('imp.sellos') ||
+         d.includes('iva rg') ||
+         d.includes('iibb') ||
+         d.includes('percep') ||
+         d.includes('db.rg') ||
+         d.includes('rg 4240') ||
+         d.includes('rg 5617') ||
+         d.includes('rg 4815') ||
+         d.includes('rg 5272') ||
+         d.includes('ley 27541') ||
+         d.includes('impuesto pais');
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
@@ -197,7 +214,9 @@ export default async function handler(req, res) {
           recur_group_id: recurGroupId
         });
 
-        if (consumo.imputar && rowAccountId) {
+        const isTaxItem = item.isTax || isTaxConcept(item.descripcion);
+
+        if (consumo.imputar && rowAccountId && !isTaxItem) {
           // 1. Egreso en la cuenta imputada (ej: Hogar)
           movRows.push({
             id_movimiento: crypto.randomUUID(),
@@ -262,7 +281,7 @@ export default async function handler(req, res) {
             });
 
             // Imputación persistente hacia la cuenta destino
-            if (consumo.imputar && rowAccountId) {
+            if (consumo.imputar && rowAccountId && !isTaxItem) {
               movRows.push({
                 id_movimiento: crypto.randomUUID(),
                 id_cuenta_principal: rowAccountId,
@@ -320,7 +339,7 @@ export default async function handler(req, res) {
             });
 
             // Imputación persistente hacia la cuenta destino
-            if (consumo.imputar && rowAccountId) {
+            if (consumo.imputar && rowAccountId && !isTaxItem) {
               movRows.push({
                 id_movimiento: crypto.randomUUID(),
                 id_cuenta_principal: rowAccountId,
@@ -419,6 +438,7 @@ export default async function handler(req, res) {
       // --- MODO INDIVIDUAL ---
       const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
       const moneda = consumo.moneda || 'ARS';
+      const isTaxItem = consumo.isTax || isTaxConcept(consumo.descripcion);
 
       if (consumo.tipoConsumo === 'COMUN' || consumo.tipoConsumo === 'SIMPLE') {
         const idConsumo = crypto.randomUUID();
@@ -435,7 +455,7 @@ export default async function handler(req, res) {
           moneda: moneda
         });
 
-        if (consumo.imputar) {
+        if (consumo.imputar && !isTaxItem) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: consumo.idCuentaImputar,
@@ -491,7 +511,7 @@ export default async function handler(req, res) {
           recur_group_id: installmentGroupId
         });
 
-        if (consumo.imputar) {
+        if (consumo.imputar && !isTaxItem) {
           const descImputacion = consumo.descripcion + ' (Cuota ' + cuotaNumActual + '/' + consumo.cuotaTotal + ')';
           movRows.push({
             id_movimiento: crypto.randomUUID(),
@@ -547,7 +567,7 @@ export default async function handler(req, res) {
           recur_group_id: recurGroupId
         });
 
-        if (consumo.imputar) {
+        if (consumo.imputar && !isTaxItem) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: consumo.idCuentaImputar,

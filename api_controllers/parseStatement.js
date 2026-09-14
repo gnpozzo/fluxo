@@ -147,7 +147,8 @@ function tryParseSantanderXlsx(buffer) {
             importe,
             moneda: 'ARS',
             cuota_actual: null,
-            cuota_total: null
+            cuota_total: null,
+            isTax: true
           });
         }
       }
@@ -264,6 +265,7 @@ export default async function handler(req, res) {
       const systemInstruction = `
 Eres un asistente de procesamiento de resúmenes de tarjeta de crédito para Fluxo.
 Extrae todas las compras, consumos, impuestos y percepciones del documento (ignora pagos como "SU PAGO EN PESOS").
+Identifica y marca impuestos y percepciones bancarias/fiscales (Impuesto de sellos, IVA RG, IIBB percep, DB.RG, Percepciones) con "isTax": true.
 Determina los metadatos del resumen y la tarjeta (incluyendo próximo cierre y próximo vencimiento si están presentes en el resumen).
 
 Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de código markdown:
@@ -286,7 +288,8 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       "importe": 123.45,
       "moneda": "ARS" o "USD",
       "cuota_actual": número o null,
-      "cuota_total": número o null
+      "cuota_total": número o null,
+      "isTax": true o false
     }
   ]
 }
@@ -418,11 +421,41 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       return false;
     }
 
+    function isTaxConcept(desc) {
+      if (!desc) return false;
+      const d = String(desc).toLowerCase();
+      return d.includes('impuesto de sellos') ||
+             d.includes('imp.sellos') ||
+             d.includes('iva rg') ||
+             d.includes('iibb') ||
+             d.includes('percep') ||
+             d.includes('db.rg') ||
+             d.includes('rg 4240') ||
+             d.includes('rg 5617') ||
+             d.includes('rg 4815') ||
+             d.includes('rg 5272') ||
+             d.includes('ley 27541') ||
+             d.includes('impuesto pais');
+    }
+
     function resolveTransactionMetadata(tx, consumosHist) {
       const d = (tx.descripcion || '').toLowerCase();
       const sig = getInsuranceSignature(tx.descripcion);
       const baseKey = extractBaseKey(tx.descripcion);
       const normTx = d.replace(/[^a-z0-9]/g, '');
+
+      // 0. PRIORIDAD 0: Impuestos y percepciones específicas del resumen (no se imputan a cuentas)
+      if (tx.isTax || isTaxConcept(tx.descripcion)) {
+        return {
+          id_categoria: null,
+          id_cuenta_imputar: null,
+          tipo_consumo: 'SIMPLE',
+          sugerencia_ia: '🏛️ Impuesto de resumen (específico de la tarjeta, no se imputa a cuentas)',
+          isRecur: false,
+          isTax: true,
+          subtype: 'TAX'
+        };
+      }
 
       // 1. PRIORIDAD 1: Reglas aprendidas explícitas del usuario (guardadas al editar consumos)
       let matchedRule = null;
@@ -592,6 +625,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       tx.tipo_consumo = meta.tipo_consumo;
       if (meta.sugerencia_ia) tx.sugerencia_ia = meta.sugerencia_ia;
       if (meta.id_cuenta_imputar) tx.id_cuenta_imputar = meta.id_cuenta_imputar;
+      if (meta.isTax) tx.isTax = true;
 
       const isCuotas = tx.tipo_consumo === 'CUOTAS';
       const isRecur = meta.isRecur;

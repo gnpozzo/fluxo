@@ -70,12 +70,19 @@ export default async function handler(req, res) {
         m.pagado = !!pagosMap[m.id_movimiento]?.pagado;
         m.fecha_pago = pagosMap[m.id_movimiento]?.fecha_pago || null;
 
+        const isPagoTC = m.id_categoria === 'CAT_PAGO_TC' || (typeof m.descripcion === 'string' && m.descripcion.toLowerCase().startsWith('pago resumen:'));
+        m.is_pago_tc = isPagoTC;
+
         const amt = Math.abs(Number(m.importe));
         if (m.tipo_mov === 'INGRESO') ingresos += amt;
         if (m.tipo_mov === 'EGRESO') {
-          egresos -= amt;
-          if (m.pagado) egresosSaldados += amt;
-          else egresosPendientes += amt;
+          // Filosofía Copilot / Monarch: El pago de resumen es un flujo de transferencia/pasivo.
+          // No debe sumarse al total de egresos operativos para no duplicar con los consumos desglosados (Adobe, Showcase, etc.)
+          if (!isPagoTC) {
+            egresos -= amt;
+            if (m.pagado) egresosSaldados += amt;
+            else egresosPendientes += amt;
+          }
         }
     });
 
@@ -95,7 +102,7 @@ export default async function handler(req, res) {
 
     const { data: histMovs, error: histError } = await supabase
       .from('movimientos')
-      .select('fecha, tipo_mov, importe')
+      .select('fecha, tipo_mov, importe, id_categoria, descripcion')
       .eq('id_cuenta_principal', cuenta)
       .eq('user_id', userId)
       .gte('fecha', startRange)
@@ -125,9 +132,10 @@ export default async function handler(req, res) {
     (histMovs || []).forEach(hm => {
       const mKey = (hm.fecha || '').substring(0, 7);
       if (mesesBuckets[mKey]) {
+        const isPagoTC = hm.id_categoria === 'CAT_PAGO_TC' || (typeof hm.descripcion === 'string' && hm.descripcion.toLowerCase().startsWith('pago resumen:'));
         const amt = Math.abs(Number(hm.importe || 0));
         if (hm.tipo_mov === 'INGRESO') mesesBuckets[mKey].ingresos += amt;
-        if (hm.tipo_mov === 'EGRESO') mesesBuckets[mKey].egresos += amt;
+        if (hm.tipo_mov === 'EGRESO' && !isPagoTC) mesesBuckets[mKey].egresos += amt;
       }
     });
 

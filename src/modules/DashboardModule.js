@@ -1608,8 +1608,26 @@ export class DashboardModule extends BaseModule {
 
     if (subEl) subEl.textContent = isIngresos ? 'Distribución de ingresos' : 'Distribución de gastos';
     if (centerLblEl) centerLblEl.textContent = isIngresos ? 'Total Ingresos' : 'Total Gastos';
+    const isTaxConsumo = (m) => {
+      const d = (m.descripcion || '').toLowerCase();
+      return d.includes('impuesto de sellos') ||
+             d.includes('imp.sellos') ||
+             d.includes('iva rg') ||
+             d.includes('iibb') ||
+             d.includes('db.rg') ||
+             d.includes('percep-sant');
+    };
+    const isPagoTC = (m) => (
+      m.is_pago_tc ||
+      m.id_categoria === 'CAT_PAGO_TC' ||
+      (typeof m.descripcion === 'string' && m.descripcion.toLowerCase().startsWith('pago resumen:')) ||
+      (typeof m.categoria_nombre === 'string' && m.categoria_nombre.toLowerCase().includes('pago de tarjeta'))
+    );
 
-    const pool = (this.#movData || []).filter(m => m.tipo_mov === targetType);
+    let pool = (this.#movData || []).filter(m => m.tipo_mov === targetType && !isTaxConsumo(m));
+    if (targetType === 'EGRESO') {
+      pool = pool.filter(m => !isPagoTC(m));
+    }
     const totalMetric = pool.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
 
     if (centerValEl) {
@@ -1718,13 +1736,35 @@ export class DashboardModule extends BaseModule {
     const catFilterSelect = document.getElementById('dash-mov-cat-filter');
     if (!listEl) return;
 
+    const isTaxConsumo = (m) => {
+      const d = (m.descripcion || '').toLowerCase();
+      return d.includes('impuesto de sellos') ||
+             d.includes('imp.sellos') ||
+             d.includes('iva rg') ||
+             d.includes('iibb') ||
+             d.includes('db.rg') ||
+             d.includes('percep-sant');
+    };
+    const isPagoTC = (m) => (
+      m.is_pago_tc ||
+      m.id_categoria === 'CAT_PAGO_TC' ||
+      (typeof m.descripcion === 'string' && m.descripcion.toLowerCase().startsWith('pago resumen:')) ||
+      (typeof m.categoria_nombre === 'string' && m.categoria_nombre.toLowerCase().includes('pago de tarjeta'))
+    );
+
+    const cleanData = (this.#movData || []).filter(m => !isTaxConsumo(m));
+
     // 1. Populate category filter options from current data
     if (catFilterSelect) {
       const currentVal = this.#selectedMovCategoria || 'ALL';
       const availableCats = new Set();
-      (this.#movData || []).forEach(m => {
+      cleanData.forEach(m => {
         if (m.tipo_mov === 'EGRESO') {
-          availableCats.add(m.categoria_nombre || 'General');
+          if (isPagoTC(m)) {
+            availableCats.add('Pago de Tarjeta de Crédito');
+          } else {
+            availableCats.add(m.categoria_nombre || 'General');
+          }
         } else if (m.tipo_mov === 'INGRESO') {
           availableCats.add(m.categoria_nombre || 'Ingreso');
         }
@@ -1736,17 +1776,19 @@ export class DashboardModule extends BaseModule {
     }
 
     // 2. Filter by type (ALL, INGRESO, EGRESO)
-    let filtered = this.#movData || [];
+    // Filosofía Copilot/Monarch: En 'Gastos' se muestran egresos operativos (sin duplicar pago de resumen).
+    // En 'Todos' se ve el flujo completo de dinero incluyendo la liquidación de la tarjeta.
+    let filtered = cleanData;
     if (this.#movFilter === 'INGRESO') {
       filtered = filtered.filter(m => m.tipo_mov === 'INGRESO');
     } else if (this.#movFilter === 'EGRESO') {
-      filtered = filtered.filter(m => m.tipo_mov === 'EGRESO');
+      filtered = filtered.filter(m => m.tipo_mov === 'EGRESO' && !isPagoTC(m));
     }
 
     // 3. Filter by category selection
     if (this.#selectedMovCategoria && this.#selectedMovCategoria !== 'ALL') {
       filtered = filtered.filter(m => {
-        const cat = m.categoria_nombre || (m.tipo_mov === 'INGRESO' ? 'Ingreso' : 'General');
+        const cat = isPagoTC(m) ? 'Pago de Tarjeta de Crédito' : (m.categoria_nombre || (m.tipo_mov === 'INGRESO' ? 'Ingreso' : 'General'));
         return cat === this.#selectedMovCategoria;
       });
     }
@@ -1855,23 +1897,26 @@ export class DashboardModule extends BaseModule {
       const iconClass = esIngreso ? 'icon-green' : 'icon-subtle';
       const sign = esIngreso ? '+' : '-';
       const valClass = esIngreso ? 'positivo' : 'negativo';
-      const catName = r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General');
+      const isPago = isPagoTC(r);
+      const catName = isPago ? 'Pago Tarjeta de Crédito' : (r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General'));
       const desc = r.descripcion || catName;
       const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
       const medio = r.medio_pago ? `<span class="dh-pill-medio">${App.Utils.escapeHtml(r.medio_pago)}</span>` : '';
       const isConsolidado = !!r.es_consolidado;
       const badgeConsolidado = isConsolidado ? `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${r.items_agrupados?.length || 0} reintegros</span>` : '';
+      const badgePagoTC = isPago ? `<span class="badge" style="background:rgba(37,99,235,0.12); color:#2563eb; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:6px; margin-left:4px;">💳 Flujo de Pago TC</span>` : '';
 
       return `
-        <div class="dh-drill-row ${isConsolidado ? 'is-consolidated' : ''}" data-id="${r.id_movimiento || r.id}">
+        <div class="dh-drill-row ${isConsolidado ? 'is-consolidated' : ''} ${isPago ? 'is-pago-tc' : ''}" data-id="${r.id_movimiento || r.id}">
           <div class="dh-col-main">
             <div class="dh-item-icon ${iconClass}">
-              ${getCategoryIconSvg(catName, r.tipo_mov)}
+              ${isPago ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>` : getCategoryIconSvg(catName, r.tipo_mov)}
             </div>
             <div class="dh-col-desc-wrap">
               <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
                 <span class="dh-row-desc">${App.Utils.escapeHtml(desc)}</span>
                 ${badgeConsolidado}
+                ${badgePagoTC}
               </div>
               <span class="dh-row-date">${fechaStr}</span>
             </div>
@@ -1901,12 +1946,13 @@ export class DashboardModule extends BaseModule {
     // Group Egresos by category
     const catGroups = {};
     egresos.forEach(m => {
-      const catName = m.categoria_nombre || 'General';
+      const isPago = isPagoTC(m);
+      const catName = isPago ? 'Pago de Tarjeta de Crédito' : (m.categoria_nombre || 'General');
       if (!catGroups[catName]) {
         const catDef = (window._appCategorias || []).find(c => c.id_categoria === m.id_categoria || (c.nombre && c.nombre.toLowerCase() === catName.toLowerCase()));
         catGroups[catName] = {
           name: catName,
-          jerarquia: catDef?.jerarquia || '',
+          jerarquia: isPago ? '99 - Flujo de Tarjetas' : (catDef?.jerarquia || ''),
           items: [],
           subtotal: 0
         };
@@ -2072,6 +2118,13 @@ export class DashboardModule extends BaseModule {
     const medioPago = row.medio_pago || '—';
 
     const badges = [];
+    const isPagoTarjeta = (
+      row.is_pago_tc ||
+      row.id_categoria === 'CAT_PAGO_TC' ||
+      (typeof row.descripcion === 'string' && row.descripcion.toLowerCase().startsWith('pago resumen:')) ||
+      (typeof row.categoria_nombre === 'string' && row.categoria_nombre.toLowerCase().includes('pago de tarjeta'))
+    );
+    if (isPagoTarjeta) badges.push('<span class="badge" style="background:rgba(37,99,235,0.12); color:#2563eb; font-weight:600;">💳 Flujo de Pago TC</span>');
     if (row.recur_group_id?.startsWith('INSTL_')) badges.push('<span class="badge badge-recur">Cuotas</span>');
     else if (row.recur_group_id) badges.push('<span class="badge badge-recur">Recurrente</span>');
     if (row.split_group_id) badges.push('<span class="badge badge-split">Split</span>');
@@ -2079,7 +2132,7 @@ export class DashboardModule extends BaseModule {
     if (row.id_transfer_ahorro) badges.push('<span class="badge badge-ahorro">Ahorro</span>');
     if (row.id_transfer_inversion) badges.push('<span class="badge badge-ahorro">Inversión</span>');
 
-    const isAutoGenerated = !!row.id_consumo_tarjeta_origen || !!row.id_transfer_ahorro || !!row.id_transfer_inversion;
+    const isAutoGenerated = !!row.id_consumo_tarjeta_origen || !!row.id_transfer_ahorro || !!row.id_transfer_inversion || isPagoTarjeta;
 
     const detailModal = new App.Modal('modal-dash-mov-detail');
     detailModal.open({
@@ -2102,7 +2155,7 @@ export class DashboardModule extends BaseModule {
           </div>
           <div class="detail-item">
             <span class="detail-label">Categoría</span>
-            <span class="detail-value">${App.Utils.escapeHtml(row.categoria_nombre || 'General')}</span>
+            <span class="detail-value">${App.Utils.escapeHtml(isPagoTarjeta ? 'Pago Tarjeta de Crédito' : (row.categoria_nombre || 'General'))}</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">Método de Pago</span>
@@ -2113,14 +2166,18 @@ export class DashboardModule extends BaseModule {
             <span class="detail-value">${badges.length > 0 ? badges.join(' ') : '<span style="color:var(--texto-3)">Ninguna</span>'}</span>
           </div>
         </div>
-        ${!isAutoGenerated ? `
+        ${isPagoTarjeta ? `
+        <div style="margin-top:16px;padding:12px;background:rgba(37,99,235,0.08);border-radius:var(--r);font-size:0.82rem;color:var(--texto-2);display:flex;align-items:center;gap:8px;">
+          ${App.Icons.get('info', 'icon-sm')}
+          <span><strong>Liquidación de Tarjeta:</strong> Este movimiento registra el débito del resumen para cancelar la tarjeta. Siguiendo las mejores prácticas financieras (Monarch / Copilot), no duplica tus gastos ya que las compras individuales se encuentran desglosadas en sus categorías correspondientes.</span>
+        </div>` : (!isAutoGenerated ? `
         <div class="detail-actions">
           <button class="btn btn-ghost" id="dash-mov-edit">${App.Icons.get('edit', 'icon-sm')} Editar</button>
           <button class="btn btn-danger" id="dash-mov-delete">${App.Icons.get('delete', 'icon-sm')} Eliminar</button>
         </div>` : `
         <div style="margin-top:16px;padding:12px;background:var(--primary-tint);border-radius:var(--r);font-size:0.82rem;color:var(--texto-2)">
           ${App.Icons.get('info', 'icon-sm')} Este movimiento fue generado automáticamente. Editálo desde su módulo de origen.
-        </div>`}
+        </div>`)}
       `,
       confirmLabel: '',
       cancelLabel: 'Cerrar'

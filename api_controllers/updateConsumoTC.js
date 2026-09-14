@@ -37,6 +37,23 @@ function addMonthsSafe(date, months) {
   return d;
 }
 
+function isTaxConcept(desc) {
+  if (!desc) return false;
+  const d = String(desc).toLowerCase();
+  return d.includes('impuesto de sellos') ||
+         d.includes('imp.sellos') ||
+         d.includes('iva rg') ||
+         d.includes('iibb') ||
+         d.includes('percep') ||
+         d.includes('db.rg') ||
+         d.includes('rg 4240') ||
+         d.includes('rg 5617') ||
+         d.includes('rg 4815') ||
+         d.includes('rg 5272') ||
+         d.includes('ley 27541') ||
+         d.includes('impuesto pais');
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
@@ -182,7 +199,7 @@ export default async function handler(req, res) {
         descripcion: consumo.descripcion,
         importe: cleanImporte
       });
-      if (consumo.imputar && targetAccountId) {
+      if (consumo.imputar && targetAccountId && !isTaxConcept(consumo.descripcion)) {
         movRows.push({
           id_movimiento: crypto.randomUUID(),
           id_cuenta_principal: targetAccountId,
@@ -232,7 +249,7 @@ export default async function handler(req, res) {
           cuota_total: consumo.cuotaTotal,
           recur_group_id: installmentGroupId
         });
-        if (consumo.imputar && targetAccountId) {
+        if (consumo.imputar && targetAccountId && !isTaxConcept(consumo.descripcion)) {
           const descImputacion = consumo.descripcion + ' (Cuota ' + cuotaNumActual + '/' + consumo.cuotaTotal + ')';
           movRows.push({
             id_movimiento: crypto.randomUUID(),
@@ -282,7 +299,7 @@ export default async function handler(req, res) {
           importe: cleanImporte,
           recur_group_id: recurGroupId
         });
-        if (consumo.imputar && targetAccountId) {
+        if (consumo.imputar && targetAccountId && !isTaxConcept(consumo.descripcion)) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: targetAccountId,

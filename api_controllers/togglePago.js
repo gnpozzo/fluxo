@@ -181,7 +181,7 @@ export default async function handler(req, res) {
               id_cuenta_principal: tc.id_cuenta_principal,
               user_id: userId,
               fecha: paymentDate,
-              id_categoria: 'CAT_SERVICIOS',
+              id_categoria: 'CAT_PAGO_TC',
               tipo_mov: 'EGRESO',
               descripcion: descPago,
               importe: Math.round(cardTotal * 100) / 100,
@@ -193,6 +193,13 @@ export default async function handler(req, res) {
               .insert([newPaymentMov])
               .select('id_movimiento');
             paymentMovId = insertedMov?.[0]?.id_movimiento;
+          } else {
+            // Asegurar que quede categorizado como CAT_PAGO_TC
+            await supabase
+              .from('movimientos')
+              .update({ id_categoria: 'CAT_PAGO_TC' })
+              .eq('id_movimiento', paymentMovId)
+              .eq('user_id', userId);
           }
 
           if (paymentMovId) {
