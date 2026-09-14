@@ -837,11 +837,13 @@ export class AhorroModule extends BaseModule {
 
       rowEl.addEventListener('click', () => this.#abrirModalDetalle(rowData));
 
-      rowEl.querySelector('.aho-btn-edit')?.addEventListener('click', () => {
+      rowEl.querySelector('.aho-btn-edit')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.#abrirModalEdicion(rowData);
       });
 
-      rowEl.querySelector('.aho-btn-delete')?.addEventListener('click', () => {
+      rowEl.querySelector('.aho-btn-delete')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.#eliminar(rowData);
       });
     });
@@ -886,8 +888,10 @@ export class AhorroModule extends BaseModule {
       : new Date().toISOString().substring(0, 10);
     const moneda = data?.moneda || this.#vistaActual;
 
-    // Subcuentas (viene en dataCompleta)
-    const subcuentas = this.#dataCompleta?.subcuentas || [];
+    // Subcuentas (viene en dataCompleta o fallback a _appSubcuentas)
+    const subcuentas = (this.#dataCompleta?.subcuentas && this.#dataCompleta.subcuentas.length > 0)
+      ? this.#dataCompleta.subcuentas
+      : (window._appSubcuentas || []);
     const optsS = subcuentas
       .filter(s => !moneda || s.moneda === moneda)
       .map(s => `<option value="${s.id_subcuenta}" ${data?.id_subcuenta === s.id_subcuenta ? 'selected':''}>${App.Utils.escapeHtml(s.nombre)}</option>`)

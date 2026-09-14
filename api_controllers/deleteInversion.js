@@ -7,10 +7,11 @@ export default async function handler(req, res) {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    let idOperacion = Array.isArray(req.body) ? req.body[0] : req.body;
-    if (typeof idOperacion === 'object' && idOperacion !== null) {
-      idOperacion = idOperacion.id || idOperacion.id_inversion || idOperacion.idOperacion || idOperacion.id_operacion;
-    }
+    const rawArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
+    let payload = rawArgs ? rawArgs[0] : req.body;
+    let idOperacion = (typeof payload === 'object' && payload !== null)
+      ? (payload.id || payload.id_inversion || payload.idOperacion || payload.id_operacion || payload.id_inversion_mov)
+      : payload;
     
     if (!idOperacion) throw new Error('idOperacion requerido');
     

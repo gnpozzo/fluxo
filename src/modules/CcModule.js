@@ -351,6 +351,12 @@ export class CCModule extends BaseModule {
 
   #abrirModalAlta() {
     this.#editData = null;
+    if (!this.#categorias || this.#categorias.length === 0) {
+      this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : [];
+    }
+    if (!this.#usuarios || this.#usuarios.length === 0) {
+      this.#usuarios = (window._appUsuariosCC && window._appUsuariosCC.length > 0) ? window._appUsuariosCC : [];
+    }
     this.#modal.open({
       titulo      : 'Nuevo gasto compartido',
       icono       : 'users',
@@ -363,6 +369,12 @@ export class CCModule extends BaseModule {
 
   #abrirModalEdicion(row) {
     this.#editData = row;
+    if (!this.#categorias || this.#categorias.length === 0) {
+      this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : [];
+    }
+    if (!this.#usuarios || this.#usuarios.length === 0) {
+      this.#usuarios = (window._appUsuariosCC && window._appUsuariosCC.length > 0) ? window._appUsuariosCC : [];
+    }
     this.#modal.open({
       titulo      : 'Editar gasto compartido',
       icono       : 'edit',
@@ -374,12 +386,19 @@ export class CCModule extends BaseModule {
   }
 
   #buildFormHtml(data) {
+    if (!this.#categorias || this.#categorias.length === 0) {
+      this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : [];
+    }
+    if (!this.#usuarios || this.#usuarios.length === 0) {
+      this.#usuarios = (window._appUsuariosCC && window._appUsuariosCC.length > 0) ? window._appUsuariosCC : [];
+    }
+
     const optsC = this.#categorias
       .filter(c => c.activa)
       .map(c => `<option value="${c.id_categoria}" ${data?.id_categoria === c.id_categoria ? 'selected':''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
       .join('');
 
-    const otherUsers = this.#usuarios.filter(u => u.id_cuenta_principal === App.Store.cuenta && !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
+    const otherUsers = (this.#usuarios || []).filter(u => u.id_cuenta_principal === App.Store.cuenta && !u.es_yo && !u.nombre.toLowerCase().includes('(yo)'));
     const optsU = otherUsers
       .map(u => `<option value="${u.id_usuario}" ${data?.id_usuario === u.id_usuario ? 'selected':''}>${App.Utils.escapeHtml(u.nombre)}</option>`)
       .join('');
@@ -391,7 +410,7 @@ export class CCModule extends BaseModule {
 
     return `
       <form id="form-cc" class="form-grid">
-        <input type="hidden" name="id_consumo" value="${data?.id_consumo_cc || ''}">
+        <input type="hidden" name="id_consumo" value="${data?.id_consumo_cc || data?.id_cc_consumo || ''}">
 
         <div class="form-group">
           <label>Fecha <span class="required-mark">*</span></label>
@@ -543,7 +562,7 @@ export class CCModule extends BaseModule {
       danger      : true,
       onConfirm   : async () => {
         try {
-          await this._handleDelete(row.id_consumo_cc);
+          await this._handleDelete(row.id_consumo_cc || row.id_cc_consumo);
         } catch (_) {} finally {
           confirmModal.close();
         }

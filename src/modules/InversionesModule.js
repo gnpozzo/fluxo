@@ -1251,7 +1251,8 @@ export class InversionesModule extends BaseModule {
 
       rowEl.addEventListener('click', () => this.#abrirModalDetalle(rowData));
 
-      rowEl.querySelector('.inv-btn-delete')?.addEventListener('click', () => {
+      rowEl.querySelector('.inv-btn-delete')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.#eliminarOperacion(rowData);
       });
     });
@@ -1279,9 +1280,9 @@ export class InversionesModule extends BaseModule {
 
   #buildFormHtml(tipo, data) {
     const isCompra = tipo === 'COMPRA';
-    const tasas = this.#cotizDolar;
+    const tasas = this.#cotizDolar || { blue: { venta: App.Store.dolarBolsa || 1400 } };
     const usdInfo = tasas
-      ? `<small style="color:var(--texto-3)">USD Blue: $${App.Utils.formatearMoneda(tasas.blue?.venta, false)}</small>`
+      ? `<small style="color:var(--texto-3)">USD Blue: $${App.Utils.formatearMoneda(tasas.blue?.venta || 1400, false)}</small>`
       : '';
 
     return `

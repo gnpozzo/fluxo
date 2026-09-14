@@ -4,18 +4,20 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    let request = req.body;
-    if (Array.isArray(req.body)) {
-      if (typeof req.body[0] === 'object' && req.body[0] !== null) {
-        request = req.body[0];
+    const rawArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
+    let request = req.body || {};
+    if (rawArgs) {
+      if (typeof rawArgs[0] === 'object' && rawArgs[0] !== null) {
+        request = rawArgs[0];
       } else {
-        request = { id_ahorro: req.body[0] };
+        request = { id_ahorro: rawArgs[0] };
       }
     }
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const idAhorro = request.id_ahorro;
+    const idAhorro = request.id_ahorro || request.id || (rawArgs ? rawArgs[0] : null);
+    if (!idAhorro) throw new Error('id_ahorro requerido');
     
     // Delete from movimientos first (FK) scoped to user_id
     const movResult = await supabase.from('movimientos').delete().eq('id_transfer_ahorro', idAhorro).eq('user_id', userId);

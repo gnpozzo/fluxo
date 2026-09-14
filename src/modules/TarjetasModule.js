@@ -501,6 +501,13 @@ export class TarjetasModule extends BaseModule {
 
   #abrirModalAlta() {
     this.#editData = null;
+    if (!this.#tarjetas || this.#tarjetas.length === 0) {
+      const allTarjetas = (window._appTarjetas && window._appTarjetas.length > 0) ? window._appTarjetas : this._tcList;
+      this.#tarjetas = (allTarjetas || []).filter(t => t.id_cuenta_principal === App.Store.cuenta);
+    }
+    if (!this.#categorias || this.#categorias.length === 0) {
+      this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : [];
+    }
     this.#modal.open({
       titulo      : 'Nuevo Consumo TC',
       icono       : 'card',
@@ -530,16 +537,24 @@ export class TarjetasModule extends BaseModule {
   }
 
   #buildFormHtml(data) {
+    if (!this.#tarjetas || this.#tarjetas.length === 0) {
+      const allTarjetas = (window._appTarjetas && window._appTarjetas.length > 0) ? window._appTarjetas : this._tcList;
+      this.#tarjetas = (allTarjetas || []).filter(t => t.id_cuenta_principal === App.Store.cuenta);
+    }
+    if (!this.#categorias || this.#categorias.length === 0) {
+      this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : [];
+    }
+
     const defaultTcId = data?.id_tarjeta || this.#selectedTcId || '';
     const optsT = this.#tarjetas
       .map(t => `<option value="${t.id_tarjeta}" ${t.id_tarjeta === defaultTcId ? 'selected' : ''}>
         ${App.Utils.escapeHtml(t.nombre)}
       </option>`).join('');
 
-    const categoriesList = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : this.#categorias;
-    const optsC = categoriesList
+    const defaultCat = data?.id_categoria || '';
+    const optsC = this.#categorias
       .filter(c => c.tipo_mov === 'EGRESO' && c.activa)
-      .map(c => `<option value="${c.id_categoria}" ${data?.id_categoria === c.id_categoria ? 'selected' : ''}>
+      .map(c => `<option value="${c.id_categoria}" ${c.id_categoria === defaultCat ? 'selected' : ''}>
         ${App.Utils.escapeHtml(c.nombre)}
       </option>`).join('');
 
@@ -549,7 +564,7 @@ export class TarjetasModule extends BaseModule {
 
     return `
       <form id="form-tc" class="form-grid">
-        <input type="hidden" name="id_consumo" value="${data?.id_consumo_tc || ''}">
+        <input type="hidden" name="id_consumo" value="${data?.id_consumo_tc || data?.id_consumo_tarjeta || ''}">
 
         <div class="form-group">
           <label>Fecha <span class="required-mark">*</span></label>
@@ -754,7 +769,7 @@ export class TarjetasModule extends BaseModule {
       danger      : true,
       onConfirm   : async () => {
         try {
-          await this._handleDelete(row.id_consumo_tc);
+          await this._handleDelete(row.id_consumo_tc || row.id_consumo_tarjeta);
         } catch (_) {} finally {
           confirmModal.close();
         }

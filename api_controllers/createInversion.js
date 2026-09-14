@@ -76,6 +76,7 @@ export default async function handler(req, res) {
     const invRow = {
       id_inversion_mov: idInversion,
       id_movimiento_origen: idMovimiento,
+      id_cuenta_principal: idCuenta,
       user_id: userId,
       ticker: ticker,
       fecha: fecha,

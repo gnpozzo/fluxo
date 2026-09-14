@@ -80,8 +80,9 @@ export default async function handler(req, res) {
 
     consumos = Array.from(consumosMap.values());
 
-    // Map id_tarjeta based on tarjeta_nombre if missing
+    // Map id_tarjeta based on tarjeta_nombre if missing and normalize primary key aliases
     consumos.forEach(c => {
+      c.id_consumo_tc = c.id_consumo_tarjeta;
       if (!c.id_tarjeta && c.tarjeta_nombre) {
         const found = (tarjetas || []).find(t => t.nombre.toLowerCase() === c.tarjeta_nombre.toLowerCase());
         if (found) c.id_tarjeta = found.id_tarjeta;

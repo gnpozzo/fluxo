@@ -4,16 +4,17 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
   try {
     const supabase = getSupabaseClient(req);
-    let request = req.body;
-    if (Array.isArray(req.body)) {
-      if (typeof req.body[0] === 'object' && req.body[0] !== null) {
-        request = req.body[0];
+    const rawArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
+    let request = req.body || {};
+    if (rawArgs) {
+      if (typeof rawArgs[0] === 'object' && rawArgs[0] !== null) {
+        request = rawArgs[0];
       } else {
         request = {
-          consumoId: req.body[0],
-          scope: req.body[1] || 'SINGLE',
-          recurGroupId: req.body[2],
-          fecha: req.body[3]
+          consumoId: rawArgs[0],
+          scope: rawArgs[1] || 'SINGLE',
+          recurGroupId: rawArgs[2],
+          fecha: rawArgs[3]
         };
       }
     }
@@ -21,9 +22,12 @@ export default async function handler(req, res) {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    if (request.scope === 'SINGLE') {
-      if (!request.consumoId) throw new Error('consumoId requerido');
-      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', request.consumoId).eq('user_id', userId);
+    const scope = request.scope || 'SINGLE';
+    const consumoId = request.consumoId || request.id || request.id_consumo_cc || request.id_cc_consumo || (rawArgs ? rawArgs[0] : null);
+
+    if (scope === 'SINGLE') {
+      if (!consumoId) throw new Error('consumoId requerido');
+      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', consumoId).eq('user_id', userId);
       if (error) throw error;
     } else if (request.scope === 'SERIES') {
       if (!request.recurGroupId || !request.fecha) throw new Error('Faltan recurGroupId o fecha');
