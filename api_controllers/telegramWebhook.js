@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { callGemini } from '../api_lib/gemini.js';
 import createMovimiento from './createMovimiento.js';
 import createConsumoTC from './createConsumoTC.js';
 import createConsumoCC from './createConsumoCC.js';
@@ -531,54 +532,7 @@ async function handleWizardStep(req, res, supabase, token, chatId, messageId, wi
 }
 
 
-async function callGemini(key, modelName, systemInstruction, history, responseMimeType = null) {
-  const cleanHistory = (history || []).filter(h => h.role === 'user' || h.role === 'model');
-  const payload = {
-    contents: cleanHistory
-  };
-  if (systemInstruction) {
-    payload.systemInstruction = {
-      parts: [{ text: systemInstruction }]
-    };
-  }
-  if (responseMimeType) {
-    payload.generationConfig = { responseMimeType };
-  }
-  
-  const defaultModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-  const modelsToTry = [
-    modelName || defaultModel,
-    'gemini-3.8-flash',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.0-flash'
-  ].filter((v, i, a) => v && a.indexOf(v) === i);
 
-  let lastError = null;
-  for (const model of modelsToTry) {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (response.ok) {
-        const result = await response.json();
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) return text;
-      } else {
-        const errTxt = await response.text();
-        lastError = `${response.status} - ${errTxt}`;
-        console.warn(`[telegramWebhook] Model ${model} failed: ${lastError}`);
-      }
-    } catch (e) {
-      lastError = e.message;
-      console.warn(`[telegramWebhook] Model ${model} threw: ${lastError}`);
-    }
-  }
-
-  throw new Error(`Gemini API error: ${lastError || 'No model responded'}`);
-}
 
 function getWorkingDayDate(year, month, targetWorkingDay) {
   const daysInMonth = new Date(year, month, 0).getDate();

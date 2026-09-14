@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
+import { getDynamicGeminiFlashModels, DEFAULT_FLASH_MODELS } from '../api_lib/gemini.js';
 import XLSX from 'xlsx';
 
 export default async function handler(req, res) {
@@ -383,41 +384,12 @@ FORMATO: Escribe con elegancia, precisión profesional en español y negritas de
     let lastError = null;
 
     try {
-      const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, { signal: AbortSignal.timeout(4000) });
-      let availableModels = [];
-      if (listResp.ok) {
-        const listData = await listResp.json();
-        availableModels = (listData.models || [])
-          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-          .map(m => m.name.replace('models/', ''));
-      }
-
-      const priorityOrder = [
+      const dynamicModels = await getDynamicGeminiFlashModels(apiKey);
+      const modelsToTry = [
         process.env.GEMINI_MODEL,
-        'gemini-3.8-flash',
-        'gemini-3.6-flash',
-        'gemini-3.5-flash',
-        'gemini-3.0-flash'
-      ].filter(Boolean);
-
-      let modelsToTry = [];
-      if (availableModels.length > 0) {
-        const textModels = availableModels.filter(m => 
-          !m.includes('tts') && 
-          !m.includes('audio') && 
-          !m.includes('imagen') && 
-          !m.includes('embedding') &&
-          !m.includes('bison')
-        );
-        modelsToTry = priorityOrder.filter(m => textModels.includes(m));
-        textModels.forEach(m => {
-          if (!modelsToTry.includes(m)) modelsToTry.push(m);
-        });
-      }
-
-      if (modelsToTry.length === 0) {
-        modelsToTry = priorityOrder;
-      }
+        ...dynamicModels,
+        ...DEFAULT_FLASH_MODELS
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
 
       for (const model of modelsToTry) {
         try {

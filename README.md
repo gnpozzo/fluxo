@@ -203,12 +203,15 @@ Cualquier cambio de código o interacción con FluxoBot debe respetar estas dire
   - El modal de confirmación desglosa con exactitud el total a debitar y la cantidad de consumos afectados.
 
 ### [v6.1.0] — 14 de Septiembre de 2026
-#### 🧠 Estandarización en Gemini 3.8 Flash & Arquitectura de IA de Última Generación
-- **Adopción de Gemini 3.8 Flash como Modelo Primario**:
-  - Actualización arquitectónica global para utilizar siempre la última versión de la familia Gemini Flash (**`gemini-3.8-flash`**) como estándar por defecto en toda la aplicación (`parseStatement`, `aiAdvisor`, `telegramWebhook`).
-  - Deprecación definitiva de modelos anteriores (series 2.x y 1.x) que fueron dados de baja por Google.
+#### 🧠 Descubrimiento Dinámico de Gemini Flash & Arquitectura de IA Auto-Actualizable
+- **Descubrimiento Dinámico de Versiones (`api_lib/gemini.js`)**:
+  - Consulta automática a la API de Google (`/v1beta/models`) filtrando y ordenando los modelos Flash disponibles por versión numérica descendente.
+  - La aplicación siempre selecciona de forma 100% autónoma el modelo Flash más reciente disponible para la API Key, eliminando la necesidad de actualizar el código cuando Google publique nuevas versiones (ej. 3.9, 4.0, etc.).
+- **Caché en Memoria con TTL**:
+  - Almacena en memoria el listado descubierto durante 1 hora para eliminar latencia en invocaciones serverless.
 - **Cadena de Fallback Moderna (Serie 3.x Flash)**:
-  - Definición estricta de redundancia en cascada: `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3.0-flash`.
+  - Redundancia garantizada: `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3.0-flash`.
+  - Deprecación definitiva de series 2.x y 1.x dadas de baja por Google.
 - **Resiliencia ante Picos de Demanda y Latencia Serverless**:
   - Reintentos optimizados y límites de ejecución estrictos para garantizar respuestas en < 3 segundos, evitando timeouts HTTP 504 en Vercel.
 
