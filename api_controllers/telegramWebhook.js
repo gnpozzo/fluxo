@@ -545,12 +545,13 @@ async function callGemini(key, modelName, systemInstruction, history, responseMi
     payload.generationConfig = { responseMimeType };
   }
   
+  const defaultModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const modelsToTry = [
-    modelName,
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
+    modelName || defaultModel,
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
     'gemini-3.5-flash',
-    'gemini-flash-latest'
+    'gemini-3.0-flash'
   ].filter((v, i, a) => v && a.indexOf(v) === i);
 
   let lastError = null;
@@ -909,7 +910,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 }
 `;
 
-        const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
         const pdfHistory = [
           {
@@ -1221,7 +1222,7 @@ IMPORTANTE: Devuelve únicamente un objeto JSON válido, sin Markdown (no uses b
     });
 
     // Call Gemini with the conversation history
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     const contentText = await callGemini(geminiKey, modelName, systemInstruction, history, 'application/json');
 
     let parsedResult;

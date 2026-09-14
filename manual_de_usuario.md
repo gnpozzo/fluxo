@@ -142,9 +142,11 @@ Seguimiento de cartera y cotizaciones financieras:
 
 ---
 
-## 9. Asistente Inteligente (FluxoAI)
+## 9. Asistente Inteligente (FluxoAI / Gemini 3.8 Flash)
 
-Chatbot financiero inteligente integrado en panel lateral:
+Chatbot financiero inteligente integrado en panel lateral, potenciado por **Google Gemini 3.8 Flash** (el último modelo disponible de Google de ultra alta velocidad y comprensión multimodal):
+- **Motor de Inteligencia de Última Generación**:
+  - Utiliza de forma nativa **Gemini 3.8 Flash** como modelo primario con redundancia en cascada en la serie 3.x Flash (`3.8` → `3.6` → `3.5` → `3.0`), garantizando respuestas ultra rápidas (< 2s) y máxima precisión de análisis.
 - **Experiencia de Conversación Progresiva (Estilo WhatsApp)**:
   - Al abrirse, la ventana se posiciona directamente en el último mensaje de la conversación.
   - Al deslizar hacia arriba (`scrollTop <= 40px`), carga de 10 en 10 los mensajes anteriores manteniendo fija la posición de pantalla.
@@ -153,7 +155,7 @@ Chatbot financiero inteligente integrado en panel lateral:
   - Alertas sobre compromisos pendientes de pago antes de los vencimientos.
 - **Extracción de Movimientos desde Archivos**:
   - Al adjuntar facturas, tickets o resúmenes bancarios (PDF/imágenes), extrae las transacciones y ofrece un botón directo para incorporar todos los movimientos a la cuenta en 1 clic.
-- **Notificaciones Proactivas y Bot de Telegram**: Envío automático de alertas de cierres y vencimientos de resúmenes de tarjeta.
+- **Notificaciones Proactivas y Bot de Telegram**: Envío automático de alertas de cierres y vencimientos de resúmenes de tarjeta vía webhook con Gemini 3.8 Flash.
 
 ---
 

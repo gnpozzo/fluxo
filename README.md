@@ -83,7 +83,7 @@ Fluxo opera bajo una arquitectura desacoplada de alto rendimiento:
       │                                   ▲
       ▼ Fetch / REST                      │ Webhook Updates
 [ Vercel Edge Serverless Functions ]  [ Telegram Bot ]
- (api_controllers / api_lib)              │ (Gemini 2.5 AI)
+ (api_controllers / api_lib)              │ (Gemini 3.8 Flash AI)
       │                                   │
       ▼ Client SDK / RLS                  ▼
    [ Supabase PostgreSQL 15 (Auth + Data + Sessions) ]
@@ -201,6 +201,16 @@ Cualquier cambio de código o interacción con FluxoBot debe respetar estas dire
 - **Botón y Modal Dinámico en Frontend**:
   - Actualización del botón de acción: `💳 Pagar Resumen (Santander Visa)` o `💳 Pagar Resumen (Consolidado)`.
   - El modal de confirmación desglosa con exactitud el total a debitar y la cantidad de consumos afectados.
+
+### [v6.1.0] — 14 de Septiembre de 2026
+#### 🧠 Estandarización en Gemini 3.8 Flash & Arquitectura de IA de Última Generación
+- **Adopción de Gemini 3.8 Flash como Modelo Primario**:
+  - Actualización arquitectónica global para utilizar siempre la última versión de la familia Gemini Flash (**`gemini-3.8-flash`**) como estándar por defecto en toda la aplicación (`parseStatement`, `aiAdvisor`, `telegramWebhook`).
+  - Deprecación definitiva de modelos anteriores (series 2.x y 1.x) que fueron dados de baja por Google.
+- **Cadena de Fallback Moderna (Serie 3.x Flash)**:
+  - Definición estricta de redundancia en cascada: `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3.0-flash`.
+- **Resiliencia ante Picos de Demanda y Latencia Serverless**:
+  - Reintentos optimizados y límites de ejecución estrictos para garantizar respuestas en < 3 segundos, evitando timeouts HTTP 504 en Vercel.
 
 ---
 

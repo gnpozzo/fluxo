@@ -15,12 +15,14 @@ async function callGemini(key, modelName, systemInstruction, history, responseMi
     payload.generationConfig = { responseMimeType };
   }
   
-  // Modelos ordenados por velocidad y estabilidad (gemini-2.0-flash y gemini-1.5-flash responden en 1-3s)
+  // Siempre usamos el último modelo disponible de Gemini Flash (gemini-3.8-flash) con fallback en la serie 3.x
+  const defaultModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const modelsToTry = [
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash-lite',
-    modelName || 'gemini-2.5-flash'
+    modelName || defaultModel,
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.0-flash'
   ].filter((v, i, a) => v && a.indexOf(v) === i);
 
   let lastError = null;
@@ -331,7 +333,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       }
       parts.push({ text: 'Extrae los datos y transacciones de este resumen.' });
 
-      const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
       const contentText = await callGemini(geminiKey, modelName, systemInstruction, [{ role: 'user', parts }], 'application/json');
 
       try {
