@@ -7085,4 +7085,156 @@ input:checked + .toggle-slider:before {
   font-size: 0.85rem;
 }
 
+/* ============================================================
+   FinSet Category Accordions & Dynamic Filters
+   ============================================================ */
+.finset-cat-accordion {
+  border: 1px solid var(--borde, #e2e8f0);
+  border-radius: var(--r, 12px);
+  background: var(--card-bg, #ffffff);
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.finset-cat-accordion:hover {
+  border-color: var(--borde-hover, #cbd5e1);
+}
+.finset-cat-accordion .fca-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-subtle, #f8fafc);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+  border-bottom: 1px solid transparent;
+}
+.finset-cat-accordion.is-open .fca-header {
+  border-bottom-color: var(--borde, #e2e8f0);
+}
+.finset-cat-accordion .fca-header:hover {
+  background: var(--bg-hover, #f1f5f9);
+}
+.finset-cat-accordion .fca-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.finset-cat-accordion .fca-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s ease;
+  color: var(--texto-3, #94a3b8);
+  transform: rotate(-90deg);
+}
+.finset-cat-accordion.is-open .fca-chevron {
+  transform: rotate(0deg);
+}
+.finset-cat-accordion .fca-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.finset-cat-accordion .fca-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--texto, #0f172a);
+}
+.finset-cat-accordion .fca-badge-jerarquia {
+  font-size: 0.70rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.1);
+  color: #4f46e5;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+.finset-cat-accordion .fca-count {
+  font-size: 0.75rem;
+  color: var(--texto-3, #94a3b8);
+}
+.finset-cat-accordion .fca-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.finset-cat-accordion .fca-subtotal {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.finset-cat-accordion .fca-subtotal.positivo {
+  color: var(--verde, #10b981);
+}
+.finset-cat-accordion .fca-subtotal.negativo {
+  color: var(--texto, #0f172a);
+}
+.finset-cat-accordion .fca-body {
+  display: none;
+}
+.finset-cat-accordion.is-open .fca-body {
+  display: block;
+}
+.finset-cat-accordion .fca-body .dh-drill-row {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: 1px solid var(--borde-subtle, rgba(0,0,0,0.04));
+  margin-bottom: 0;
+}
+.finset-cat-accordion .fca-body .dh-drill-row:last-child {
+  border-bottom: none;
+}
+
+/* Category Filter Pills in Tarjetas */
+.tc-cat-filter-container {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--borde, #e2e8f0);
+  background: var(--bg-subtle, #f8fafc);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tc-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--borde, #e2e8f0);
+  background: var(--card-bg, #ffffff);
+  color: var(--texto-2, #475569);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.tc-filter-pill:hover {
+  border-color: var(--primary, #1D195D);
+  color: var(--primary, #1D195D);
+}
+.tc-filter-pill.active {
+  background: #1D195D;
+  border-color: #1D195D;
+  color: #ffffff;
+  font-weight: 600;
+}
+.tc-filter-pill-count {
+  font-size: 0.70rem;
+  opacity: 0.8;
+}
+
+
 

@@ -101,8 +101,12 @@ export default async function handler(req, res) {
 
     if (ccItems.length === 0) throw new Error('No se generaron registros CC para insertar.');
 
-    const { error } = await supabase.from('cc_consumos').insert(ccItems);
-    if (error) throw error;
+    let insertRes = await supabase.from('cc_consumos').insert(ccItems);
+    if (insertRes.error && insertRes.error.message && insertRes.error.message.includes('id_usuario')) {
+      ccItems.forEach(item => { delete item.id_usuario; });
+      insertRes = await supabase.from('cc_consumos').insert(ccItems);
+    }
+    if (insertRes.error) throw insertRes.error;
 
     return res.status(200).json({ success: true, data: { count: ccItems.length } });
   } catch (err) {

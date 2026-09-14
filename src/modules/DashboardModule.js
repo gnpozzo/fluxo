@@ -20,6 +20,7 @@ export class DashboardModule extends BaseModule {
   #viewMode = 'detail'; // 'portfolio' | 'detail'
   #movFilter = 'ALL'; // 'ALL' | 'INGRESO' | 'EGRESO'
   #movSearch = '';
+  #selectedMovCategoria = 'ALL';
   #moneyFlowChartInstance = null;
   #categoriesDonutInstance = null;
   #evolucionMode = 'ingresos_vs_gastos'; // 'ingresos_vs_gastos' | 'balance'
@@ -524,8 +525,12 @@ export class DashboardModule extends BaseModule {
 
                   <div class="dh-search-box" style="margin:0;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input type="text" id="dash-mov-search" placeholder="Buscar..." class="finset-search-input" style="width:130px;">
+                    <input type="text" id="dash-mov-search" placeholder="Buscar..." class="finset-search-input" style="width:110px;">
                   </div>
+
+                  <select id="dash-mov-cat-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:28px; max-width:130px;" title="Filtrar por categoría">
+                    <option value="ALL">Todas las categorías</option>
+                  </select>
                 </div>
               </div>
 
@@ -758,6 +763,11 @@ export class DashboardModule extends BaseModule {
 
     document.getElementById('dash-mov-search')?.addEventListener('input', (e) => {
       this.#movSearch = e.target.value;
+      this.#renderMovimientos();
+    });
+
+    document.getElementById('dash-mov-cat-filter')?.addEventListener('change', (e) => {
+      this.#selectedMovCategoria = e.target.value;
       this.#renderMovimientos();
     });
 
@@ -1705,9 +1715,27 @@ export class DashboardModule extends BaseModule {
     const titleEl = document.getElementById('dash-mov-title');
     const badgeEl = document.getElementById('dash-mov-badge');
     const summaryEl = document.getElementById('dash-mov-summary');
+    const catFilterSelect = document.getElementById('dash-mov-cat-filter');
     if (!listEl) return;
 
-    // Filter by type
+    // 1. Populate category filter options from current data
+    if (catFilterSelect) {
+      const currentVal = this.#selectedMovCategoria || 'ALL';
+      const availableCats = new Set();
+      (this.#movData || []).forEach(m => {
+        if (m.tipo_mov === 'EGRESO') {
+          availableCats.add(m.categoria_nombre || 'General');
+        } else if (m.tipo_mov === 'INGRESO') {
+          availableCats.add(m.categoria_nombre || 'Ingreso');
+        }
+      });
+      const sortedOpts = Array.from(availableCats).sort();
+      catFilterSelect.innerHTML = `<option value="ALL">Categoría: Todas</option>` +
+        sortedOpts.map(cat => `<option value="${App.Utils.escapeHtml(cat)}" ${cat === currentVal ? 'selected' : ''}>${App.Utils.escapeHtml(cat)}</option>`).join('');
+      catFilterSelect.value = currentVal;
+    }
+
+    // 2. Filter by type (ALL, INGRESO, EGRESO)
     let filtered = this.#movData || [];
     if (this.#movFilter === 'INGRESO') {
       filtered = filtered.filter(m => m.tipo_mov === 'INGRESO');
@@ -1715,7 +1743,15 @@ export class DashboardModule extends BaseModule {
       filtered = filtered.filter(m => m.tipo_mov === 'EGRESO');
     }
 
-    // Filter by live search text
+    // 3. Filter by category selection
+    if (this.#selectedMovCategoria && this.#selectedMovCategoria !== 'ALL') {
+      filtered = filtered.filter(m => {
+        const cat = m.categoria_nombre || (m.tipo_mov === 'INGRESO' ? 'Ingreso' : 'General');
+        return cat === this.#selectedMovCategoria;
+      });
+    }
+
+    // 4. Filter by live search text
     if (this.#movSearch.trim()) {
       const q = this.#movSearch.toLowerCase().trim();
       filtered = filtered.filter(m => {
@@ -1726,8 +1762,36 @@ export class DashboardModule extends BaseModule {
       });
     }
 
+    // 5. Consolidate Reintegros TC
+    const isRefund = (m) => (
+      m.id_categoria === 'CAT_REINTEGRO_TC' ||
+      (typeof m.descripcion === 'string' && m.descripcion.toLowerCase().startsWith('reintegro tc')) ||
+      (typeof m.categoria_nombre === 'string' && m.categoria_nombre.toLowerCase().includes('reintegro tc'))
+    );
+    const refundItems = filtered.filter(isRefund);
+    let displayMovements = filtered.filter(m => !isRefund(m));
+    let consolidadoRefund = null;
+
+    if (refundItems.length > 0) {
+      const sumRefunds = refundItems.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+      consolidadoRefund = {
+        id_movimiento: 'consolidado_reintegros_tc',
+        id: 'consolidado_reintegros_tc',
+        descripcion: 'Reintegros TC (Ajuste de consumos TC)',
+        categoria_nombre: 'Reintegro TC',
+        id_categoria: 'CAT_REINTEGRO_TC',
+        tipo_mov: 'INGRESO',
+        importe: sumRefunds,
+        fecha: refundItems[0]?.fecha || new Date().toISOString(),
+        medio_pago: 'transferencia',
+        items_agrupados: refundItems,
+        es_consolidado: true
+      };
+      displayMovements.push(consolidadoRefund);
+    }
+
     // Calculate sum of filtered
-    const totalFiltered = filtered.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+    const totalFiltered = displayMovements.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
 
     // Update Header Badge and Title
     if (badgeEl) {
@@ -1739,7 +1803,7 @@ export class DashboardModule extends BaseModule {
       else titleEl.textContent = 'Todos los Movimientos';
     }
     if (summaryEl) {
-      const countLabel = filtered.length === 1 ? '1 movimiento' : `${filtered.length} movimientos`;
+      const countLabel = displayMovements.length === 1 ? '1 movimiento' : `${displayMovements.length} movimientos`;
       summaryEl.textContent = `${countLabel} • Total: ${App.Utils.formatearMoneda(totalFiltered)}`;
     }
 
@@ -1754,7 +1818,7 @@ export class DashboardModule extends BaseModule {
       }
     });
 
-    if (filtered.length === 0) {
+    if (displayMovements.length === 0) {
       listEl.innerHTML = `
         <div class="dh-empty-state" style="padding:32px 16px;">
           <div class="dh-empty-icon">
@@ -1768,7 +1832,7 @@ export class DashboardModule extends BaseModule {
 
     const getCategoryIconSvg = (catName, tipo) => {
       const cat = (catName || '').toLowerCase();
-      if (tipo === 'INGRESO') {
+      if (tipo === 'INGRESO' || cat.includes('ingreso') || cat.includes('reintegro')) {
         return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
       }
       if (cat.includes('super') || cat.includes('alimen') || cat.includes('comida')) {
@@ -1778,7 +1842,7 @@ export class DashboardModule extends BaseModule {
         return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
       }
       if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
-        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
       }
       if (cat.includes('salud') || cat.includes('farmacia')) {
         return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
@@ -1786,7 +1850,7 @@ export class DashboardModule extends BaseModule {
       return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
     };
 
-    const rowsHtml = filtered.map(r => {
+    const renderMovementRow = (r) => {
       const esIngreso = r.tipo_mov === 'INGRESO';
       const iconClass = esIngreso ? 'icon-green' : 'icon-subtle';
       const sign = esIngreso ? '+' : '-';
@@ -1795,15 +1859,20 @@ export class DashboardModule extends BaseModule {
       const desc = r.descripcion || catName;
       const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
       const medio = r.medio_pago ? `<span class="dh-pill-medio">${App.Utils.escapeHtml(r.medio_pago)}</span>` : '';
+      const isConsolidado = !!r.es_consolidado;
+      const badgeConsolidado = isConsolidado ? `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${r.items_agrupados?.length || 0} reintegros</span>` : '';
 
       return `
-        <div class="dh-drill-row" data-id="${r.id_movimiento || r.id}">
+        <div class="dh-drill-row ${isConsolidado ? 'is-consolidated' : ''}" data-id="${r.id_movimiento || r.id}">
           <div class="dh-col-main">
             <div class="dh-item-icon ${iconClass}">
               ${getCategoryIconSvg(catName, r.tipo_mov)}
             </div>
             <div class="dh-col-desc-wrap">
-              <span class="dh-row-desc">${App.Utils.escapeHtml(desc)}</span>
+              <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+                <span class="dh-row-desc">${App.Utils.escapeHtml(desc)}</span>
+                ${badgeConsolidado}
+              </div>
               <span class="dh-row-date">${fechaStr}</span>
             </div>
           </div>
@@ -1823,13 +1892,116 @@ export class DashboardModule extends BaseModule {
           </div>
         </div>
       `;
-    }).join('');
+    };
 
-    listEl.innerHTML = `<div class="dh-rows-list" style="max-height:480px; overflow-y:auto; padding-right:4px;">${rowsHtml}</div>`;
+    // Separate into Ingresos and Egresos
+    const ingresos = displayMovements.filter(m => m.tipo_mov === 'INGRESO');
+    const egresos = displayMovements.filter(m => m.tipo_mov !== 'INGRESO');
 
+    // Group Egresos by category
+    const catGroups = {};
+    egresos.forEach(m => {
+      const catName = m.categoria_nombre || 'General';
+      if (!catGroups[catName]) {
+        const catDef = (window._appCategorias || []).find(c => c.id_categoria === m.id_categoria || (c.nombre && c.nombre.toLowerCase() === catName.toLowerCase()));
+        catGroups[catName] = {
+          name: catName,
+          jerarquia: catDef?.jerarquia || '',
+          items: [],
+          subtotal: 0
+        };
+      }
+      catGroups[catName].items.push(m);
+      catGroups[catName].subtotal += Math.abs(Number(m.importe || 0));
+    });
+
+    // Sort Egresos categories by jerarquia (e.g. '0 - Gastos vivienda'), then alphabetically
+    const sortedCatGroups = Object.values(catGroups).sort((a, b) => {
+      const jA = (a.jerarquia || '').trim();
+      const jB = (b.jerarquia || '').trim();
+      if (jA && jB) {
+        return jA.localeCompare(jB, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      if (jA && !jB) return -1;
+      if (!jA && jB) return 1;
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    let accordionsHtml = '';
+
+    // If Ingresos present and allowed by filter, render Ingresos accordion first
+    if (ingresos.length > 0 && this.#movFilter !== 'EGRESO') {
+      const subtotalIngresos = ingresos.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+      accordionsHtml += `
+        <div class="finset-cat-accordion is-open is-income" data-cat-group="Ingresos">
+          <div class="fca-header" role="button" tabindex="0" title="Clic para expandir / colapsar">
+            <div class="fca-header-left">
+              <span class="fca-chevron">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </span>
+              <span class="fca-icon icon-green">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              </span>
+              <span class="fca-title">Ingresos</span>
+              <span class="fca-count">${ingresos.length} ${ingresos.length === 1 ? 'ingreso' : 'ingresos'}</span>
+            </div>
+            <div class="fca-header-right">
+              <span class="fca-subtotal positivo">+ ${App.Utils.formatearMoneda(subtotalIngresos)}</span>
+            </div>
+          </div>
+          <div class="fca-body">
+            ${ingresos.map(renderMovementRow).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Render each Expense category accordion
+    sortedCatGroups.forEach(group => {
+      accordionsHtml += `
+        <div class="finset-cat-accordion is-open" data-cat-group="${App.Utils.escapeHtml(group.name)}">
+          <div class="fca-header" role="button" tabindex="0" title="Clic para expandir / colapsar">
+            <div class="fca-header-left">
+              <span class="fca-chevron">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </span>
+              <span class="fca-icon icon-subtle">
+                ${getCategoryIconSvg(group.name, 'EGRESO')}
+              </span>
+              <span class="fca-title">${App.Utils.escapeHtml(group.name)}</span>
+              ${group.jerarquia ? `<span class="fca-badge-jerarquia" title="Jerarquía">${App.Utils.escapeHtml(group.jerarquia)}</span>` : ''}
+              <span class="fca-count">${group.items.length} ${group.items.length === 1 ? 'gasto' : 'gastos'}</span>
+            </div>
+            <div class="fca-header-right">
+              <span class="fca-subtotal negativo">- ${App.Utils.formatearMoneda(group.subtotal)}</span>
+            </div>
+          </div>
+          <div class="fca-body">
+            ${group.items.map(renderMovementRow).join('')}
+          </div>
+        </div>
+      `;
+    });
+
+    listEl.innerHTML = `<div class="dh-accordions-wrap" style="max-height:480px; overflow-y:auto; padding-right:4px;">${accordionsHtml}</div>`;
+
+    // Accordion toggle click listener
+    listEl.querySelectorAll('.fca-header').forEach(headerEl => {
+      headerEl.addEventListener('click', (e) => {
+        const acc = headerEl.closest('.finset-cat-accordion');
+        if (acc) acc.classList.toggle('is-open');
+      });
+    });
+
+    // Row click listeners
     listEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
-      rowEl.addEventListener('click', () => {
+      rowEl.addEventListener('click', (e) => {
+        e.stopPropagation();
         const id = rowEl.dataset.id;
+        if (id === 'consolidado_reintegros_tc' && consolidadoRefund) {
+          this.#abrirModalDetalleMov(consolidadoRefund);
+          return;
+        }
         const row = this.#movData.find(m => (m.id_movimiento || m.id) == id);
         if (row) this.#abrirModalDetalleMov(row);
       });
@@ -1837,6 +2009,64 @@ export class DashboardModule extends BaseModule {
   }
 
   #abrirModalDetalleMov(row) {
+    // Caso especial: Reintegros TC consolidados
+    if (row.es_consolidado || (row.items_agrupados && row.items_agrupados.length > 0)) {
+      const detailModal = new App.Modal('modal-dash-mov-detail');
+      detailModal.open({
+        titulo: 'Reintegros TC (Ajuste de consumos TC)',
+        icono: 'trending_up',
+        size: 'md',
+        body: `
+          <div class="detail-grid" style="margin-bottom:16px;">
+            <div class="detail-item">
+              <span class="detail-label">Total Reintegros</span>
+              <span class="detail-value detail-amount positivo">+ ${App.Utils.formatearMoneda(row.importe)}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Tipo</span>
+              <span class="detail-value"><span class="tipo-mov tipo-ingreso">INGRESO</span></span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Cantidad</span>
+              <span class="detail-value">${row.items_agrupados.length} operaciones</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Categoría</span>
+              <span class="detail-value">Reintegro TC</span>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--borde); border-radius:var(--r); overflow:hidden;">
+            <div style="padding:10px 14px; background:var(--bg-subtle, #f8fafc); font-weight:600; font-size:0.82rem; border-bottom:1px solid var(--borde); display:flex; justify-content:space-between;">
+              <span>Detalle de Reintegros Individuales</span>
+              <span style="color:var(--texto-3);">${row.items_agrupados.length} items</span>
+            </div>
+            <div style="max-height:220px; overflow-y:auto;">
+              ${row.items_agrupados.map(item => `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid var(--borde-subtle, rgba(0,0,0,0.04)); font-size:0.82rem;">
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span style="font-weight:600; color:var(--texto);">${App.Utils.escapeHtml(item.descripcion)}</span>
+                    <span style="font-size:0.74rem; color:var(--texto-3);">${App.Utils.formatearFecha(item.fecha?.value || item.fecha)} • ${App.Utils.escapeHtml(item.medio_pago || 'Transferencia')}</span>
+                  </div>
+                  <span style="font-weight:700; color:var(--verde); white-space:nowrap; margin-left:12px;">+ ${App.Utils.formatearMoneda(item.importe)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div style="margin-top:14px; padding:10px 12px; background:rgba(99,102,241,0.08); border-radius:var(--r); font-size:0.80rem; color:var(--texto-2); display:flex; align-items:center; gap:8px;">
+            ${App.Icons.get('info', 'icon-sm')}
+            <span>Estos reintegros compensan automáticamente en tu cuenta principal los consumos con tarjeta imputados a otras cuentas.</span>
+          </div>
+        `,
+        confirmLabel: '',
+        cancelLabel: 'Cerrar'
+      });
+      const cb = detailModal.el.querySelector('.modal-confirm');
+      if (cb) cb.style.display = 'none';
+      return;
+    }
+
     const esIngreso = row.tipo_mov === 'INGRESO';
     const colorClass = esIngreso ? 'positivo' : 'negativo';
     const medioPago = row.medio_pago || '—';

@@ -29,6 +29,8 @@ export class TarjetasModule extends BaseModule {
   #editData    = null;
   #allConsumos = [];
   #selectedTcId = null;
+  #selectedCategorias = new Set();
+  #baseSaldoTotal = 0;
   #selectedCuentaId = '';
   #txListImportar = [];
   #lastStatementPayload = null;
@@ -165,6 +167,8 @@ export class TarjetasModule extends BaseModule {
       incidenciaPersonal = totalResumenArs - incidenciaFamiliar;
     }
 
+    this.#baseSaldoTotal = saldoTotal;
+
     // Actualizar Scorecards FinSet
     // 1. ARS
     const valArsEl = document.getElementById('tc-kpi-val-ars');
@@ -210,6 +214,9 @@ export class TarjetasModule extends BaseModule {
 
     // Build the card selector pills
     this.#renderCardSelector();
+
+    // Render category filter pills
+    this.#renderCategoryFilter();
 
     this.#filterConsumos();
     this.#renderMoneyFlowChart();
@@ -376,6 +383,12 @@ export class TarjetasModule extends BaseModule {
                 <span>Nuevo Consumo</span>
               </button>
             </div>
+          </div>
+
+          <!-- Filtro Dinámico de Categorías (Pills interactivos) -->
+          <div class="tc-cat-filter-container" id="tc-cat-filter-container">
+            <span style="font-size:0.72rem; font-weight:600; color:var(--texto-3); text-transform:uppercase; letter-spacing:0.5px; margin-right:4px;">Categorías:</span>
+            <div id="tc-cat-filter-pills" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"></div>
           </div>
 
           <!-- Lista de consumos interactiva -->
@@ -1058,7 +1071,9 @@ export class TarjetasModule extends BaseModule {
     const tc = list[this.#tcIndex];
     this.#selectedTcId = tc?.isConsolidado ? null : tc?.id_tarjeta;
     this.#updateTcVisual();
+    this.#renderCategoryFilter();
     this.#filterConsumos();
+    this.#updateScorecardTotal();
     this.#updateSubcards();
   }
 
@@ -1261,6 +1276,11 @@ export class TarjetasModule extends BaseModule {
       }
     }
 
+    // Dynamic category filter
+    if (this.#selectedCategorias.size > 0) {
+      filtered = filtered.filter(c => this.#selectedCategorias.has(c.categoria_nombre || 'General'));
+    }
+
     // Separar impuestos de la liquidación de los consumos habituales
     const regularConsumos = filtered.filter(c => !this.#isTaxConsumo(c));
     const taxConsumos = filtered.filter(c => this.#isTaxConsumo(c));
@@ -1306,6 +1326,7 @@ export class TarjetasModule extends BaseModule {
     this.#renderConsumosList(displayConsumos);
     this.#renderImpuestosAccordion(taxConsumos);
     this.#renderGraficos();
+    this.#updateScorecardTotal();
 
     // Actualizar metadata de tarjeta seleccionada en el panel derecho
     const infoCard = this.#selectedTcId ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId) : null;
@@ -1320,6 +1341,118 @@ export class TarjetasModule extends BaseModule {
     }
 
     this.#updateSubcards();
+  }
+
+  #renderCategoryFilter() {
+    const pillsContainer = document.getElementById('tc-cat-filter-pills');
+    if (!pillsContainer) return;
+
+    let pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
+    if (this.#selectedTcId) {
+      pool = pool.filter(c => c.id_tarjeta === this.#selectedTcId);
+    }
+
+    const catCounts = {};
+    pool.forEach(c => {
+      const cat = c.categoria_nombre || 'General';
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+    });
+
+    const uniqueCats = Object.keys(catCounts).sort();
+    if (uniqueCats.length <= 1) {
+      pillsContainer.parentElement.style.display = 'none';
+      return;
+    }
+    pillsContainer.parentElement.style.display = 'flex';
+
+    const isAllActive = this.#selectedCategorias.size === 0;
+
+    let html = `
+      <button type="button" class="tc-filter-pill ${isAllActive ? 'active' : ''}" data-cat="ALL">
+        <span>Todas</span>
+        <span class="tc-filter-pill-count">(${pool.length})</span>
+      </button>
+    `;
+
+    uniqueCats.forEach(cat => {
+      const isSel = this.#selectedCategorias.has(cat);
+      html += `
+        <button type="button" class="tc-filter-pill ${isSel ? 'active' : ''}" data-cat="${App.Utils.escapeHtml(cat)}">
+          <span>${App.Utils.escapeHtml(cat)}</span>
+          <span class="tc-filter-pill-count">(${catCounts[cat]})</span>
+        </button>
+      `;
+    });
+
+    pillsContainer.innerHTML = html;
+
+    pillsContainer.querySelectorAll('.tc-filter-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cat = btn.dataset.cat;
+        if (cat === 'ALL') {
+          this.#selectedCategorias.clear();
+        } else {
+          if (this.#selectedCategorias.has(cat)) {
+            this.#selectedCategorias.delete(cat);
+          } else {
+            this.#selectedCategorias.add(cat);
+          }
+        }
+        this.#onCategoryFilterChanged();
+      });
+    });
+  }
+
+  #onCategoryFilterChanged() {
+    // 1. Update active states of pills
+    const pillsContainer = document.getElementById('tc-cat-filter-pills');
+    if (pillsContainer) {
+      const isAll = this.#selectedCategorias.size === 0;
+      pillsContainer.querySelectorAll('.tc-filter-pill').forEach(btn => {
+        const cat = btn.dataset.cat;
+        if (cat === 'ALL') {
+          btn.classList.toggle('active', isAll);
+        } else {
+          btn.classList.toggle('active', this.#selectedCategorias.has(cat));
+        }
+      });
+    }
+
+    // 2. Recalculate scorecard sumatoria
+    this.#updateScorecardTotal();
+
+    // 3. Filter consumos list & update donut
+    this.#filterConsumos();
+
+    // 4. Update money flow chart
+    this.#renderMoneyFlowChart();
+  }
+
+  #updateScorecardTotal() {
+    const valArsEl = document.getElementById('tc-kpi-val-ars');
+    const subArsEl = document.getElementById('tc-kpi-sub-ars');
+    if (!valArsEl) return;
+
+    if (this.#selectedCategorias.size > 0) {
+      let pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c) && c.moneda !== 'USD');
+      if (this.#selectedTcId) {
+        pool = pool.filter(c => c.id_tarjeta === this.#selectedTcId);
+      }
+      const filteredSum = pool
+        .filter(c => this.#selectedCategorias.has(c.categoria_nombre || 'General'))
+        .reduce((acc, c) => acc + Number(c.importe || 0), 0);
+      
+      valArsEl.textContent = App.Utils.formatearMoneda(filteredSum);
+      if (subArsEl) {
+        const count = this.#selectedCategorias.size;
+        subArsEl.textContent = `Filtrado por ${count} ${count === 1 ? 'categoría' : 'categorías'}`;
+      }
+    } else {
+      valArsEl.textContent = App.Utils.formatearMoneda(this.#baseSaldoTotal);
+      if (subArsEl) {
+        subArsEl.textContent = 'Liquidación del mes actual';
+      }
+    }
   }
 
   #renderConsumosList(items) {
@@ -1478,18 +1611,66 @@ export class TarjetasModule extends BaseModule {
     const currentMes = App.Store.mes || new Date().toISOString().substring(0, 7);
     const currentYear = currentMes.substring(0, 4);
 
-    // Build timeline using this.#proyeccionesData
-    let dataList = (this.#proyeccionesData || []).map(p => ({
-      mes: p.mes,
-      total: Number(p.total || 0),
-      consumos: Number(p.subtotal_consumos !== undefined ? p.subtotal_consumos : p.total || 0),
-      impuestos: Number(p.impuestos?.total_impuestos || 0)
-    }));
+    let dataList = [];
 
-    // If proyecciones are empty, build fallback from current month consumos
-    if (!dataList.length) {
-      const currTotal = (this.#allConsumos || []).reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
-      dataList = [{ mes: currentMes, total: currTotal, consumos: currTotal, impuestos: 0 }];
+    if (this.#selectedCategorias.size > 0) {
+      // Recalcular progresión mensual considerando solo las categorías seleccionadas
+      let poolConsumos = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c) && c.moneda !== 'USD');
+      if (this.#selectedTcId) {
+        poolConsumos = poolConsumos.filter(c => c.id_tarjeta === this.#selectedTcId);
+      }
+      const catConsumos = poolConsumos.filter(c => this.#selectedCategorias.has(c.categoria_nombre || 'General'));
+
+      let months = (this.#proyeccionesData || []).map(p => p.mes);
+      if (!months.length) {
+        for (let i = 0; i < 12; i++) {
+          const d = new Date(currentMes + '-01T12:00:00Z');
+          d.setMonth(d.getMonth() + i);
+          months.push(d.toISOString().substring(0, 7));
+        }
+      }
+
+      dataList = months.map((m, mIdx) => {
+        let monthTotal = 0;
+        catConsumos.forEach(c => {
+          const cMes = (c.fecha?.value || c.fecha || '').substring(0, 7);
+          const cuotaTot = Number(c.cuota_total || 1);
+          const cuotaAct = Number(c.cuota_actual || 1);
+          const imp = Number(c.importe || 0);
+
+          if (cuotaTot > 1) {
+            const remainingInstallments = cuotaTot - cuotaAct + 1;
+            if (mIdx >= 0 && mIdx < remainingInstallments) {
+              monthTotal += imp;
+            }
+          } else {
+            if (mIdx === 0 || cMes === m) {
+              monthTotal += imp;
+            }
+          }
+        });
+
+        return {
+          mes: m,
+          total: monthTotal,
+          consumos: monthTotal,
+          impuestos: 0
+        };
+      });
+    } else {
+      // Build timeline using this.#proyeccionesData
+      dataList = (this.#proyeccionesData || []).map(p => ({
+        mes: p.mes,
+        total: Number(p.total || 0),
+        consumos: Number(p.subtotal_consumos !== undefined ? p.subtotal_consumos : p.total || 0),
+        impuestos: Number(p.impuestos?.total_impuestos || 0)
+      }));
+
+      // If proyecciones are empty, build fallback from current month consumos
+      if (!dataList.length) {
+        const currTotal = (this.#allConsumos || []).reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
+        dataList = [{ mes: currentMes, total: currTotal, consumos: currTotal, impuestos: 0 }];
+      }
     }
 
     // Filter by selected period
@@ -1505,9 +1686,10 @@ export class TarjetasModule extends BaseModule {
 
     const subEl = document.getElementById('tc-moneyflow-sub');
     if (subEl) {
-      if (this.#moneyFlowPeriod === '6M') subEl.textContent = 'Evolución y vencimientos próximos 6 meses';
-      else if (this.#moneyFlowPeriod === '12M') subEl.textContent = 'Proyección completa a 12 meses';
-      else subEl.textContent = `Vencimientos del año ${currentYear}`;
+      const catSuffix = this.#selectedCategorias.size > 0 ? ` (${this.#selectedCategorias.size} cat. seleccionadas)` : '';
+      if (this.#moneyFlowPeriod === '6M') subEl.textContent = 'Evolución y vencimientos próximos 6 meses' + catSuffix;
+      else if (this.#moneyFlowPeriod === '12M') subEl.textContent = 'Proyección completa a 12 meses' + catSuffix;
+      else subEl.textContent = `Vencimientos del año ${currentYear}` + catSuffix;
     }
 
     this.#evolucionChartInstance?.destroy();
@@ -1594,10 +1776,13 @@ export class TarjetasModule extends BaseModule {
     if (this.#selectedTcId) {
       pool = pool.filter(c => c.id_tarjeta === this.#selectedTcId);
     }
+    if (this.#selectedCategorias.size > 0) {
+      pool = pool.filter(c => this.#selectedCategorias.has(c.categoria_nombre || 'General'));
+    }
 
     const isByCard = this.#catMetric === 'tarjeta';
-    if (subEl) subEl.textContent = isByCard ? 'Distribución por tarjeta' : 'Distribución por categorías';
-    if (centerLblEl) centerLblEl.textContent = isByCard ? 'Por Tarjeta' : 'Total Consumos';
+    if (subEl) subEl.textContent = isByCard ? 'Distribución por tarjeta' : (this.#selectedCategorias.size > 0 ? `Distribución (${this.#selectedCategorias.size} seleccionadas)` : 'Distribución por categorías');
+    if (centerLblEl) centerLblEl.textContent = isByCard ? 'Por Tarjeta' : (this.#selectedCategorias.size > 0 ? 'Total Filtrado' : 'Total Consumos');
 
     const totalMetric = pool.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
     if (centerValEl) {

@@ -251,7 +251,7 @@ export class AdminModule extends BaseModule {
         </div>
         <div class="table-card">
           <table class="table">
-            <thead><tr><th>Nombre</th><th>Tipo</th><th>Activa</th><th></th></tr></thead>
+            <thead><tr><th>Jerarquía</th><th>Nombre</th><th>Tipo</th><th>Activa</th><th></th></tr></thead>
             <tbody id="adm-cat-tbody"></tbody>
           </table>
         </div>
@@ -261,11 +261,12 @@ export class AdminModule extends BaseModule {
         const tbody = document.getElementById('adm-cat-tbody');
         if (!tbody) return;
         if (!items.length) {
-          tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--texto-3);padding:24px;">No se encontraron categorías</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--texto-3);padding:24px;">No se encontraron categorías</td></tr>`;
           return;
         }
         tbody.innerHTML = items.map(c => `
           <tr>
+            <td><span class="badge badge-neutro" style="font-size:0.75rem;">${App.Utils.escapeHtml(c.jerarquia || '—')}</span></td>
             <td><strong>${App.Utils.escapeHtml(c.nombre)}</strong></td>
             <td><span class="tipo-mov tipo-${c.tipo_mov?.toLowerCase()}">${App.Utils.escapeHtml(c.tipo_mov)}</span></td>
             <td>${c.activa ? '✓' : '—'}</td>
@@ -660,6 +661,10 @@ export class AdminModule extends BaseModule {
           <div class="form-group full-width">
             <label>Nombre <span class="required-mark">*</span></label>
             <input class="input" name="nombre" value="${App.Utils.escapeHtml(data?.nombre || '')}" required>
+          </div>
+          <div class="form-group full-width">
+            <label>Jerarquía / Grupo (Opcional)</label>
+            <input class="input" name="jerarquia" value="${App.Utils.escapeHtml(data?.jerarquia || '')}" placeholder="Ej: 0 - Gastos vivienda, 1 - Alimentación...">
           </div>
           <div class="form-group">
             <label>Tipo de movimiento</label>
