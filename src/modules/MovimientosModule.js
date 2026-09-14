@@ -1308,6 +1308,7 @@ export class MovimientosModule extends BaseModule {
     });
 
     // Delegación para botón toggle pago en movimientos
+    const tablaWrap = document.getElementById('mov-tabla-wrap');
     tablaWrap?.addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-toggle-pago]');
       if (!btn) return;

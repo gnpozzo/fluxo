@@ -1313,6 +1313,9 @@ export class TarjetasModule extends BaseModule {
     }
 
     // Actualizar resumen y títulos
+    const badgeTitleEl = document.getElementById('tc-consumos-title');
+    const badgeEl = document.getElementById('tc-consumos-badge');
+    const summaryEl = document.getElementById('tc-consumos-summary');
     const activeCard = this.#selectedTcId ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId) : null;
 
     if (badgeTitleEl) {
