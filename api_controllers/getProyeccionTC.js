@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       finalArgs = [req.body.cuenta, req.body.mes];
     }
 
-    const [cuenta, mesYYYYMM] = finalArgs;
+    let [cuenta, mesYYYYMM] = finalArgs;
 
     if (!cuenta || !mesYYYYMM) {
       return res.status(400).json({ success: false, error: 'Faltan parámetros idCuenta o mes (YYYY-MM)' });
@@ -28,10 +28,11 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: 'No autenticado' });
     }
 
-    const isOwner = await verifyCuentaOwnership(supabase, cuenta, userId);
-    if (!isOwner) {
+    const resolvedCuenta = await resolveUserCuenta(supabase, cuenta, userId);
+    if (!resolvedCuenta) {
       return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
+    cuenta = resolvedCuenta;
 
     const start = new Date(mesYYYYMM + '-01T12:00:00Z');
     const end = new Date(start);

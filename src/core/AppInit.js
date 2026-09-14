@@ -156,12 +156,30 @@ class AppInit {
 
       const initialData = await initialDataPromise;
 
-      const defaultCuentas = [
-        { id_cuenta_principal: 'Principal', nombre: 'Principal', es_predeterminada: true, activa: true, modulo_tarjetas_activo: true, modulo_cc_activo: true, modulo_ahorro_activo: true, modulo_inversiones_activo: true }
-      ];
+      let cachedCuentas = null;
+      let cachedMeses = null;
+      try {
+        const storedC = localStorage.getItem('fluxo_cached_cuentas');
+        if (storedC) cachedCuentas = JSON.parse(storedC);
+        const storedM = localStorage.getItem('fluxo_cached_meses');
+        if (storedM) cachedMeses = JSON.parse(storedM);
+      } catch (_) {}
+
+      if (initialData?.cuentas?.length) {
+        try { localStorage.setItem('fluxo_cached_cuentas', JSON.stringify(initialData.cuentas)); } catch (_) {}
+      }
+      if (initialData?.meses?.length) {
+        try { localStorage.setItem('fluxo_cached_meses', JSON.stringify(initialData.meses)); } catch (_) {}
+      }
+
+      const defaultCuentas = (cachedCuentas && cachedCuentas.length)
+        ? cachedCuentas
+        : [
+            { id_cuenta_principal: 'Principal', nombre: 'Principal', es_predeterminada: true, activa: true, modulo_tarjetas_activo: true, modulo_cc_activo: true, modulo_ahorro_activo: true, modulo_inversiones_activo: true }
+          ];
 
       const cuentas = initialData?.cuentas?.length ? initialData.cuentas : defaultCuentas;
-      const meses = initialData?.meses?.length ? initialData.meses : [];
+      const meses = initialData?.meses?.length ? initialData.meses : (cachedMeses?.length ? cachedMeses : []);
 
       // Llenar Store con datos maestros
       App.Store.setCuentas(cuentas);

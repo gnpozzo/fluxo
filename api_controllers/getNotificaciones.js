@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -16,14 +16,15 @@ export default async function handler(req, res) {
     } else if (req.body && typeof req.body === 'object') {
       finalArgs = [req.body.cuenta, req.body.mes];
     }
-    const [cuenta, mesYYYYMM] = finalArgs;
+    let [cuenta, mesYYYYMM] = finalArgs;
 
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
     if (cuenta) {
-      const isOwner = await verifyCuentaOwnership(supabase, cuenta, userId);
-      if (!isOwner) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+      const resolvedCuenta = await resolveUserCuenta(supabase, cuenta, userId);
+      if (!resolvedCuenta) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
+      cuenta = resolvedCuenta;
     }
     
     const notificaciones = [];

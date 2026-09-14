@@ -147,6 +147,13 @@ class ApiService {
           return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
         }
 
+        const isServerTimeoutOrTemp = (response && [502, 503, 504].includes(response.status)) || errMsg.includes('Gateway Timeout');
+        if (isServerTimeoutOrTemp && attempt < 3) {
+          if (window.App) window.App.warn('AppAPI', 'fetch:server_retry', { endpoint, attempt, status: response?.status || 504 });
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
+        }
+
         if (response && response.status === 401 && window.App && window.App.Events) {
           window.App.Events.emit('auth:unauthorized');
         }

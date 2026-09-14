@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -14,17 +14,18 @@ export default async function handler(req, res) {
     } else if (typeof req.body === 'string') {
       try { finalArgs = JSON.parse(req.body); if (finalArgs.args) finalArgs = finalArgs.args; } catch(e){}
     }
-    const [cuenta, fechaInicio, fechaFin] = finalArgs;
+    let [cuenta, fechaInicio, fechaFin] = finalArgs;
     
     if (!cuenta) throw new Error("Falta id de cuenta");
 
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const isOwner = await verifyCuentaOwnership(supabase, cuenta, userId);
-    if (!isOwner) {
+    const resolvedCuenta = await resolveUserCuenta(supabase, cuenta, userId);
+    if (!resolvedCuenta) {
       return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
+    cuenta = resolvedCuenta;
 
     let consumos = [];
     let error = null;

@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       finalArgs = [req.body.cuenta || req.body.idCuenta];
     }
 
-    const idCuenta = finalArgs[0];
+    let idCuenta = finalArgs[0];
     if (!idCuenta) {
       return res.status(400).json({ success: false, error: 'Falta parámetro idCuenta' });
     }
@@ -27,10 +27,11 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: 'No autenticado' });
     }
 
-    const isOwner = await verifyCuentaOwnership(supabase, idCuenta, userId);
-    if (!isOwner) {
+    const resolvedCuenta = await resolveUserCuenta(supabase, idCuenta, userId);
+    if (!resolvedCuenta) {
       return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
+    idCuenta = resolvedCuenta;
 
     let movimientos = [];
 

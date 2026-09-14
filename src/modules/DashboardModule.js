@@ -152,7 +152,6 @@ export class DashboardModule extends BaseModule {
 
   #enterDetailMode(cuentaId) {
     this.#viewMode = 'detail';
-    App.Store.setCuenta(cuentaId);
     const sel = document.getElementById('selector-cuenta');
     if (sel) sel.value = cuentaId;
     const pEl = document.getElementById('dash-portfolio-view');
@@ -160,7 +159,11 @@ export class DashboardModule extends BaseModule {
     if (pEl) pEl.style.display = 'none';
     if (dEl) dEl.style.display = '';
     this.#renderDetailNav(cuentaId);
-    this.#cargarDetail();
+    if (App.Store.cuenta !== cuentaId) {
+      App.Store.setCuenta(cuentaId);
+    } else {
+      this.#cargarDetail();
+    }
     App.updateAccountSelectorVisibility();
   }
 

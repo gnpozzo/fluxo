@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import { verifyCuentaOwnership } from '../api_lib/auth.js';
+import { resolveUserCuenta } from '../api_lib/auth.js';
 
 // [Origen -> api -> getDashboardData.js]
 // v6.0.0
@@ -32,15 +32,15 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: 'No autenticado' });
     }
 
-    const isOwner = await verifyCuentaOwnership(supabase, cuenta, userId);
-    if (!isOwner) {
+    const resolvedCuenta = await resolveUserCuenta(supabase, cuenta, userId);
+    if (!resolvedCuenta) {
       return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
 
     const { data: movimientos, error: movError } = await supabase
       .from('movimientos')
       .select('*, categorias (nombre)')
-      .eq('id_cuenta_principal', cuenta)
+      .eq('id_cuenta_principal', resolvedCuenta)
       .eq('user_id', userId)
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
     const { data: histMovs, error: histError } = await supabase
       .from('movimientos')
       .select('fecha, tipo_mov, importe, id_categoria, descripcion')
-      .eq('id_cuenta_principal', cuenta)
+      .eq('id_cuenta_principal', resolvedCuenta)
       .eq('user_id', userId)
       .gte('fecha', startRange)
       .lte('fecha', endRange);

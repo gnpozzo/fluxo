@@ -7,7 +7,7 @@
 
 export class AppStore {
   #state = {
-    cuenta        : 'Gastos',
+    cuenta        : null,
     mes           : null,
     cuentas       : [],
     meses         : [],
