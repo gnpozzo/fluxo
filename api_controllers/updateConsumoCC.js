@@ -46,8 +46,11 @@ export default async function handler(req, res) {
     
     // 1. DELETE (scoped to user_id)
     if (scope === 'SINGLE') {
-      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', original.consumoId).eq('user_id', userId);
-      if (error) throw error;
+      const origId = original.consumoId || original.id || original.id_cc_consumo || (typeof bodyArgs?.[0] === 'string' ? bodyArgs[0] : null);
+      if (origId) {
+        const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', origId).eq('user_id', userId);
+        if (error) throw error;
+      }
     } else if (scope === 'SERIES') {
       const { error } = await supabase.from('cc_consumos').delete()
         .eq('recur_group_id', original.recurGroupId)

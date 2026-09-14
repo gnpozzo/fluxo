@@ -25,6 +25,7 @@ export default async function handler(req, res) {
     const bodyArgs = Array.isArray(req.body?.args) ? req.body.args : (Array.isArray(req.body) ? req.body : null);
     let request = null;
     let rawScope = null;
+    const rawId = (typeof bodyArgs?.[0] === 'string') ? bodyArgs[0] : null;
 
     if (bodyArgs) {
       if (bodyArgs[1] && typeof bodyArgs[1] === 'object') {
@@ -47,6 +48,7 @@ export default async function handler(req, res) {
     const { original = {}, data = {} } = request || {};
     const scope = request.scope || rawScope || 'SINGLE';
     const mov = (data && Object.keys(data).length > 0) ? data : request;
+    const targetId = original.movimientoId || original.id || original.id_movimiento || rawId || request.id || mov.id_movimiento;
 
     if (mov?.idCuenta) {
       const resolved = await resolveUserCuenta(supabase, mov.idCuenta, userId);
@@ -56,15 +58,15 @@ export default async function handler(req, res) {
       mov.idCuenta = resolved;
     }
 
-    const isOriginalRecurrente = !!original.recurGroupId;
-    const isOriginalSplit = !!original.splitGroupId;
+    const isOriginalRecurrente = Boolean(original.recurGroupId);
+    const isOriginalSplit = Boolean(original.splitGroupId);
     const isMovRecurrente = mov.tipoConsumo === 'RECURRENTE' || mov.tipoConsumo === 'CUOTAS';
-    const isComplexityChanging = isMovRecurrente !== isOriginalRecurrente || mov.esSplit !== isOriginalSplit;
+    const isComplexityChanging = isMovRecurrente !== isOriginalRecurrente || Boolean(mov.esSplit) !== isOriginalSplit;
 
     if (scope !== 'SINGLE' || isComplexityChanging) {
       // 1. DELETE (scoped to user_id)
       if (scope === 'SINGLE') {
-        await supabase.from('movimientos').delete().eq('id_movimiento', original.movimientoId).eq('user_id', userId);
+        if (targetId) await supabase.from('movimientos').delete().eq('id_movimiento', targetId).eq('user_id', userId);
       } else if (scope === 'GROUP') {
         await supabase.from('movimientos').delete().eq('split_group_id', original.splitGroupId).eq('user_id', userId);
       } else if (scope === 'SERIES') {
@@ -166,13 +168,17 @@ export default async function handler(req, res) {
 
     } else {
       // UPDATE SIMPLE (scoped to user_id)
-      const { error } = await supabase.from('movimientos').update({
+      const updatePayload = {
         fecha: mov.fecha,
         id_categoria: mov.idCategoria,
         descripcion: mov.descripcion,
         importe: mov.importe,
         medio_pago: mov.medioPago
-      }).eq('id_movimiento', original.movimientoId).eq('user_id', userId);
+      };
+      if (mov.idCuenta) updatePayload.id_cuenta_principal = mov.idCuenta;
+      if (mov.tipo) updatePayload.tipo_mov = mov.tipo;
+
+      const { error } = await supabase.from('movimientos').update(updatePayload).eq('id_movimiento', targetId).eq('user_id', userId);
       if (error) throw error;
     }
 
