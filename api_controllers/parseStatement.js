@@ -1,6 +1,8 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import XLSX from 'xlsx';
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function callGemini(key, modelName, systemInstruction, history, responseMimeType = null) {
   const cleanHistory = (history || []).filter(h => h.role === 'user' || h.role === 'model');
   const payload = {
@@ -15,39 +17,122 @@ async function callGemini(key, modelName, systemInstruction, history, responseMi
     payload.generationConfig = { responseMimeType };
   }
   
-  const modelsToTry = [
+  const priorityList = [
     modelName,
     'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-3.5-flash',
-    'gemini-flash-latest'
-  ].filter((v, i, a) => v && a.indexOf(v) === i);
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash-latest',
+    'gemini-2.5-pro',
+    'gemini-1.5-pro'
+  ].filter(Boolean);
+
+  let modelsToTry = [...new Set(priorityList)];
+
+  // Descubrimiento dinámico de modelos soportados por la API Key
+  try {
+    const listController = new AbortController();
+    const listTimeout = setTimeout(() => listController.abort(), 3500);
+    const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {
+      signal: listController.signal
+    });
+    clearTimeout(listTimeout);
+
+    if (listResp.ok) {
+      const listData = await listResp.json();
+      const validNames = (listData.models || [])
+        .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+        .map(m => m.name.replace('models/', ''));
+
+      const discovered = [];
+      for (const p of priorityList) {
+        if (validNames.includes(p) && !discovered.includes(p)) {
+          discovered.push(p);
+        }
+      }
+      for (const v of validNames) {
+        if (!discovered.includes(v) &&
+            !v.includes('tts') &&
+            !v.includes('audio') &&
+            !v.includes('imagen') &&
+            !v.includes('embedding') &&
+            !v.includes('bison') &&
+            !v.includes('realtime')) {
+          discovered.push(v);
+        }
+      }
+      if (discovered.length > 0) {
+        modelsToTry = discovered;
+      }
+    }
+  } catch (e) {
+    console.warn('[parseStatement] Dynamic model discovery timed out or failed, using fallback list:', e.message);
+  }
 
   let lastError = null;
+  let isOverloadError = false;
+
   for (const model of modelsToTry) {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (response.ok) {
-        const result = await response.json();
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) return text;
-      } else {
-        const errTxt = await response.text();
-        lastError = `${response.status} - ${errTxt}`;
-        console.warn(`[parseStatement] Model ${model} failed: ${lastError}`);
+    const maxRetries = 2; // Intento inicial + hasta 2 reintentos
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delayMs = attempt * 1200 + Math.floor(Math.random() * 500);
+          console.log(`[parseStatement] Reintentando modelo ${model} (intento ${attempt + 1}/${maxRetries + 1}) tras ${delayMs}ms...`);
+          await sleep(delayMs);
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const result = await response.json();
+          let text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            text = text.trim();
+            if (text.startsWith('```json')) {
+              text = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
+            } else if (text.startsWith('```')) {
+              text = text.replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
+            }
+            return text;
+          }
+        } else {
+          const errTxt = await response.text();
+          lastError = `${response.status} - ${errTxt}`;
+          const isTransient = response.status === 503 || response.status === 429 || response.status === 500 || response.status === 502 || response.status === 504;
+          if (response.status === 503 || errTxt.includes('high demand') || errTxt.includes('UNAVAILABLE')) {
+            isOverloadError = true;
+          }
+          console.warn(`[parseStatement] Model ${model} (intento ${attempt + 1}) falló con HTTP ${response.status}: ${errTxt}`);
+          
+          if (!isTransient) {
+            break;
+          }
+        }
+      } catch (e) {
+        lastError = e.message;
+        console.warn(`[parseStatement] Model ${model} (intento ${attempt + 1}) excepción: ${lastError}`);
       }
-    } catch (e) {
-      lastError = e.message;
-      console.warn(`[parseStatement] Model ${model} threw: ${lastError}`);
     }
   }
 
-  throw new Error(`Gemini API error: ${lastError || 'No model responded'}`);
+  if (isOverloadError) {
+    throw new Error('El servicio de IA (Google Gemini) se encuentra temporalmente con alta demanda. Por favor reintenta en unos instantes.');
+  }
+
+  throw new Error(`Gemini API error: ${lastError || 'Ningún modelo disponible respondió con éxito'}`);
 }
+
 
 function tryParseSantanderXlsx(buffer) {
   try {
@@ -776,6 +861,17 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 
   } catch (err) {
     console.error('[API -> parseStatement Error]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    const isOverload = (err.message || '').includes('503') ||
+      (err.message || '').includes('alta demanda') ||
+      (err.message || '').includes('UNAVAILABLE') ||
+      (err.message || '').includes('high demand') ||
+      (err.message || '').includes('Gateway Timeout');
+
+    const userMsg = isOverload
+      ? 'El servicio de IA (Google Gemini) se encuentra temporalmente con alta demanda en Google. Por favor, vuelve a intentar en unos instantes.'
+      : err.message;
+
+    return res.status(500).json({ success: false, error: userMsg });
   }
 }
+
