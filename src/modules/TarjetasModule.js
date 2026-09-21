@@ -488,21 +488,28 @@ export class TarjetasModule extends BaseModule {
               </div>
             </div>
 
-            <!-- 4. Impuestos Resumen -->
-            <div class="finset-submodule-card" id="tc-card-sub-impuestos" style="cursor:pointer;" title="Clic para ver desglose de impuestos">
-              <div class="fsc-header">
-                <div class="fsc-tag-wrap">
+            <!-- 4. Impuestos Resumen (Accordion) -->
+            <div class="finset-submodule-card" id="tc-card-sub-impuestos" style="cursor:pointer; transition: all 0.2s ease;" title="Clic para ver desglose de impuestos">
+              <div class="fsc-header" id="tc-taxes-toggle" role="button" tabindex="0" style="display:flex; align-items:center; justify-content:space-between; user-select:none;">
+                <div class="fsc-tag-wrap" style="display:flex; align-items:center; gap:10px;">
                   <div class="fsc-icon-box icon-yellow">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                   </div>
                   <div class="fsc-text-block">
-                    <div class="fsc-title">Impuestos Resumen</div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <div class="fsc-title">Impuestos Resumen</div>
+                      <span id="tc-taxes-badge" class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:10px; background:rgba(239,68,68,0.1); color:var(--rojo); font-weight:700; display:none;">0 ítems</span>
+                    </div>
                     <div class="fsc-sub">PAIS, Ganancias, Sellos</div>
                   </div>
                 </div>
-                <div class="fsc-right-block">
+                <div class="fsc-right-block" style="display:flex; align-items:center; gap:8px;">
                   <span class="fsc-value negativo" id="tc-subcard-impuestos">$ 0,00</span>
+                  <svg id="tc-taxes-chevron" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 0.25s ease; color:var(--texto-3);"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
+              </div>
+              <div id="tc-taxes-content" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--borde); font-size:0.8rem;">
+                <div id="tc-taxes-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
               </div>
             </div>
 
@@ -514,9 +521,6 @@ export class TarjetasModule extends BaseModule {
             </div>
 
           </div>
-
-          <!-- Desglose de Impuestos (Accordion interactivo) -->
-          <div id="tc-taxes-wrap"></div>
         </div>
 
       </div>
@@ -1074,9 +1078,16 @@ export class TarjetasModule extends BaseModule {
     const taxSubcard = document.getElementById('tc-card-sub-impuestos');
     if (taxSubcard && !taxSubcard._boundToggle) {
       taxSubcard._boundToggle = true;
-      taxSubcard.addEventListener('click', () => {
-        const toggle = document.getElementById('tc-taxes-toggle');
-        toggle?.click();
+      taxSubcard.addEventListener('click', (e) => {
+        // Toggle if not clicked directly on a link or button
+        const contentEl = document.getElementById('tc-taxes-content');
+        const chevronEl = document.getElementById('tc-taxes-chevron');
+        if (!contentEl) return;
+        const isHidden = contentEl.style.display === 'none' || !contentEl.style.display;
+        contentEl.style.display = isHidden ? 'block' : 'none';
+        if (chevronEl) {
+          chevronEl.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
       });
     }
 
@@ -1621,48 +1632,53 @@ export class TarjetasModule extends BaseModule {
   }
 
   #renderImpuestosAccordion(taxes) {
-    const wrap = document.getElementById('tc-taxes-wrap');
-    if (!wrap) return;
+    const cardEl = document.getElementById('tc-card-sub-impuestos');
+    const badgeEl = document.getElementById('tc-taxes-badge');
+    const contentEl = document.getElementById('tc-taxes-content');
+    const itemsListEl = document.getElementById('tc-taxes-items-list');
+    const chevronEl = document.getElementById('tc-taxes-chevron');
+    const toggleEl = document.getElementById('tc-taxes-toggle');
+
+    if (!cardEl) return;
+
     if (!taxes || taxes.length === 0) {
-      wrap.innerHTML = '';
+      if (badgeEl) {
+        badgeEl.textContent = '0 ítems';
+        badgeEl.style.display = 'none';
+      }
+      if (itemsListEl) itemsListEl.innerHTML = '';
+      if (contentEl) contentEl.style.display = 'none';
+      if (chevronEl) chevronEl.style.transform = 'rotate(0deg)';
       return;
     }
 
-    const totalImpuestos = taxes.reduce((acc, t) => acc + Number(t.importe || 0), 0);
-    wrap.innerHTML = `
-      <div class="tc-taxes-accordion" id="tc-taxes-accordion" style="margin-top:12px; border:1px solid var(--borde); border-radius:10px; overflow:hidden; background:var(--fondo);">
-        <div class="tc-taxes-header" id="tc-taxes-toggle" role="button" tabindex="0" title="Ver desglose detallado de impuestos" style="padding:10px 14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; background:var(--bg-2); user-select:none;">
-          <div class="tc-taxes-header-left" style="display:flex; align-items:center; gap:8px;">
-            <span class="tc-taxes-icon">🏛️</span>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span class="tc-taxes-title" style="font-weight:600; font-size:0.8rem; color:var(--texto);">Impuestos del Resumen</span>
-              <span class="tc-taxes-badge" style="font-size:0.7rem; padding:1px 6px; border-radius:10px; background:rgba(239,68,68,0.1); color:var(--rojo); font-weight:700;">${taxes.length} ${taxes.length === 1 ? 'ítem' : 'ítems'}</span>
-            </div>
-          </div>
-          <div class="tc-taxes-header-right" style="display:flex; align-items:center; gap:8px;">
-            <span class="tc-taxes-total-val negativo" style="font-weight:700; font-size:0.85rem;">${App.Utils.formatearMoneda(totalImpuestos)}</span>
-            <svg class="tc-taxes-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </div>
-        </div>
-        <div class="tc-taxes-body" style="padding:8px 12px; font-size:0.78rem; border-top:1px dashed var(--borde-1); display:none;" id="tc-taxes-content">
-          ${taxes.map(t => `
-            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--borde-1);">
-              <span style="color:var(--texto-2);">${App.Utils.escapeHtml(t.descripcion)}</span>
-              <strong style="color:var(--rojo);">${App.Utils.formatearMoneda(t.importe)}</strong>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
+    // Actualizar badge de cantidad
+    if (badgeEl) {
+      badgeEl.textContent = `${taxes.length} ${taxes.length === 1 ? 'ítem' : 'ítems'}`;
+      badgeEl.style.display = 'inline-block';
+    }
 
-    const toggle = document.getElementById('tc-taxes-toggle');
-    const content = document.getElementById('tc-taxes-content');
-    if (toggle && content) {
-      toggle.addEventListener('click', () => {
-        const isHidden = content.style.display === 'none';
-        content.style.display = isHidden ? 'block' : 'none';
-        const chevron = toggle.querySelector('.tc-taxes-chevron');
-        if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+    // Llenar lista detallada
+    if (itemsListEl) {
+      itemsListEl.innerHTML = taxes.map(t => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid var(--borde-1, rgba(0,0,0,0.05));">
+          <span style="color:var(--texto-2); font-size:0.78rem;">${App.Utils.escapeHtml(t.descripcion || 'Impuesto')}</span>
+          <strong style="color:var(--rojo); font-size:0.8rem;">${App.Utils.formatearMoneda(t.importe)}</strong>
+        </div>
+      `).join('');
+    }
+
+    // Event listener para desplegar/contraer (idempotente)
+    if (toggleEl && !toggleEl._hasBoundTaxToggle) {
+      toggleEl._hasBoundTaxToggle = true;
+      toggleEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!contentEl) return;
+        const isHidden = contentEl.style.display === 'none' || !contentEl.style.display;
+        contentEl.style.display = isHidden ? 'block' : 'none';
+        if (chevronEl) {
+          chevronEl.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
       });
     }
   }
