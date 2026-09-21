@@ -210,7 +210,7 @@ export class BaseModule {
     if (!tbody) return;
     const skeletonRow = `
       <tr class="skeleton-row">
-        ${'<td><div class="skeleton-line"></div></td>'.repeat(columnas)}
+        ${'<td><div class="skeleton skeleton-text"></div></td>'.repeat(columnas)}
       </tr>`;
     tbody.innerHTML = skeletonRow.repeat(filas);
   }

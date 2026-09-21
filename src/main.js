@@ -23,7 +23,7 @@ import './core/AppGemini.js';
 
 // 3. UI Components
 import { ToastManager } from './components/Toast.js';
-window.App.Toast = new ToastManager();
+if (!window.App.Toast) window.App.Toast = new ToastManager();
 import { Modal } from './components/Modal.js';
 window.App.Modal = Modal;
 import { DataTable } from './components/DataTable.js';

@@ -269,11 +269,11 @@ export class DataTable {
       <span class="dt-pag-info">${start}–${end} de ${total}</span>
       <div class="dt-pag-controls">
         <button class="btn btn-icon dt-prev" ${this.#page === 1 ? 'disabled' : ''} aria-label="Anterior">
-          ${App.Icons.get('chevronUp', 'icon-sm')}
+          ${App.Icons.get('chevronLeft', 'icon-sm')}
         </button>
         <span class="dt-pag-current">${this.#page} / ${pages}</span>
         <button class="btn btn-icon dt-next" ${this.#page === pages ? 'disabled' : ''} aria-label="Siguiente">
-          ${App.Icons.get('chevronDown', 'icon-sm')}
+          ${App.Icons.get('chevronRight', 'icon-sm')}
         </button>
       </div>
     `;

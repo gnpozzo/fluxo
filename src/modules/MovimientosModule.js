@@ -55,6 +55,14 @@ export class MovimientosModule extends BaseModule {
     App.log('MovimientosModule', 'init', 'Módulo iniciado');
   }
 
+  destruir() {
+    this.#donutChartInstance?.destroy();
+    this.#donutChartInstance = null;
+    this.#evolucionChartInstance?.destroy();
+    this.#evolucionChartInstance = null;
+    super.destruir();
+  }
+
   async cargar() {
     if (App.Store.isModuloLoaded(this.moduleId)) return;
 
@@ -169,7 +177,7 @@ export class MovimientosModule extends BaseModule {
       <div class="section-header" style="margin-bottom:var(--space-3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div class="acciones-container">
           <button id="mov-btn-nuevo" class="btn btn-primary btn-sm" type="button" style="display:inline-flex;align-items:center;gap:6px;">
-            ${App.Icons.get('plus', 'icon-sm')}
+            ${App.Icons.get('add', 'icon-sm')}
             <span>Nuevo Movimiento</span>
           </button>
         </div>

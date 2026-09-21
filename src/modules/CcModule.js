@@ -39,6 +39,14 @@ export class CCModule extends BaseModule {
     App.log('CCModule', 'init', 'Módulo CC iniciado');
   }
 
+  destruir() {
+    this.#moneyFlowChartInstance?.destroy();
+    this.#moneyFlowChartInstance = null;
+    this.#categoriesChartInstance?.destroy();
+    this.#categoriesChartInstance = null;
+    super.destruir();
+  }
+
   async cargar() {
     if (App.Store.isModuloLoaded(this.moduleId)) return;
     const { cuenta, mes } = App.Store;

@@ -67,6 +67,14 @@ export class TarjetasModule extends BaseModule {
     App.log('TarjetasModule', 'init', 'Módulo iniciado');
   }
 
+  destruir() {
+    this.#chartInstance?.destroy();
+    this.#chartInstance = null;
+    this.#evolucionChartInstance?.destroy();
+    this.#evolucionChartInstance = null;
+    super.destruir();
+  }
+
   async cargar() {
     const cuenta = App.Store.cuenta;
     const mes = App.Store.mes;
@@ -462,7 +470,7 @@ export class TarjetasModule extends BaseModule {
               </div>
             </div>
 
-            <!-- 3. Total Tarjeta (con botón de Pagar Resumen) -->
+            <!-- 3. Total Tarjeta -->
             <div class="finset-submodule-card" id="tc-card-sub-total">
               <div class="fsc-header">
                 <div class="fsc-tag-wrap">
@@ -474,11 +482,8 @@ export class TarjetasModule extends BaseModule {
                     <div class="fsc-sub" id="tc-subcard-total-sub">Resumen del mes</div>
                   </div>
                 </div>
-                <div class="fsc-right-block" style="display:flex;align-items:center;gap:8px;">
+                <div class="fsc-right-block">
                   <span class="fsc-value negativo" id="tc-subcard-total">$ 0,00</span>
-                  <button class="btn btn-primary btn-sm" id="tc-btn-pagar-resumen" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;" title="Liquidar resumen y marcar consumos como saldados" type="button">
-                    💳 Pagar Resumen
-                  </button>
                 </div>
               </div>
             </div>
@@ -499,6 +504,13 @@ export class TarjetasModule extends BaseModule {
                   <span class="fsc-value negativo" id="tc-subcard-impuestos">$ 0,00</span>
                 </div>
               </div>
+            </div>
+
+            <!-- Botón Pagar Resumen destacado -->
+            <div class="tc-action-pagar-container" style="margin-top:6px;">
+              <button class="btn btn-primary" id="tc-btn-pagar-resumen" style="width:100%;padding:11px 16px;font-weight:600;font-size:0.875rem;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 6px rgba(var(--primary-rgb, 37, 99, 235), 0.25);" title="Liquidar resumen y marcar consumos como saldados" type="button">
+                💳 Pagar Resumen
+              </button>
             </div>
 
           </div>

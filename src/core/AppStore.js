@@ -31,6 +31,8 @@ export class AppStore {
   get version()  { return this.#state.version; }
   get usuario()  { return this.#state.usuario ? { ...this.#state.usuario } : null; }
   get globalCurrency() { return this.#state.globalCurrency; }
+  get currency() { return this.#state.globalCurrency; }
+  get monedaGlobal() { return this.#state.globalCurrency; }
   get exchangeRate() { return this.#state.exchangeRate; }
   get dolarOficial() { return this.#state.dolarOficial || 1535; }
 

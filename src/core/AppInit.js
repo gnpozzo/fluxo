@@ -26,6 +26,7 @@ class AppInit {
 
   #modalNotificaciones = null;
   #modalRecordatorio    = null;
+  #quickAddInitialized  = false;
 
   // --- SECCIÓN 1: ARRANQUE ---
 
@@ -204,9 +205,6 @@ class AppInit {
       // Configurar Account Selector
       this.#setupAccountSelector(cuentas);
       
-      // Configurar Quick Add global
-      this.#setupQuickAdd();
-
       // Configurar credentials dropdown
       this.#setupCredentialsDropdown();
 
@@ -410,7 +408,7 @@ class AppInit {
         setActivePill(pill.dataset.currency);
       } else {
         // Toggling currency if clicked on the track/knob area
-        const currentCurrency = App.Store.currency || 'ARS';
+        const currentCurrency = App.Store.globalCurrency || 'ARS';
         setActivePill(currentCurrency === 'ARS' ? 'USD' : 'ARS');
       }
     });
@@ -547,10 +545,12 @@ class AppInit {
   // --- SECCIÓN 5: QUICK ADD (Universal) ---
 
   #setupQuickAdd() {
+    if (this.#quickAddInitialized) return;
     const wrap = document.getElementById('topbar-quick-add-wrap');
     const btn = document.getElementById('topbar-btn-nuevo');
     const menu = document.getElementById('topbar-quick-add-menu');
     if (!wrap || !btn || !menu) return;
+    this.#quickAddInitialized = true;
 
     const toggleMenu = (show) => {
       const willShow = (show !== undefined) ? show : menu.classList.contains('hidden');

@@ -256,7 +256,7 @@ export class DashboardModule extends BaseModule {
     const breakdownIngresosEl = document.getElementById('dash-breakdown-ingresos');
     const breakdownEgresosEl = document.getElementById('dash-breakdown-egresos');
 
-    const curr = App.Store.monedaGlobal || 'ARS';
+    const curr = App.Store.globalCurrency || 'ARS';
     const rate = App.Store.exchangeRate || 1540;
 
     if (saldoValEl) {

@@ -142,5 +142,7 @@ export class ToastManager {
 }
 
 // --- REGISTRO EN NAMESPACE ---
-App.Toast = new ToastManager();
-App.log('component-toast', 'init', 'App.Toast registrado');
+if (!App.Toast) {
+  App.Toast = new ToastManager();
+  App.log('component-toast', 'init', 'App.Toast registrado');
+}
