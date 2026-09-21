@@ -238,26 +238,8 @@ export default async function handler(req, res) {
             recur_group_id: recurGroupId
           });
 
-          // 2. Si es una imputación externa (la tarjeta pertenece a otra cuenta, ej: Personal):
-          // Se genera un INGRESO por reintegro en la cuenta de la tarjeta al vencimiento del resumen.
-          if (cardAccountId && rowAccountId !== cardAccountId) {
-            const fechaReintegro = stVto || cardVto || fechaISO;
-            const targetAccName = cuentaNombreMap[rowAccountId] || 'Externa';
-            movRows.push({
-              id_movimiento: crypto.randomUUID(),
-              id_cuenta_principal: cardAccountId,
-              user_id: userId,
-              fecha: fechaReintegro,
-              id_categoria: 'CAT_REINTEGRO_TC',
-              tipo_mov: 'INGRESO',
-              descripcion: `Reintegro TC: ${item.descripcion}${cuotaTot > 1 ? ` (${cuotaAct}/${cuotaTot})` : ''} (${targetAccName})`,
-              importe: Number(item.importe || 0),
-              moneda: monedaItem,
-              medio_pago: 'Tarjeta de Crédito',
-              id_consumo_tarjeta_origen: idConsumo,
-              recur_group_id: recurGroupId
-            });
-          }
+          // NOTA: El INGRESO por reintegro en la cuenta de la tarjeta (cardAccountId)
+          // NO se genera al importar el resumen, sino exclusivamente al ejecutar "Pagar Resumen" (togglePago.js).
         }
 
         // Base para proyecciones futuras (mes consecutivo a partir de la fecha del consumo)
@@ -360,23 +342,7 @@ export default async function handler(req, res) {
                 recur_group_id: recurGroupId
               });
 
-              if (cardAccountId && rowAccountId !== cardAccountId) {
-                const targetAccName = cuentaNombreMap[rowAccountId] || 'Externa';
-                movRows.push({
-                  id_movimiento: crypto.randomUUID(),
-                  id_cuenta_principal: cardAccountId,
-                  user_id: userId,
-                  fecha: fechaFutura,
-                  id_categoria: 'CAT_REINTEGRO_TC',
-                  tipo_mov: 'INGRESO',
-                  descripcion: `Reintegro TC: ${item.descripcion} (${targetAccName})`,
-                  importe: Number(item.importe || 0),
-                  moneda: monedaItem,
-                  medio_pago: 'Tarjeta de Crédito',
-                  id_consumo_tarjeta_origen: idFuturo,
-                  recur_group_id: recurGroupId
-                });
-              }
+              // Reintegro en la cuenta de tarjeta se generará al pagar el resumen del período correspondiente
             }
           }
         }
@@ -475,23 +441,7 @@ export default async function handler(req, res) {
             id_consumo_tarjeta_origen: idConsumo
           });
 
-          if (cardAccountId && consumo.idCuentaImputar !== cardAccountId) {
-            const fechaReintegro = cardVto || fechaISO;
-            const targetAccName = cuentaNombreMap[consumo.idCuentaImputar] || 'Externa';
-            movRows.push({
-              id_movimiento: crypto.randomUUID(),
-              id_cuenta_principal: cardAccountId,
-              user_id: userId,
-              fecha: fechaReintegro,
-              id_categoria: 'CAT_REINTEGRO_TC',
-              tipo_mov: 'INGRESO',
-              descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
-              importe: consumo.importe,
-              moneda: moneda,
-              medio_pago: 'Tarjeta de Crédito',
-              id_consumo_tarjeta_origen: idConsumo
-            });
-          }
+          // Reintegro en la cuenta de tarjeta se generará al pagar el resumen en togglePago.js
         }
       } else if (consumo.tipoConsumo === 'CUOTAS') {
         const installmentGroupId = 'INSTL_' + crypto.randomUUID();
@@ -533,23 +483,7 @@ export default async function handler(req, res) {
             id_consumo_tarjeta_origen: idConsumo
           });
 
-          if (cardAccountId && consumo.idCuentaImputar !== cardAccountId) {
-            const targetAccName = cuentaNombreMap[consumo.idCuentaImputar] || 'Externa';
-            movRows.push({
-              id_movimiento: crypto.randomUUID(),
-              id_cuenta_principal: cardAccountId,
-              user_id: userId,
-              fecha: fechaISO,
-              id_categoria: 'CAT_REINTEGRO_TC',
-              tipo_mov: 'INGRESO',
-              descripcion: `Reintegro TC: ${consumo.descripcion} (${cuotaNumActual}/${consumo.cuotaTotal}) (${targetAccName})`,
-              importe: consumo.importe,
-              moneda: moneda,
-              medio_pago: 'Tarjeta de Crédito',
-              recur_group_id: installmentGroupId,
-              id_consumo_tarjeta_origen: idConsumo
-            });
-          }
+          // Reintegro en la cuenta de tarjeta se generará al pagar el resumen en togglePago.js
         }
       }
 
@@ -588,23 +522,7 @@ export default async function handler(req, res) {
             id_consumo_tarjeta_origen: idConsumo
           });
 
-          if (cardAccountId && consumo.idCuentaImputar !== cardAccountId) {
-            const targetAccName = cuentaNombreMap[consumo.idCuentaImputar] || 'Externa';
-            movRows.push({
-              id_movimiento: crypto.randomUUID(),
-              id_cuenta_principal: cardAccountId,
-              user_id: userId,
-              fecha: fechaISO,
-              id_categoria: 'CAT_REINTEGRO_TC',
-              tipo_mov: 'INGRESO',
-              descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
-              importe: consumo.importe,
-              moneda: moneda,
-              medio_pago: 'Tarjeta de Crédito',
-              recur_group_id: recurGroupId,
-              id_consumo_tarjeta_origen: idConsumo
-            });
-          }
+          // Reintegro en la cuenta de tarjeta se generará al pagar el resumen en togglePago.js
         }
       }
     }

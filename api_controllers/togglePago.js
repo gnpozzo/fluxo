@@ -207,22 +207,92 @@ export default async function handler(req, res) {
           }
         }
 
+        // 1.b Generar o actualizar el INGRESO por Reintegro TC para consumos imputados a cuentas externas (ej: Hogar)
+        const extMovs = movsVinculados.filter(m => 
+          m.id_cuenta_principal !== tc.id_cuenta_principal && 
+          m.tipo_mov === 'EGRESO' &&
+          cardConsumos.some(c => c.id_consumo_tarjeta === m.id_consumo_tarjeta_origen)
+        );
+
+        const reintegrosPorCuenta = {};
+        extMovs.forEach(m => {
+          const destId = m.id_cuenta_principal;
+          if (!reintegrosPorCuenta[destId]) {
+            reintegrosPorCuenta[destId] = { total: 0, items: [] };
+          }
+          reintegrosPorCuenta[destId].total += Number(m.importe || 0);
+          reintegrosPorCuenta[destId].items.push(m);
+        });
+
+        for (const [destAccId, rData] of Object.entries(reintegrosPorCuenta)) {
+          if (rData.total > 0) {
+            const destCuenta = (allCuentas || []).find(c => c.id_cuenta_principal === destAccId);
+            const destAccName = destCuenta?.nombre || 'Externa';
+            const descReintegro = `Reintegro TC: Consumos ${destAccName} (${tc.nombre})`;
+            const importeReintegro = Math.round(rData.total * 100) / 100;
+
+            const { data: existingReintegro } = await supabase
+              .from('movimientos')
+              .select('id_movimiento')
+              .eq('id_cuenta_principal', tc.id_cuenta_principal)
+              .eq('tipo_mov', 'INGRESO')
+              .eq('id_categoria', 'CAT_REINTEGRO_TC')
+              .eq('descripcion', descReintegro)
+              .gte('fecha', paymentDate.substring(0, 7) + '-01')
+              .lte('fecha', paymentDate.substring(0, 7) + '-31')
+              .eq('user_id', userId);
+
+            let reintegroMovId = existingReintegro?.[0]?.id_movimiento;
+            if (!reintegroMovId) {
+              const newReintegroMov = {
+                id_movimiento: crypto.randomUUID(),
+                id_cuenta_principal: tc.id_cuenta_principal,
+                user_id: userId,
+                fecha: paymentDate,
+                id_categoria: 'CAT_REINTEGRO_TC',
+                tipo_mov: 'INGRESO',
+                descripcion: descReintegro,
+                importe: importeReintegro,
+                moneda: 'ARS',
+                medio_pago: 'Transferencia'
+              };
+              const { data: insertedR } = await supabase
+                .from('movimientos')
+                .insert([newReintegroMov])
+                .select('id_movimiento');
+              reintegroMovId = insertedR?.[0]?.id_movimiento;
+            } else {
+              await supabase
+                .from('movimientos')
+                .update({ importe: importeReintegro, fecha: paymentDate })
+                .eq('id_movimiento', reintegroMovId)
+                .eq('user_id', userId);
+            }
+
+            if (reintegroMovId) {
+              pagosMap[reintegroMovId] = { pagado: true, fecha_pago: paymentDate, tipo: 'REINTEGRO_TC' };
+            }
+          }
+        }
+
         if (mes) {
           pagosMap[`RESUMEN_${tc.id_tarjeta}_${mes}`] = { pagado: true, fecha_pago: paymentDate };
         }
       }
 
-      // 2. Si los egresos de Hogar estaban fechados en el mes anterior, sincronizar su fecha
-      if (hogarId) {
-        const hogarMovsToAlign = movsVinculados.filter(m => m.id_cuenta_principal === hogarId && m.tipo_mov === 'EGRESO' && m.fecha < paymentDate.substring(0, 7) + '-01');
-        for (const hm of hogarMovsToAlign) {
-          await supabase
-            .from('movimientos')
-            .update({ fecha: paymentDate })
-            .eq('id_movimiento', hm.id_movimiento)
-            .eq('user_id', userId);
-          hm.fecha = paymentDate;
-        }
+      // 2. Sincronizar fecha de egresos de cuentas externas si estaban fechados antes del período de pago
+      const extMovsToAlign = movsVinculados.filter(m => 
+        (allTarjetas || []).some(t => t.id_cuenta_principal !== m.id_cuenta_principal) &&
+        m.tipo_mov === 'EGRESO' && 
+        m.fecha < paymentDate.substring(0, 7) + '-01'
+      );
+      for (const em of extMovsToAlign) {
+        await supabase
+          .from('movimientos')
+          .update({ fecha: paymentDate })
+          .eq('id_movimiento', em.id_movimiento)
+          .eq('user_id', userId);
+        em.fecha = paymentDate;
       }
 
       // 3. Marcar todos los consumos y movimientos asociados como Saldados

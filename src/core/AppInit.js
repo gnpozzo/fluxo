@@ -383,11 +383,26 @@ class AppInit {
 
           this.#cargarNotificaciones(); // Refrescar notificaciones
 
-          // Recargar módulo activo con la nueva cuenta
-          const modId = this.#tabMap[this.#tabActivo];
-          if (modId && App.Modules[modId]) {
-            App.Modules[modId].destruir();
-            App.Modules[modId].cargar();
+          // Validar si la vista activa es compatible con la nueva cuenta seleccionada
+          const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj.id_cuenta_principal);
+          const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj.id_cuenta_principal);
+
+          const isTabValid = 
+            this.#tabActivo === 'vista-dashboard' ||
+            (this.#tabActivo === 'vista-tarjetas' && hasTarjetas) ||
+            (this.#tabActivo === 'vista-cc' && cuentaObj.modulo_cc_activo) ||
+            (this.#tabActivo === 'vista-ahorro' && hasAhorro) ||
+            (this.#tabActivo === 'vista-inversiones' && cuentaObj.modulo_inversiones_activo);
+
+          if (!isTabValid) {
+            this.#navegarTab('vista-dashboard');
+          } else {
+            // Recargar módulo activo con la nueva cuenta
+            const modId = this.#tabMap[this.#tabActivo];
+            if (modId && App.Modules[modId]) {
+              App.Modules[modId].destruir();
+              App.Modules[modId].cargar();
+            }
           }
         }
       });
