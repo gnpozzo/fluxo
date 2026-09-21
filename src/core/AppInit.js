@@ -33,6 +33,16 @@ class AppInit {
   async boot() {
     App.log('AppInit', 'boot', `v${App.VERSION} — Iniciando`);
 
+    // Invalidador de caché local ante cambio de versión
+    try {
+      const storedVersion = localStorage.getItem('fluxo_app_version');
+      if (storedVersion !== App.VERSION) {
+        localStorage.removeItem('fluxo_cached_cuentas');
+        localStorage.removeItem('fluxo_cached_meses');
+        localStorage.setItem('fluxo_app_version', App.VERSION);
+      }
+    } catch (_) {}
+
     this.#mostrarLoader();
     this.#setDefaultMes();
 
@@ -241,16 +251,21 @@ class AppInit {
 
       App.log('AppInit', 'boot', 'Inicialización completada');
 
-      // Bind logout
-      const btnLogout = document.getElementById('btn-logout');
-      if (btnLogout) {
-         btnLogout.addEventListener('click', async () => {
-           if(confirm('¿Seguro que quieres cerrar sesión?')) {
-             await App.Auth.logout();
-             window.location.reload();
-           }
-         });
-      }
+       // Bind logout
+       const btnLogout = document.getElementById('btn-logout');
+       if (btnLogout) {
+          btnLogout.addEventListener('click', async () => {
+            if(confirm('¿Seguro que quieres cerrar sesión?')) {
+              try {
+                localStorage.removeItem('fluxo_cached_cuentas');
+                localStorage.removeItem('fluxo_cached_meses');
+                localStorage.removeItem('fluxo_app_version');
+              } catch (_) {}
+              await App.Auth.logout();
+              window.location.reload();
+            }
+          });
+       }
 
       // Bind mobile sidebar toggle
       const btnSidebarToggle = document.getElementById('sidebar-toggle');
