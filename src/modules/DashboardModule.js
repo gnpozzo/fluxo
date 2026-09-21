@@ -2005,38 +2005,79 @@ export class DashboardModule extends BaseModule {
       `;
     }
 
-    // Render each Expense category accordion
-    sortedCatGroups.forEach(group => {
+    // If Egresos present and allowed by filter, render Gastos master accordion containing category accordions
+    if (egresos.length > 0 && this.#movFilter !== 'INGRESO') {
+      const subtotalEgresos = egresos.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+
+      let expenseCategoriesHtml = '';
+      sortedCatGroups.forEach(group => {
+        expenseCategoriesHtml += `
+          <div class="finset-cat-accordion is-open" data-cat-group="${App.Utils.escapeHtml(group.name)}">
+            <div class="fca-header" role="button" tabindex="0" title="Clic para expandir / colapsar">
+              <div class="fca-header-left">
+                <span class="fca-chevron">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+                <span class="fca-icon icon-subtle">
+                  ${getCategoryIconSvg(group.name, 'EGRESO')}
+                </span>
+                <span class="fca-title">${App.Utils.escapeHtml(group.name)}</span>
+                ${group.jerarquia ? `<span class="fca-badge-jerarquia" title="Jerarquía">${App.Utils.escapeHtml(group.jerarquia)}</span>` : ''}
+                <span class="fca-count">${group.items.length} ${group.items.length === 1 ? 'gasto' : 'gastos'}</span>
+              </div>
+              <div class="fca-header-right">
+                <span class="fca-subtotal negativo">- ${App.Utils.formatearMoneda(group.subtotal)}</span>
+              </div>
+            </div>
+            <div class="fca-body">
+              ${group.items.map(renderMovementRow).join('')}
+            </div>
+          </div>
+        `;
+      });
+
       accordionsHtml += `
-        <div class="finset-cat-accordion is-open" data-cat-group="${App.Utils.escapeHtml(group.name)}">
+        <div class="finset-cat-accordion is-open is-expense" data-cat-group="Gastos">
           <div class="fca-header" role="button" tabindex="0" title="Clic para expandir / colapsar">
             <div class="fca-header-left">
               <span class="fca-chevron">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </span>
-              <span class="fca-icon icon-subtle">
-                ${getCategoryIconSvg(group.name, 'EGRESO')}
+              <span class="fca-icon icon-red">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
               </span>
-              <span class="fca-title">${App.Utils.escapeHtml(group.name)}</span>
-              ${group.jerarquia ? `<span class="fca-badge-jerarquia" title="Jerarquía">${App.Utils.escapeHtml(group.jerarquia)}</span>` : ''}
-              <span class="fca-count">${group.items.length} ${group.items.length === 1 ? 'gasto' : 'gastos'}</span>
+              <span class="fca-title">Gastos</span>
+              <span class="fca-count">${egresos.length} ${egresos.length === 1 ? 'gasto' : 'gastos'}</span>
             </div>
             <div class="fca-header-right">
-              <span class="fca-subtotal negativo">- ${App.Utils.formatearMoneda(group.subtotal)}</span>
+              <span class="fca-subtotal negativo">- ${App.Utils.formatearMoneda(subtotalEgresos)}</span>
             </div>
           </div>
-          <div class="fca-body">
-            ${group.items.map(renderMovementRow).join('')}
+          <div class="fca-body fca-body-nested">
+            ${expenseCategoriesHtml}
           </div>
         </div>
       `;
-    });
+    }
+
+    if (!accordionsHtml) {
+      listEl.innerHTML = `
+        <div class="dh-empty-state" style="padding:32px 16px;">
+          <div class="dh-empty-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          </div>
+          <span>No se encontraron movimientos para esta selección</span>
+        </div>
+      `;
+      return;
+    }
 
     listEl.innerHTML = `<div class="dh-accordions-wrap" style="max-height:480px; overflow-y:auto; padding-right:4px;">${accordionsHtml}</div>`;
 
     // Accordion toggle click listener
     listEl.querySelectorAll('.fca-header').forEach(headerEl => {
       headerEl.addEventListener('click', (e) => {
+        e.stopPropagation();
         const acc = headerEl.closest('.finset-cat-accordion');
         if (acc) acc.classList.toggle('is-open');
       });
@@ -2273,7 +2314,9 @@ export class DashboardModule extends BaseModule {
             await App.API.call('api_updateMovimiento', req);
             App.Toast.success('Movimiento actualizado.');
             m.close();
+            App.API.invalidateAll();
             App.Events.emit('data:changed');
+            await this.cargar();
           } catch (err) {
             m.setLoading(false);
             App.Toast.error(err.message);
@@ -2310,7 +2353,9 @@ export class DashboardModule extends BaseModule {
         };
         await App.API.call('api_deleteMovimiento', req);
         App.Toast.success('Movimiento eliminado.');
+        App.API.invalidateAll();
         App.Events.emit('data:changed');
+        await this.cargar();
       } catch (err) {
         App.Toast.error(err.message);
       }

@@ -1366,7 +1366,7 @@ class AppInit {
       
       document.getElementById('dropdown-opt-config')?.addEventListener('click', () => {
         dropdown.classList.remove('open');
-        document.getElementById('btn-admin')?.click();
+        this.#navegarTab('vista-admin');
       });
 
       document.getElementById('dropdown-opt-theme')?.addEventListener('click', () => {

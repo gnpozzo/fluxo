@@ -533,6 +533,18 @@ export class MovimientosModule extends BaseModule {
               <input class="input" type="number" name="cuota_total" min="2" value="12" style="width:80px">
             </div>
           </div>
+          <div class="form-group full-width" style="margin-top:var(--space-2);margin-bottom:var(--space-2)">
+            <label style="font-size:0.8rem;font-weight:600;color:var(--texto-2);text-transform:uppercase;letter-spacing:0.04em">Modalidad del monto</label>
+            <div style="display:flex;gap:16px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem">
+                <input type="radio" name="cuotas_modo_monto" value="cuota" checked> Monto por cuota
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem">
+                <input type="radio" name="cuotas_modo_monto" value="total"> Monto total de la compra
+              </label>
+            </div>
+            <div id="mov-cuotas-calc-info" style="font-size:0.8rem;color:var(--primario, #4f46e5);font-weight:500;margin-top:6px;display:none;background:rgba(99,102,241,0.08);padding:6px 10px;border-radius:6px"></div>
+          </div>
           <div class="form-group" style="margin-top:var(--space-3)">
             <label>¿Cómo se pagan las cuotas?</label>
             <select class="input" name="cuotas_medio" id="mov-cuotas-medio">
@@ -641,8 +653,41 @@ export class MovimientosModule extends BaseModule {
       selTipoConsumo.addEventListener('change', () => {
         document.getElementById('mov-cuotas-opts')?.classList.toggle('hidden', selTipoConsumo.value !== 'CUOTAS');
         document.getElementById('mov-recur-opts')?.classList.toggle('hidden', selTipoConsumo.value !== 'RECURRENTE');
+        updateMovCuotasInfo();
       });
     }
+
+    const updateMovCuotasInfo = () => {
+      const cuotasOpts = document.getElementById('mov-cuotas-opts');
+      if (!cuotasOpts || cuotasOpts.classList.contains('hidden')) return;
+      const infoEl = document.getElementById('mov-cuotas-calc-info');
+      if (!infoEl) return;
+      const modo = document.querySelector('input[name="cuotas_modo_monto"]:checked')?.value || 'cuota';
+      const importeInput = document.querySelector('#form-movimiento input[name="importe"]');
+      const cuotaTotInput = document.querySelector('#form-movimiento input[name="cuota_total"]');
+      const cuotas = Math.max(1, Number(cuotaTotInput?.value || 1));
+      const val = Number(importeInput?.value || 0);
+
+      if (val <= 0) {
+        infoEl.style.display = 'none';
+        return;
+      }
+
+      infoEl.style.display = 'block';
+      if (modo === 'total') {
+        const porCuota = val / cuotas;
+        infoEl.innerHTML = `💡 Se registrarán <strong>${cuotas} cuotas de $ ${porCuota.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (Monto total: $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+      } else {
+        const total = val * cuotas;
+        infoEl.innerHTML = `💡 Total estimado de la compra: <strong>$ ${total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (${cuotas} cuotas de $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+      }
+    };
+
+    document.querySelectorAll('input[name="cuotas_modo_monto"]').forEach(radio => {
+      radio.addEventListener('change', updateMovCuotasInfo);
+    });
+    document.querySelector('#form-movimiento input[name="importe"]')?.addEventListener('input', updateMovCuotasInfo);
+    document.querySelector('#form-movimiento input[name="cuota_total"]')?.addEventListener('input', updateMovCuotasInfo);
 
     // Cuotas medio: show TC selector when "tarjeta" selected
     const selCuotasMedio = document.getElementById('mov-cuotas-medio');
@@ -822,6 +867,11 @@ export class MovimientosModule extends BaseModule {
     }
 
     const cuentaDestino = datos.id_cuenta_destino || App.Store.cuenta;
+    const cuotasTot = Number(datos.cuota_total || 2);
+    const rawImporte = Number(datos.importe || 0);
+    const importeCalculado = (datos.tipo_consumo === 'CUOTAS' && datos.cuotas_modo_monto === 'total' && cuotasTot > 1)
+      ? Math.round((rawImporte / cuotasTot) * 100) / 100
+      : rawImporte;
 
     const payload = {
       idCuenta          : cuentaDestino,
@@ -829,7 +879,7 @@ export class MovimientosModule extends BaseModule {
       fecha             : datos.fecha,
       idCategoria       : datos.id_categoria,
       descripcion       : datos.descripcion,
-      importe           : Number(datos.importe),
+      importe           : importeCalculado,
       medioPago         : 'transferencia',
       tipoConsumo       : datos.tipo_consumo || 'COMUN',
       frecuencia        : datos.frecuencia || 'MENSUAL',
@@ -852,7 +902,7 @@ export class MovimientosModule extends BaseModule {
             fecha: datos.fecha,
             tipo: 'COMUN',
             descripcion: datos.descripcion,
-            importe: Number(datos.importe),
+            importe: importeCalculado,
             idUsuario: datos.compartir_contacto,
             pagador: 'YO',
             porcentajeImputado: Number(datos.compartir_porcentaje || 50),

@@ -642,13 +642,30 @@ export class TarjetasModule extends BaseModule {
                  value="${data?.importe || ''}" required>
         </div>
 
-        <div id="tc-cuotas-opts" class="form-group ${tipoConsumo !== 'CUOTAS' ? 'hidden' : ''}">
-          <label>Cuota actual / Total</label>
-          <div style="display:flex;gap:var(--space-2)">
-            <input class="input" type="number" name="cuota_actual" min="1"
-                   value="${data?.cuota_actual || 1}" style="width:60px">
-            <input class="input" type="number" name="cuota_total"  min="2"
-                   value="${data?.cuota_total  || 12}" style="width:60px">
+        <div id="tc-cuotas-opts" class="form-group full-width ${tipoConsumo !== 'CUOTAS' ? 'hidden' : ''}">
+          <div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-2)">
+            <div style="flex:1">
+              <label>Cuota actual</label>
+              <input class="input" type="number" name="cuota_actual" min="1"
+                     value="${data?.cuota_actual || 1}" style="width:100%">
+            </div>
+            <div style="flex:1">
+              <label>Total de cuotas</label>
+              <input class="input" type="number" name="cuota_total"  min="2"
+                     value="${data?.cuota_total  || 12}" style="width:100%">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:0.8rem;font-weight:600;color:var(--texto-2);text-transform:uppercase;letter-spacing:0.04em">Modalidad del monto</label>
+            <div style="display:flex;gap:16px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem">
+                <input type="radio" name="cuotas_modo_monto" value="cuota" checked> Monto por cuota
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem">
+                <input type="radio" name="cuotas_modo_monto" value="total"> Monto total de la compra
+              </label>
+            </div>
+            <div id="tc-cuotas-calc-info" style="font-size:0.8rem;color:var(--primario, #4f46e5);font-weight:500;margin-top:6px;display:none;background:rgba(99,102,241,0.08);padding:6px 10px;border-radius:6px"></div>
           </div>
         </div>
 
@@ -704,10 +721,46 @@ export class TarjetasModule extends BaseModule {
 
   #bindFormListeners() {
     const tipoSel = document.getElementById('tc-tipo-consumo');
+    const updateTcCuotasInfo = () => {
+      const cuotasOpts = document.getElementById('tc-cuotas-opts');
+      if (!cuotasOpts || cuotasOpts.classList.contains('hidden')) return;
+      const infoEl = document.getElementById('tc-cuotas-calc-info');
+      if (!infoEl) return;
+      const modo = document.querySelector('input[name="cuotas_modo_monto"]:checked')?.value || 'cuota';
+      const importeInput = document.querySelector('#form-tc input[name="importe"]');
+      const cuotaTotInput = document.querySelector('#form-tc input[name="cuota_total"]');
+      const cuotas = Math.max(1, Number(cuotaTotInput?.value || 1));
+      const val = Number(String(importeInput?.value || '').replace(',', '.'));
+
+      if (val <= 0) {
+        infoEl.style.display = 'none';
+        return;
+      }
+
+      infoEl.style.display = 'block';
+      if (modo === 'total') {
+        const porCuota = val / cuotas;
+        infoEl.innerHTML = `💡 Se registrarán <strong>${cuotas} cuotas de $ ${porCuota.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (Monto total: $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+      } else {
+        const total = val * cuotas;
+        infoEl.innerHTML = `💡 Total estimado de la compra: <strong>$ ${total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (${cuotas} cuotas de $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+      }
+    };
+
     tipoSel?.addEventListener('change', () => {
       document.getElementById('tc-cuotas-opts')?.classList.toggle('hidden', tipoSel.value !== 'CUOTAS');
       document.getElementById('tc-recur-opts')?.classList.toggle('hidden', tipoSel.value !== 'RECURRENTE');
+      updateTcCuotasInfo();
     });
+    document.querySelectorAll('input[name="cuotas_modo_monto"]').forEach(radio => {
+      radio.addEventListener('change', updateTcCuotasInfo);
+    });
+    document.querySelector('#form-tc input[name="importe"]')?.addEventListener('input', updateTcCuotasInfo);
+    document.querySelector('#form-tc input[name="cuota_total"]')?.addEventListener('input', updateTcCuotasInfo);
+    if (tipoSel?.value === 'CUOTAS') {
+      updateTcCuotasInfo();
+    }
+
     const chkImp = document.getElementById('tc-chk-imputar');
     chkImp?.addEventListener('change', () => {
       document.getElementById('tc-imputar-opts')?.classList.toggle('hidden', !chkImp.checked);
@@ -727,10 +780,15 @@ export class TarjetasModule extends BaseModule {
     const d  = {};
     fd.forEach((v, k) => { d[k] = v; });
 
-    const cleanImporte = Number(String(d.importe || '').replace(',', '.'));
+    let cleanImporte = Number(String(d.importe || '').replace(',', '.'));
     if (!d.fecha || !d.id_tarjeta || !d.id_categoria || !d.descripcion || isNaN(cleanImporte) || cleanImporte <= 0) {
       App.Toast.warning('Completá todos los campos obligatorios.');
       return;
+    }
+
+    const cuotaTot = Number(d.cuota_total || 1);
+    if (d.tipo_consumo === 'CUOTAS' && d.cuotas_modo_monto === 'total' && cuotaTot > 1) {
+      cleanImporte = Math.round((cleanImporte / cuotaTot) * 100) / 100;
     }
 
     const payload = {
@@ -781,10 +839,13 @@ export class TarjetasModule extends BaseModule {
           },
           scope: reqScope
         };
-        await this._handleUpdate(this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta, req, modal, reqScope);
+        const editId = this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta;
+        await this._handleUpdate(editId, req, modal, reqScope);
       }
     } catch (_) {
       modal.setLoading(false);
+    } finally {
+      this.#editData = null;
     }
   }
 
