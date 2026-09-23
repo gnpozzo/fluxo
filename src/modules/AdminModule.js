@@ -77,6 +77,8 @@ export class AdminModule extends BaseModule {
     const footer = this.#modal.el.querySelector('.modal-footer');
     if (footer) footer.style.display = 'none';
 
+    this.#modal.el.classList.add('modal-admin');
+
     this.#activarSeccion(this.#seccionActiva);
   }
 
@@ -918,8 +920,9 @@ export class AdminModule extends BaseModule {
   // --- SECCIÓN 5: LISTENERS ---
 
   _bindListeners() {
-    // El botón admin está en el topbar — se vincula aquí para no depender del orden de init
     document.getElementById('btn-admin')
+      ?.addEventListener('click', () => this.#abrirPanel());
+    document.getElementById('btn-admin-header')
       ?.addEventListener('click', () => this.#abrirPanel());
   }
 }

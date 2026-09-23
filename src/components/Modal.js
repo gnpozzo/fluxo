@@ -95,7 +95,9 @@ export class Modal {
    */
   close() {
     this.#overlay.classList.remove('modal-open');
-    document.body.classList.remove('modal-active');
+    if (!document.querySelector('.modal-overlay.modal-open')) {
+      document.body.classList.remove('modal-active');
+    }
     this.setLoading(false);
     this.#onConfirm = null;
     this.#onCancel  = null;

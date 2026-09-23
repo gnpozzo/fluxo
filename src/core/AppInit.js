@@ -21,7 +21,8 @@ class AppInit {
     'vista-tarjetas'    : 'tarjetas',
     'vista-cc'          : 'cc',
     'vista-ahorro'      : 'ahorro',
-    'vista-inversiones' : 'inversiones'
+    'vista-inversiones' : 'inversiones',
+    'vista-admin'       : 'admin'
   };
 
   #modalNotificaciones = null;
@@ -290,6 +291,11 @@ class AppInit {
   // --- SECCIÓN 2: NAVEGACIÓN ---
 
   #navegarTab(vistaId) {
+    if (vistaId === 'vista-admin') {
+      App.Modules.admin?.cargar();
+      return;
+    }
+
     // Ocultar todos los paneles de contenido
     document.querySelectorAll('.vista-container').forEach(v => v.classList.remove('active'));
 
@@ -685,13 +691,19 @@ class AppInit {
       });
     }
 
-    // Botón Admin (si existe en DOM)
+    // Botón Admin en sidebar (si existe en DOM)
     const adminBtn = document.getElementById('btn-admin');
     if (adminBtn) {
       adminBtn.addEventListener('click', () => {
-        if (App.Modules.admin) {
-          App.Modules.admin.cargar();
-        }
+        App.Modules.admin?.cargar();
+      });
+    }
+
+    // Botón Admin en header (si existe en DOM)
+    const adminHeaderBtn = document.getElementById('btn-admin-header');
+    if (adminHeaderBtn) {
+      adminHeaderBtn.addEventListener('click', () => {
+        App.Modules.admin?.cargar();
       });
     }
 
@@ -1366,7 +1378,7 @@ class AppInit {
       
       document.getElementById('dropdown-opt-config')?.addEventListener('click', () => {
         dropdown.classList.remove('open');
-        this.#navegarTab('vista-admin');
+        App.Modules.admin?.cargar();
       });
 
       document.getElementById('dropdown-opt-theme')?.addEventListener('click', () => {

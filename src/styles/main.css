@@ -1398,6 +1398,10 @@ button.btn-secundario:hover {
 .modal-content.modal-admin {
   max-width: 960px; height: min(86vh, 680px); padding: 0; overflow: hidden;
 }
+.modal-content.modal-admin .modal-body {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
 .admin-layout-container {
   display: grid; grid-template-columns: 210px 1fr; height: 100%; overflow: hidden;
 }
@@ -1418,6 +1422,14 @@ button.btn-secundario:hover {
 .admin-content-area {
   padding: 28px 32px; overflow-y: auto;
   background-color: var(--fondo); transition: background-color 0.3s;
+}
+
+#modal-adm-cuenta,
+#modal-adm-tc,
+#modal-adm-cat,
+#modal-adm-sub,
+#modal-adm-usr {
+  z-index: calc(var(--z-modal, 1000) + 20) !important;
 }
 
 /* ----------------------------------------------------------------
