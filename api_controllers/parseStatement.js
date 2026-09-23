@@ -218,14 +218,23 @@ export default async function handler(req, res) {
 
       const systemInstruction = `
 Eres un asistente de procesamiento de resúmenes de tarjeta de crédito para Fluxo.
-Extrae todas las compras, consumos, impuestos y percepciones del documento (ignora pagos como "SU PAGO EN PESOS").
+Extrae todas las compras, consumos, impuestos y percepciones del documento (ignora pagos anteriores o pagos del resumen como "SU PAGO EN PESOS", "Pago del resumen", "Total a pagar del periodo anterior" o "Composición del saldo del periodo anterior").
 Identifica y marca impuestos y percepciones bancarias/fiscales (Impuesto de sellos, IVA RG, IIBB percep, DB.RG, Percepciones) con "isTax": true.
 Determina los metadatos del resumen y la tarjeta (incluyendo próximo cierre y próximo vencimiento si están presentes en el resumen).
+
+REGLAS ESPECÍFICAS PARA RESÚMENES DE MERCADO PAGO / TARJETAS VIRTUALES:
+- Emisor / Banco: Si es de Mercado Pago / MercadoLibre, indícalo en "banco_o_emisor": "Mercado Pago" y "nombre_tarjeta": "Mercado Pago". Las tarjetas de Mercado Pago suelen ser virtuales y NO muestran los últimos 4 dígitos en el resumen; en ese caso "ultimos_4_digitos" debe ser null o cadena vacía "".
+- Año de las fechas: En Mercado Pago las fechas figuran como "DD/mes" (ej. "14/jun", "5/ago", "12/sep") o "DD de mes" (ej. "12 de septiembre", "17 de septiembre"). Determina el año a partir del periodo o ciclo de facturación del resumen (ej. 2026). Genera todas las fechas en formato ISO YYYY-MM-DD convirtiendo el mes al número correspondiente (ej. jun -> 06, ago -> 08, sep -> 09).
+- Cuotas en Mercado Pago: Si la columna cuota dice "X de Y" (ej. "3 de 3", "2 de 2"), extrae "cuota_actual": X y "cuota_total": Y como enteros. Si no tiene cuotas, ambos deben ser null.
+- Exclusiones estrictas: La sección "Composición del saldo del periodo anterior" (que contiene "Total a pagar del periodo anterior" y "Pago del resumen -$...") NO son consumos del periodo y deben ser completamente ignoradas.
+- Próximo cierre y próximo vencimiento: En la sección "Ciclo de facturación", extrae las fechas de "Cierre próximo" y "Vencimiento próximo" para "proximo_cierre" y "proximo_vencimiento".
 
 Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de código markdown:
 {
   "card_info": {
-    "ultimos_4_digitos": "4 dígitos de la tarjeta"
+    "ultimos_4_digitos": "4 dígitos de la tarjeta o null",
+    "banco_o_emisor": "Mercado Pago, Santander, etc.",
+    "nombre_tarjeta": "Mercado Pago, Visa, Mastercard, etc."
   },
   "statement_info": {
     "fecha_cierre": "YYYY-MM-DD",
@@ -274,10 +283,38 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
 
     // 4. Identify Card
     const ultimos4 = extractedData.card_info?.ultimos_4_digitos;
+    const emisor = (extractedData.card_info?.banco_o_emisor || extractedData.card_info?.nombre_tarjeta || '').toLowerCase();
     let matchedCard = null;
+
     if (ultimos4) {
       matchedCard = tarjetas.find(t => t.ultimos_4_digitos === ultimos4);
     }
+
+    // Si no coincide por los últimos 4 dígitos o no están disponibles (como en Mercado Pago virtual)
+    if (!matchedCard && emisor) {
+      matchedCard = tarjetas.find(t => {
+        const tNombre = (t.nombre || '').toLowerCase();
+        const tBanco = (t.banco || '').toLowerCase();
+        const isMp = emisor.includes('mercado') || emisor.includes('mp');
+        if (isMp) {
+          return tNombre.includes('mercado') || tNombre.includes('mp') || tBanco.includes('mercado') || tBanco.includes('mp');
+        }
+        return tNombre.includes(emisor) || tBanco.includes(emisor);
+      });
+    }
+
+    // Si sigue sin haber match pero en las transacciones o descripción general hay menciones a mercado pago
+    if (!matchedCard) {
+      const hasMpTx = (extractedData.transactions || []).some(tx => (tx.descripcion || '').toLowerCase().includes('merpago'));
+      if (hasMpTx) {
+        matchedCard = tarjetas.find(t => {
+          const tNombre = (t.nombre || '').toLowerCase();
+          const tBanco = (t.banco || '').toLowerCase();
+          return tNombre.includes('mercado') || tNombre.includes('mp') || tBanco.includes('mercado') || tBanco.includes('mp');
+        });
+      }
+    }
+
     if (!matchedCard) {
       matchedCard = tarjetas[0];
     }
