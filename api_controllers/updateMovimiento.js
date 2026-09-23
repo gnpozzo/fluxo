@@ -111,7 +111,11 @@ export default async function handler(req, res) {
         const monthsToAdd = esCuotas ? i : (i * monthStep);
         const fechaISO = addMonthsSafe(fechaBase, monthsToAdd).toISOString().split('T')[0];
         let desc = mov.descripcion;
-        if (esCuotas) desc = `${desc} (Cuota ${mov.cuotaActual + i}/${mov.cuotaTotal})`;
+        if (esCuotas) {
+          desc = `${desc} (Cuota ${mov.cuotaActual + i}/${mov.cuotaTotal})`;
+        } else if (mov.cuotaTotal > 1 && !desc.includes('(Cuota')) {
+          desc = `${desc} (Cuota ${mov.cuotaActual || 1}/${mov.cuotaTotal})`;
+        }
 
         if (mov.esSplit && destinos.length > 0) {
           const splitGroupId = 'SPLIT_' + crypto.randomUUID();
@@ -148,7 +152,7 @@ export default async function handler(req, res) {
             });
           }
         } else {
-          rows.push({
+          const rowObj = {
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: mov.idCuenta,
             user_id: userId,
@@ -159,7 +163,11 @@ export default async function handler(req, res) {
             importe: mov.importe,
             medio_pago: mov.medioPago,
             recur_group_id: seriesGroupId
-          });
+          };
+          if (esCuotas && mov.idTarjetaCuotas) {
+            rowObj.id_consumo_tarjeta_origen = mov.idTarjetaCuotas;
+          }
+          rows.push(rowObj);
         }
       }
 
@@ -170,15 +178,20 @@ export default async function handler(req, res) {
 
     } else {
       // UPDATE SIMPLE (scoped to user_id)
+      let finalDesc = mov.descripcion;
+      if (mov.tipoConsumo === 'CUOTAS' && mov.cuotaTotal > 1 && !finalDesc.includes('(Cuota')) {
+        finalDesc = `${finalDesc} (Cuota ${mov.cuotaActual || 1}/${mov.cuotaTotal})`;
+      }
       const updatePayload = {
         fecha: mov.fecha,
         id_categoria: mov.idCategoria,
-        descripcion: mov.descripcion,
+        descripcion: finalDesc,
         importe: mov.importe,
         medio_pago: mov.medioPago
       };
       if (mov.idCuenta) updatePayload.id_cuenta_principal = mov.idCuenta;
       if (mov.tipo) updatePayload.tipo_mov = mov.tipo;
+      if (mov.idTarjetaCuotas) updatePayload.id_consumo_tarjeta_origen = mov.idTarjetaCuotas;
 
       const { data: updated, error } = await supabase.from('movimientos').update(updatePayload).eq('id_movimiento', targetId).eq('user_id', userId).select();
       if (error) throw error;

@@ -369,7 +369,51 @@ export class MovimientosModule extends BaseModule {
       ? (data.fecha?.value || data.fecha || '').substring(0, 10)
       : new Date().toISOString().substring(0, 10);
 
-    const importeVal = data?.importe || '';
+    // Detect series / cuotas / recurrente / split from data if editing
+    let currentTipoConsumo = 'COMUN';
+    let currentCuotaAct = 1;
+    let currentCuotaTot = 12;
+    let cleanDesc = data?.descripcion || '';
+    let currentFrecuencia = 'MENSUAL';
+    let currentPeriodos = 12;
+
+    const matchCuota = cleanDesc.match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || cleanDesc.match(/\((\d+)\/(\d+)\)/);
+    if (matchCuota) {
+      currentTipoConsumo = 'CUOTAS';
+      currentCuotaAct = parseInt(matchCuota[1], 10);
+      currentCuotaTot = parseInt(matchCuota[2], 10);
+      cleanDesc = cleanDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/i, '').replace(/\s*\(\d+\/\d+\)/, '').trim();
+    } else if (data?.recur_group_id?.startsWith('INSTL_')) {
+      currentTipoConsumo = 'CUOTAS';
+    } else if (data?.recur_group_id?.startsWith('REC_')) {
+      currentTipoConsumo = 'RECURRENTE';
+    }
+
+    const isSplit = Boolean(data?.split_group_id);
+    const targetAccount = data?.id_cuenta_principal || activeCuenta;
+
+    let splitRows = [];
+    if (data?.split_group_id) {
+      const siblings = (this.data || []).filter(m => m.split_group_id === data.split_group_id);
+      if (siblings.length > 0) {
+        const totalSplit = siblings.reduce((sum, s) => sum + Number(s.importe || 0), 0);
+        const destinos = siblings.filter(s => s.split_rol === 'DESTINO' || (s.id_cuenta_principal !== targetAccount));
+        destinos.forEach(dest => {
+          const pct = totalSplit > 0 ? Math.round((Number(dest.importe || 0) / totalSplit) * 100) : 50;
+          splitRows.push({ cuenta: dest.id_cuenta_principal, pct });
+        });
+      }
+    }
+    if (splitRows.length === 0) {
+      splitRows = [{ cuenta: '', pct: 50 }];
+    }
+
+    let importeVal = data?.importe || '';
+    if (isSplit && data?.split_group_id) {
+      const siblings = (this.data || []).filter(m => m.split_group_id === data.split_group_id);
+      const totalSplit = siblings.reduce((sum, s) => sum + Number(s.importe || 0), 0);
+      if (totalSplit > 0) importeVal = totalSplit;
+    }
 
     // Cuenta destino / origen: lista de cuentas principales
     const optsCuentas = allCuentas
@@ -382,16 +426,34 @@ export class MovimientosModule extends BaseModule {
 
     // Tarjetas para cuotas con TC (solo gastos)
     const allTarjetas = window._appTarjetas || [];
-    const tarjetasCuenta = allTarjetas.filter(t => t.id_cuenta_principal === activeCuenta);
+    const tarjetasCuenta = allTarjetas.filter(t => t.id_cuenta_principal === targetAccount);
     const optsTc = tarjetasCuenta
-      .map(t => `<option value="${t.id_tarjeta}">${App.Utils.escapeHtml(t.nombre)}</option>`)
+      .map(t => `<option value="${t.id_tarjeta}" ${(data?.id_consumo_tarjeta_origen === t.id_tarjeta) ? 'selected' : ''}>${App.Utils.escapeHtml(t.nombre)}</option>`)
       .join('');
 
     // Split: opciones de cuentas disponibles excluyendo la principal
-    const splitCuentasOpts = allCuentas
-      .filter(c => c.activa !== false && c.id_cuenta_principal !== activeCuenta)
-      .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
-      .join('');
+    const splitRowsHtml = splitRows.map((sr, idx) => {
+      const num = idx + 1;
+      const opts = allCuentas
+        .filter(c => c.activa !== false && c.id_cuenta_principal !== targetAccount)
+        .map(c => `<option value="${c.id_cuenta_principal}" ${sr.cuenta === c.id_cuenta_principal ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
+        .join('');
+      return `
+        <div class="form-grid split-row" style="gap:var(--space-3);margin-bottom:var(--space-2)">
+          <div class="form-group">
+            <label>Cuenta de Distribución ${splitRows.length > 1 ? num : ''}</label>
+            <select class="input" name="split_cuenta_destino_${num}">
+              <option value="">-- Seleccionar cuenta --</option>
+              ${opts}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Porcentaje (%)</label>
+            <input class="input" type="number" name="split_porcentaje_${num}" min="1" max="100" value="${sr.pct}">
+          </div>
+        </div>
+      `;
+    }).join('');
 
     return `
       <form id="form-movimiento" class="form-grid">
@@ -496,51 +558,49 @@ export class MovimientosModule extends BaseModule {
           <textarea class="input" name="descripcion" rows="3"
                     placeholder="${esIngreso ? 'Sueldo del mes, proyecto web...' : 'Cena con amigos, expensas...'}"
                     style="resize:vertical"
-                    required>${App.Utils.escapeHtml(data?.descripcion || '')}</textarea>
+                    required>${App.Utils.escapeHtml(cleanDesc)}</textarea>
         </div>
 
-        ${!data ? `
         <!-- Tipo de repetición -->
         <div class="form-group full-width">
           <label>Tipo de repetición</label>
           <select class="input" name="tipo_consumo" id="mov-tipo-consumo">
-            <option value="COMUN">Única vez (Contado)</option>
-            <option value="RECURRENTE">Recurrente</option>
-            ${!esIngreso ? '<option value="CUOTAS">En Cuotas</option>' : ''}
+            <option value="COMUN" ${currentTipoConsumo === 'COMUN' ? 'selected' : ''}>Única vez (Contado)</option>
+            <option value="RECURRENTE" ${currentTipoConsumo === 'RECURRENTE' ? 'selected' : ''}>Recurrente</option>
+            <option value="CUOTAS" ${currentTipoConsumo === 'CUOTAS' ? 'selected' : ''}>En Cuotas</option>
           </select>
         </div>
 
         <!-- Opciones Recurrente -->
-        <div id="mov-recur-opts" class="form-group full-width hidden">
+        <div id="mov-recur-opts" class="form-group full-width ${currentTipoConsumo !== 'RECURRENTE' ? 'hidden' : ''}">
           <div class="form-grid" style="gap:var(--space-3)">
             <div class="form-group">
               <label>Frecuencia</label>
               <select class="input" name="frecuencia" id="mov-frecuencia">
-                <option value="MENSUAL">Mensual</option>
-                <option value="BIMESTRAL">Bimestral (cada 2 meses)</option>
-                <option value="TRIMESTRAL">Trimestral (cada 3 meses)</option>
-                <option value="SEMESTRAL">Semestral (cada 6 meses)</option>
-                <option value="ANUAL">Anual (cada 12 meses)</option>
+                <option value="MENSUAL" ${currentFrecuencia === 'MENSUAL' ? 'selected' : ''}>Mensual</option>
+                <option value="BIMESTRAL" ${currentFrecuencia === 'BIMESTRAL' ? 'selected' : ''}>Bimestral (cada 2 meses)</option>
+                <option value="TRIMESTRAL" ${currentFrecuencia === 'TRIMESTRAL' ? 'selected' : ''}>Trimestral (cada 3 meses)</option>
+                <option value="SEMESTRAL" ${currentFrecuencia === 'SEMESTRAL' ? 'selected' : ''}>Semestral (cada 6 meses)</option>
+                <option value="ANUAL" ${currentFrecuencia === 'ANUAL' ? 'selected' : ''}>Anual (cada 12 meses)</option>
               </select>
             </div>
             <div class="form-group">
               <label>Cantidad de repeticiones</label>
-              <input class="input" type="number" name="periodos" min="2" max="120" value="12">
+              <input class="input" type="number" name="periodos" min="2" max="120" value="${currentPeriodos}">
             </div>
           </div>
         </div>
 
-        <!-- Opciones Cuotas (solo egresos) -->
-        ${!esIngreso ? `
-        <div id="mov-cuotas-opts" class="form-group full-width hidden">
+        <!-- Opciones Cuotas -->
+        <div id="mov-cuotas-opts" class="form-group full-width ${currentTipoConsumo !== 'CUOTAS' ? 'hidden' : ''}">
           <div class="form-grid" style="gap:var(--space-3)">
             <div class="form-group">
               <label>Cuota actual</label>
-              <input class="input" type="number" name="cuota_actual" min="1" value="1" style="width:80px">
+              <input class="input" type="number" name="cuota_actual" min="1" value="${currentCuotaAct}" style="width:80px">
             </div>
             <div class="form-group">
               <label>Total de cuotas</label>
-              <input class="input" type="number" name="cuota_total" min="2" value="12" style="width:80px">
+              <input class="input" type="number" name="cuota_total" min="2" value="${currentCuotaTot}" style="width:80px">
             </div>
           </div>
           <div class="form-group full-width" style="margin-top:var(--space-2);margin-bottom:var(--space-2)">
@@ -550,49 +610,38 @@ export class MovimientosModule extends BaseModule {
                 <input type="radio" name="cuotas_modo_monto" value="cuota" checked> Monto por cuota
               </label>
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem">
-                <input type="radio" name="cuotas_modo_monto" value="total"> Monto total de la compra
+                <input type="radio" name="cuotas_modo_monto" value="total"> Monto total ${esIngreso ? 'del cobro' : 'de la compra'}
               </label>
             </div>
             <div id="mov-cuotas-calc-info" style="font-size:0.8rem;color:var(--primario, #4f46e5);font-weight:500;margin-top:6px;display:none;background:rgba(99,102,241,0.08);padding:6px 10px;border-radius:6px"></div>
           </div>
+          ${!esIngreso ? `
           <div class="form-group" style="margin-top:var(--space-3)">
             <label>¿Cómo se pagan las cuotas?</label>
             <select class="input" name="cuotas_medio" id="mov-cuotas-medio">
-              <option value="contado">Al contado (débito automático / transferencia)</option>
-              <option value="tarjeta">Con Tarjeta de Crédito</option>
+              <option value="contado" ${!data?.id_consumo_tarjeta_origen ? 'selected' : ''}>Al contado (débito automático / transferencia)</option>
+              <option value="tarjeta" ${data?.id_consumo_tarjeta_origen ? 'selected' : ''}>Con Tarjeta de Crédito</option>
             </select>
           </div>
-          <div id="mov-cuotas-tc-opts" class="form-group hidden" style="margin-top:var(--space-3)">
+          <div id="mov-cuotas-tc-opts" class="form-group ${!data?.id_consumo_tarjeta_origen ? 'hidden' : ''}" style="margin-top:var(--space-3)">
             <label>Tarjeta de Crédito</label>
             <select class="input" name="id_tarjeta_cuotas">
               <option value="">— Seleccionar tarjeta —</option>
               ${optsTc}
             </select>
-          </div>
-        </div>` : ''}
+          </div>` : ''}
+        </div>
 
         <!-- Split -->
         <div class="form-group full-width">
           <label class="form-switch">
-            <input type="checkbox" class="toggle-switch" name="es_split" id="chk-split">
+            <input type="checkbox" class="toggle-switch" name="es_split" id="chk-split" ${isSplit ? 'checked' : ''}>
             <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Dividir entre cuentas (Split)</span>
           </label>
         </div>
-        <div id="split-opts" class="form-group full-width hidden">
+        <div id="split-opts" class="form-group full-width ${!isSplit ? 'hidden' : ''}">
           <div id="split-rows-container">
-            <div class="form-grid split-row" style="gap:var(--space-3);margin-bottom:var(--space-2)">
-              <div class="form-group">
-                <label>Cuenta de Distribución</label>
-                <select class="input" name="split_cuenta_destino_1">
-                  <option value="">-- Seleccionar cuenta --</option>
-                  ${splitCuentasOpts}
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Porcentaje (%)</label>
-                <input class="input" type="number" name="split_porcentaje_1" min="1" max="100" value="50">
-              </div>
-            </div>
+            ${splitRowsHtml}
           </div>
           <button type="button" id="btn-add-split" class="btn btn-ghost btn-sm" style="margin-top:4px">
             + Agregar otra distribución
@@ -624,7 +673,6 @@ export class MovimientosModule extends BaseModule {
            </div>
            <p style="font-size:0.8rem;color:var(--texto-3);margin-top:4px;margin-bottom:0">Se descontará el porcentaje restante como deuda a cobrar en Gastos Compartidos.</p>
         </div>` : ''}
-        ` : '<!-- Edición: sin opciones de serie -->'}
       </form>
     `;
   }
@@ -639,6 +687,8 @@ export class MovimientosModule extends BaseModule {
         if (form) {
           const fd = new FormData(form);
           currentData = {
+            ...(this.#editData || {}),
+            id_movimiento: fd.get('id_movimiento') || '',
             importe: fd.get('importe') || '',
             fecha: fd.get('fecha') || '',
             descripcion: fd.get('descripcion') || '',
@@ -646,9 +696,10 @@ export class MovimientosModule extends BaseModule {
           };
         }
         const esIng = nuevoTipo === 'INGRESO';
-        const titleSpan = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:var(--primary);">${App.Icons.get(esIng ? 'trending_up' : 'trending_down')}</span>${esIng ? 'Nuevo Ingreso' : 'Nuevo Gasto'}`;
+        const isEdit = !!(currentData?.id_movimiento || this.#editData);
+        const titleSpan = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:var(--primary);">${App.Icons.get(esIng ? 'trending_up' : 'trending_down')}</span>${isEdit ? (esIng ? 'Editar Ingreso' : 'Editar Gasto') : (esIng ? 'Nuevo Ingreso' : 'Nuevo Gasto')}`;
         this.#modal.el.querySelector('.modal-title').innerHTML = titleSpan;
-        this.#modal.el.querySelector('.modal-body').innerHTML = this.#buildFormHtml(nuevoTipo, currentData);
+        this.#modal.el.querySelector('.modal-body').innerHTML = this.#buildFormHtml(nuevoTipo, currentData || this.#editData);
         const confirmBtn = this.#modal.el.querySelector('.modal-confirm');
         if (confirmBtn) {
           confirmBtn.textContent = esIng ? 'Guardar Ingreso' : 'Guardar Gasto';
@@ -689,9 +740,11 @@ export class MovimientosModule extends BaseModule {
         infoEl.innerHTML = `💡 Se registrarán <strong>${cuotas} cuotas de $ ${porCuota.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (Monto total: $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
       } else {
         const total = val * cuotas;
-        infoEl.innerHTML = `💡 Total estimado de la compra: <strong>$ ${total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (${cuotas} cuotas de $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+        infoEl.innerHTML = `💡 Total estimado: <strong>$ ${total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (${cuotas} cuotas de $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
       }
     };
+
+    updateMovCuotasInfo();
 
     document.querySelectorAll('input[name="cuotas_modo_monto"]').forEach(radio => {
       radio.addEventListener('change', updateMovCuotasInfo);
@@ -716,7 +769,7 @@ export class MovimientosModule extends BaseModule {
     }
 
     // Dynamic split rows
-    let splitCount = 1;
+    let splitCount = document.querySelectorAll('.split-row').length || 1;
     const btnAddSplit = document.getElementById('btn-add-split');
     if (btnAddSplit) {
       btnAddSplit.addEventListener('click', () => {
@@ -725,8 +778,9 @@ export class MovimientosModule extends BaseModule {
         if (!container) return;
         const allCuentas = this.#cuentas.length ? this.#cuentas : (App.Store?.cuentas || []);
         const activeCuenta = App.Store?.cuenta;
+        const currentDest = document.querySelector('select[name="id_cuenta_destino"]')?.value || activeCuenta;
         const optsCuentas = allCuentas
-          .filter(c => c.activa !== false && c.id_cuenta_principal !== activeCuenta)
+          .filter(c => c.activa !== false && c.id_cuenta_principal !== currentDest)
           .map(c => `<option value="${c.id_cuenta_principal}">${App.Utils.escapeHtml(c.nombre)}</option>`)
           .join('');
         const newRow = document.createElement('div');
@@ -961,26 +1015,27 @@ export class MovimientosModule extends BaseModule {
     modal.setLoading(true);
 
     try {
+      if (datos.compartir === 'on') {
+        const ccPayload = {
+          idCuenta: App.Store.cuenta,
+          idCategoria: datos.id_categoria,
+          fecha: datos.fecha,
+          tipo: 'COMUN',
+          descripcion: datos.descripcion,
+          importe: importeCalculado,
+          idUsuario: datos.compartir_contacto,
+          pagador: 'YO',
+          porcentajeImputado: Number(datos.compartir_porcentaje || 50),
+          cuotaActual: 1,
+          cuotaTotal: 1,
+          periodos: 12
+        };
+        const respCC = await App.API.call('api_createConsumoCC', ccPayload);
+        if (!respCC.success) throw new Error('Error al crear gasto compartido: ' + respCC.error);
+        App.Store.markModuloLoaded('cc', false);
+      }
+
       if (!this.#editData) {
-        if (datos.compartir === 'on') {
-          const ccPayload = {
-            idCuenta: App.Store.cuenta,
-            idCategoria: datos.id_categoria,
-            fecha: datos.fecha,
-            tipo: 'COMUN',
-            descripcion: datos.descripcion,
-            importe: importeCalculado,
-            idUsuario: datos.compartir_contacto,
-            pagador: 'YO',
-            porcentajeImputado: Number(datos.compartir_porcentaje || 50),
-            cuotaActual: 1,
-            cuotaTotal: 1,
-            periodos: 12
-          };
-          const respCC = await App.API.call('api_createConsumoCC', ccPayload);
-          if (!respCC.success) throw new Error('Error al crear gasto compartido: ' + respCC.error);
-          App.Store.markModuloLoaded('cc', false);
-        }
         // _handleCreate ya cierra el modal, muestra toast, destruye y recarga
         await this._handleCreate(payload, modal);
         if (payload.idCuenta && payload.idCuenta !== App.Store.cuenta) {
@@ -1007,6 +1062,9 @@ export class MovimientosModule extends BaseModule {
           };
           try {
             await this._handleUpdate(this.#editData.id_movimiento, req, modal);
+            if (payload.idCuenta && payload.idCuenta !== App.Store.cuenta) {
+              App.Store.setCuenta(payload.idCuenta);
+            }
           } catch (err) {
              modal.setLoading(false);
              App.Toast.error(err.message || 'Error al guardar.');
@@ -1015,14 +1073,15 @@ export class MovimientosModule extends BaseModule {
 
         if (esSerio) {
           modal.setLoading(false);
+          const isSplitGroup = !this.#editData.recur_group_id && !!this.#editData.split_group_id;
           const confirmModal = new App.Modal('modal-mov-scope-edit');
           confirmModal.open({
-            titulo      : 'Editar movimiento de serie',
+            titulo      : isSplitGroup ? 'Editar distribución (Split)' : 'Editar movimiento de serie',
             body        : `
-              <p>Este movimiento pertenece a una serie. ¿Qué deseas actualizar?</p>
+              <p>${isSplitGroup ? 'Este movimiento forma parte de una distribución entre cuentas (Split). ¿Qué deseas actualizar?' : 'Este movimiento pertenece a una serie. ¿Qué deseas actualizar?'}</p>
               <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
                 <button class="btn btn-ghost" id="edit-single">Solo este movimiento</button>
-                <button class="btn btn-primary" id="edit-series">Este y los futuros (Serie)</button>
+                <button class="btn btn-primary" id="edit-series">${isSplitGroup ? 'Toda la distribución (Split)' : 'Este y los futuros (Serie)'}</button>
               </div>`,
             confirmLabel: '',
             cancelLabel : 'Cancelar'
@@ -1035,7 +1094,7 @@ export class MovimientosModule extends BaseModule {
           });
           document.getElementById('edit-series')?.addEventListener('click', () => {
              confirmModal.close();
-             doUpdate('SERIES');
+             doUpdate(isSplitGroup ? 'GROUP' : 'SERIES');
           });
         } else {
           await doUpdate('SINGLE');
