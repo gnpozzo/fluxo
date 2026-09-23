@@ -64,6 +64,7 @@ export class MovimientosModule extends BaseModule {
   }
 
   async cargar() {
+    this.#cacheIngresos = {};
     if (App.Store.isModuloLoaded(this.moduleId)) return;
 
     const { cuenta, mes } = App.Store;
@@ -425,7 +426,7 @@ export class MovimientosModule extends BaseModule {
 
         <!-- Panel de Cálculo Dinámico por Porcentaje -->
         <div id="wrap-gasto-pct" class="form-group full-width hidden" style="background:var(--primary-tint);border:1px solid rgba(29,25,93,0.15);padding:12px 14px;border-radius:var(--r);margin-bottom:var(--space-2)">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
             <span style="font-weight:600;font-size:0.82rem;color:var(--primary)">Calcular % sobre ingresos de la cuenta</span>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
               <button type="button" class="btn-pct-preset" data-pct="25" style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--superficie);border:1px solid var(--borde);color:var(--texto);cursor:pointer">25% (Super)</button>
@@ -435,14 +436,23 @@ export class MovimientosModule extends BaseModule {
               <button type="button" class="btn-pct-preset" data-pct="10" style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--superficie);border:1px solid var(--borde);color:var(--texto);cursor:pointer">10%</button>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <div style="display:inline-flex;align-items:center;gap:4px;background:var(--superficie);padding:4px 8px;border-radius:var(--r-sm);border:1px solid var(--borde)">
-              <input type="number" id="input-gasto-pct" min="0.01" max="100" step="0.01" placeholder="Ej: 25" style="width:75px;border:none;outline:none;font-size:1rem;font-weight:700;color:var(--primary);background:transparent">
-              <span style="font-weight:700;color:var(--primary);font-size:0.9rem">%</span>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+            <div style="flex:1;min-width:200px">
+              <label style="font-size:0.75rem;font-weight:600;color:var(--texto-2);display:block;margin-bottom:4px">Aplicar sobre el ingreso de:</label>
+              <select id="sel-gasto-pct-categoria" class="input" style="font-size:0.84rem;padding:6px 10px;width:100%">
+                <option value="__ALL__">Todos los ingresos del período</option>
+              </select>
             </div>
-            <div id="info-gasto-pct" style="font-size:0.8rem;color:var(--texto-2);flex:1;min-width:180px">
-              Ingresá el porcentaje para calcular el monto sobre los ingresos.
+            <div style="min-width:110px">
+              <label style="font-size:0.75rem;font-weight:600;color:var(--texto-2);display:block;margin-bottom:4px">Porcentaje</label>
+              <div style="display:inline-flex;align-items:center;gap:4px;background:var(--superficie);padding:5px 8px;border-radius:var(--r-sm);border:1px solid var(--borde)">
+                <input type="number" id="input-gasto-pct" min="0.01" max="100" step="0.01" placeholder="25" style="width:65px;border:none;outline:none;font-size:0.95rem;font-weight:700;color:var(--primary);background:transparent">
+                <span style="font-weight:700;color:var(--primary);font-size:0.85rem">%</span>
+              </div>
             </div>
+          </div>
+          <div id="info-gasto-pct" style="font-size:0.8rem;color:var(--texto-2);background:rgba(255,255,255,0.6);padding:6px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.05);line-height:1.4">
+            Ingresá el porcentaje para calcular el monto sobre los ingresos.
           </div>
         </div>` : ''}
 
@@ -752,12 +762,32 @@ export class MovimientosModule extends BaseModule {
     const btnPct = document.getElementById('btn-modo-monto-pct');
     const wrapPct = document.getElementById('wrap-gasto-pct');
     const inputPct = document.getElementById('input-gasto-pct');
+    const selCatPct = document.getElementById('sel-gasto-pct-categoria');
     const infoPct = document.getElementById('info-gasto-pct');
     const inputImporte = document.querySelector('input[name="importe"]');
     const selCuentaDest = document.querySelector('select[name="id_cuenta_destino"]');
     const inputFecha = document.querySelector('input[name="fecha"]');
 
     let modoPctActivo = false;
+    let lastLoadedCacheKey = null;
+
+    const actualizarOpcionesCategorias = (ingresosData) => {
+      if (!selCatPct) return;
+      const prevVal = selCatPct.value;
+      const cats = ingresosData?.categorias || [];
+      const totalIng = Number(ingresosData?.total || 0);
+
+      let html = `<option value="__ALL__">Todos los ingresos (${App.Utils.formatearMoneda(totalIng)})</option>`;
+      cats.forEach(c => {
+        html += `<option value="${App.Utils.escapeHtml(c.id)}">${App.Utils.escapeHtml(c.nombre)} (${App.Utils.formatearMoneda(c.total)})</option>`;
+      });
+      selCatPct.innerHTML = html;
+      if (prevVal && (prevVal === '__ALL__' || cats.some(c => c.id === prevVal))) {
+        selCatPct.value = prevVal;
+      } else {
+        selCatPct.value = '__ALL__';
+      }
+    };
 
     const recalcularMontoPct = async () => {
       if (!modoPctActivo || !inputPct || !infoPct || !inputImporte) return;
@@ -772,16 +802,46 @@ export class MovimientosModule extends BaseModule {
       const cuentaObj = allCuentas.find(c => c.id_cuenta_principal === idCuenta);
       const nombreCuenta = cuentaObj?.nombre || 'la cuenta';
 
-      infoPct.innerHTML = '<span style="color:var(--texto-3)">Consultando ingresos de la cuenta...</span>';
-      const totalIngresos = await this.#obtenerIngresosPeriodo(idCuenta, fecha);
+      const cacheKey = `${idCuenta}_${fecha.substring(0, 7)}`;
+      if (lastLoadedCacheKey !== cacheKey) {
+        infoPct.innerHTML = '<span style="color:var(--texto-3)">Consultando ingresos de la cuenta...</span>';
+      }
 
-      if (totalIngresos > 0) {
-        const montoCalculado = (totalIngresos * (pct / 100));
+      const ingresosData = await this.#obtenerIngresosPeriodo(idCuenta, fecha);
+
+      if (lastLoadedCacheKey !== cacheKey) {
+        lastLoadedCacheKey = cacheKey;
+        actualizarOpcionesCategorias(ingresosData);
+      }
+
+      const totalIngresos = Number(ingresosData?.total || 0);
+      const cats = ingresosData?.categorias || [];
+
+      if (totalIngresos <= 0 && cats.length === 0) {
+        infoPct.innerHTML = `<span style="color:var(--amarillo-text)">Sin ingresos registrados en ${App.Utils.escapeHtml(nombreCuenta)} para este período.</span>`;
+        return;
+      }
+
+      const selectedCatId = selCatPct?.value || '__ALL__';
+      let baseCalculo = totalIngresos;
+      let labelBase = `Ingresos ${App.Utils.escapeHtml(nombreCuenta)}`;
+
+      if (selectedCatId !== '__ALL__') {
+        const catObj = cats.find(c => c.id === selectedCatId);
+        if (catObj) {
+          baseCalculo = catObj.total;
+          labelBase = `${App.Utils.escapeHtml(catObj.nombre)} (${App.Utils.escapeHtml(nombreCuenta)})`;
+        }
+      }
+
+      if (baseCalculo > 0) {
+        const montoCalculado = (baseCalculo * (pct / 100));
         const montoFinal = Math.round(montoCalculado * 100) / 100;
         inputImporte.value = montoFinal.toFixed(2);
-        infoPct.innerHTML = `<strong>Ingresos ${App.Utils.escapeHtml(nombreCuenta)}:</strong> ${App.Utils.formatearMoneda(totalIngresos)} <br><strong>${pct}% =</strong> <span style="color:var(--rojo);font-weight:700">${App.Utils.formatearMoneda(montoFinal)}</span>`;
+        inputImporte.dispatchEvent(new Event('input', { bubbles: true }));
+        infoPct.innerHTML = `<strong>Base ${labelBase}:</strong> ${App.Utils.formatearMoneda(baseCalculo)} <br><strong>${pct}% =</strong> <span style="color:var(--rojo);font-weight:700">${App.Utils.formatearMoneda(montoFinal)}</span>`;
       } else {
-        infoPct.innerHTML = `<span style="color:var(--amarillo-text)">Sin ingresos registrados en ${App.Utils.escapeHtml(nombreCuenta)} para este período.</span>`;
+        infoPct.innerHTML = `<span style="color:var(--amarillo-text)">La opción seleccionada no tiene ingresos registrados en este período.</span>`;
       }
     };
 
@@ -810,6 +870,10 @@ export class MovimientosModule extends BaseModule {
         recalcularMontoPct();
       });
 
+      selCatPct?.addEventListener('change', () => {
+        recalcularMontoPct();
+      });
+
       document.querySelectorAll('.btn-pct-preset').forEach(presetBtn => {
         presetBtn.addEventListener('click', () => {
           if (inputPct) {
@@ -820,10 +884,12 @@ export class MovimientosModule extends BaseModule {
       });
 
       selCuentaDest?.addEventListener('change', () => {
+        lastLoadedCacheKey = null;
         if (modoPctActivo) recalcularMontoPct();
       });
 
       inputFecha?.addEventListener('change', () => {
+        lastLoadedCacheKey = null;
         if (modoPctActivo) recalcularMontoPct();
       });
     }
@@ -891,6 +957,7 @@ export class MovimientosModule extends BaseModule {
       idTarjetaCuotas   : (datos.cuotas_medio === 'tarjeta' && datos.id_tarjeta_cuotas) ? datos.id_tarjeta_cuotas : null
     };
 
+    this.#cacheIngresos = {};
     modal.setLoading(true);
 
     try {
@@ -981,6 +1048,7 @@ export class MovimientosModule extends BaseModule {
   }
 
   async #eliminar(row) {
+    this.#cacheIngresos = {};
     const scrollEl = document.querySelector('.main-content');
     this.#savedViewPosition = {
       scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
@@ -1536,7 +1604,7 @@ export class MovimientosModule extends BaseModule {
   }
 
   async #obtenerIngresosPeriodo(idCuenta, fechaStr) {
-    if (!idCuenta || !fechaStr) return 0;
+    if (!idCuenta || !fechaStr) return { total: 0, categorias: [] };
     const ym = fechaStr.substring(0, 7);
     const cacheKey = `${idCuenta}_${ym}`;
     if (this.#cacheIngresos[cacheKey] !== undefined) {
@@ -1545,12 +1613,38 @@ export class MovimientosModule extends BaseModule {
     const { fechaInicio, fechaFin } = this.#calcFechas(ym);
     try {
       const resp = await App.API.call('api_getDashboardData', [idCuenta, fechaInicio, fechaFin, false]);
-      const totalIngresos = Number(resp?.data?.kpis?.ingresos || 0);
-      this.#cacheIngresos[cacheKey] = totalIngresos;
-      return totalIngresos;
+      const kpis = resp?.kpis || resp?.data?.kpis || {};
+      const totalIngresos = Number(kpis.ingresos || 0);
+      const movs = resp?.movimientos || resp?.data?.movimientos || [];
+
+      // Agrupar ingresos por categoría
+      const catMap = {};
+      movs.forEach(m => {
+        const isIngreso = m.tipo_mov === 'INGRESO' || (m.tipo_mov === 'TRANSFERENCIA' && m.id_cuenta_destino === idCuenta);
+        if (isIngreso) {
+          const catId = m.id_categoria || 'CAT_GENERAL';
+          const catNombre = m.categoria_nombre || (catId === 'CAT_GENERAL' ? 'General' : catId);
+          const amt = Math.abs(Number(m.importe || 0));
+          if (!catMap[catId]) {
+            catMap[catId] = {
+              id: catId,
+              nombre: catNombre,
+              total: 0
+            };
+          }
+          catMap[catId].total += amt;
+        }
+      });
+
+      const categorias = Object.values(catMap);
+      const res = { total: totalIngresos, categorias };
+      if (totalIngresos > 0 || categorias.length > 0) {
+        this.#cacheIngresos[cacheKey] = res;
+      }
+      return res;
     } catch (err) {
       App.warn('MovimientosModule', 'obtenerIngresosPeriodo', err);
-      return 0;
+      return { total: 0, categorias: [] };
     }
   }
 }
