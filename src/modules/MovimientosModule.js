@@ -1086,7 +1086,6 @@ export class MovimientosModule extends BaseModule {
             confirmLabel: '',
             cancelLabel : 'Cancelar'
           });
-          confirmModal.el.querySelector('.modal-confirm')?.remove();
 
           document.getElementById('edit-single')?.addEventListener('click', () => {
              confirmModal.close();
@@ -1146,7 +1145,6 @@ export class MovimientosModule extends BaseModule {
         cancelLabel : 'Cancelar',
         onConfirm   : null
       });
-      confirmModal.el.querySelector('.modal-confirm')?.remove();
 
       const doDelete = async (scope) => {
         confirmModal.close();

@@ -58,22 +58,27 @@ export class Modal {
       titleHtml = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:var(--primary);">${App.Icons.get(icono)}</span>` + titulo;
     }
     
-    this.#el.querySelector('.modal-title').innerHTML      = titleHtml;
-    this.#el.querySelector('.modal-body').innerHTML       = body;
-    this.#el.querySelector('.modal-confirm').textContent  = confirmLabel;
-    this.#el.querySelector('.modal-cancel').textContent   = cancelLabel;
+    this.#el.querySelector('.modal-title').innerHTML = titleHtml;
+    this.#el.querySelector('.modal-body').innerHTML  = body;
 
-    // Tamaño
-    const dialog = this.#overlay.querySelector('.modal-dialog');
-    dialog.className = `modal-dialog modal-${size}`;
-
-    // Peligro y Reseteo
     const btnConfirm = this.#el.querySelector('.modal-confirm');
     if (btnConfirm) {
+      btnConfirm.textContent = confirmLabel;
+      btnConfirm.style.display = confirmLabel ? '' : 'none';
       btnConfirm.classList.toggle('btn-danger', danger);
       btnConfirm.classList.toggle('btn-primary', !danger);
       btnConfirm.disabled = false;
     }
+
+    const btnCancel = this.#el.querySelector('.modal-cancel');
+    if (btnCancel) {
+      btnCancel.textContent = cancelLabel;
+      btnCancel.style.display = cancelLabel ? '' : 'none';
+    }
+
+    // Tamaño
+    const dialog = this.#overlay.querySelector('.modal-dialog');
+    dialog.className = `modal-dialog modal-${size}`;
 
     // Mostrar
     this.#overlay.classList.add('modal-open');
