@@ -535,6 +535,7 @@ export class TarjetasModule extends BaseModule {
 
   #abrirModalAlta() {
     this.#editData = null;
+    this.#cuentas = (this.#cuentas && this.#cuentas.length) ? this.#cuentas : (App.Store?.cuentas || []);
     if (!this.#tarjetas || this.#tarjetas.length === 0) {
       const allTarjetas = (window._appTarjetas && window._appTarjetas.length > 0) ? window._appTarjetas : this._tcList;
       this.#tarjetas = (allTarjetas || []).filter(t => t.id_cuenta_principal === App.Store.cuenta);
@@ -553,6 +554,7 @@ export class TarjetasModule extends BaseModule {
   }
 
   #abrirModalEdicion(row) {
+    this.#cuentas = (this.#cuentas && this.#cuentas.length) ? this.#cuentas : (App.Store?.cuentas || []);
     const scrollEl = document.querySelector('.main-content');
     this.#savedViewPosition = {
       scroll: scrollEl ? scrollEl.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0),
@@ -683,7 +685,7 @@ export class TarjetasModule extends BaseModule {
         <div id="tc-imputar-opts" class="form-group full-width ${data && data.imputado === false ? 'hidden' : ''}">
           <label>Cuenta destino</label>
           <select class="input" name="cuenta_imputar">
-            ${this.#cuentas
+            ${(this.#cuentas.length ? this.#cuentas : (App.Store?.cuentas || []))
               .map(c => `<option value="${c.id_cuenta_principal}" ${(data?.id_cuenta_imputada || App.Store.cuenta) === c.id_cuenta_principal ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
               .join('')}
           </select>
@@ -803,7 +805,7 @@ export class TarjetasModule extends BaseModule {
       cuotaTotal  : Number(d.cuota_total  || 1),
       periodos    : Number(d.periodos     || 12),
       imputar     : d.imputar === 'on',
-      idCuentaImputar: d.cuenta_imputar || ''
+      idCuentaImputar: d.cuenta_imputar || (d.imputar === 'on' ? App.Store.cuenta : '')
     };
 
     modal.setLoading(true);

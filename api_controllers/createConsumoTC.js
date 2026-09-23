@@ -411,6 +411,8 @@ export default async function handler(req, res) {
       const moneda = consumo.moneda || 'ARS';
       const isTaxItem = consumo.isTax || isTaxConcept(consumo.descripcion);
 
+      const targetImputacion = (consumo.imputar && consumo.idCuentaImputar) ? consumo.idCuentaImputar : (cardAccountId || consumo.idCuenta);
+
       if (consumo.tipoConsumo === 'COMUN' || consumo.tipoConsumo === 'SIMPLE') {
         const idConsumo = crypto.randomUUID();
         const fechaISO = fechaBase.toISOString().split('T')[0];
@@ -429,7 +431,7 @@ export default async function handler(req, res) {
         if (consumo.imputar && !isTaxItem) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: consumo.idCuentaImputar,
+            id_cuenta_principal: targetImputacion,
             user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
@@ -470,7 +472,7 @@ export default async function handler(req, res) {
           const descImputacion = consumo.descripcion + ' (Cuota ' + cuotaNumActual + '/' + consumo.cuotaTotal + ')';
           movRows.push({
             id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: consumo.idCuentaImputar,
+            id_cuenta_principal: targetImputacion,
             user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,
@@ -509,7 +511,7 @@ export default async function handler(req, res) {
         if (consumo.imputar && !isTaxItem) {
           movRows.push({
             id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: consumo.idCuentaImputar,
+            id_cuenta_principal: targetImputacion,
             user_id: userId,
             fecha: fechaISO,
             id_categoria: consumo.idCategoria,

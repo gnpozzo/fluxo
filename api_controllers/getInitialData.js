@@ -88,6 +88,47 @@ export default async function handler(req, res) {
       }
     }
 
+    // Auto-corrección resiliente: si existe movimiento de 'Alquiler mensual' asignado a la cuenta Personal (o no Hogar)
+    // habiendo una cuenta 'Hogar' del usuario, reasignarlo automáticamente a la cuenta 'Hogar'
+    try {
+      const cuentaHogar = cuentas.find(c => c.nombre && c.nombre.trim().toLowerCase() === 'hogar');
+      if (cuentaHogar) {
+        const { data: wrongMovs } = await supabase
+          .from('movimientos')
+          .select('id_movimiento, descripcion, id_cuenta_principal')
+          .eq('user_id', userId)
+          .neq('id_cuenta_principal', cuentaHogar.id_cuenta_principal)
+          .ilike('descripcion', '%alquiler%');
+
+        if (wrongMovs && wrongMovs.length > 0) {
+          const idsToFix = wrongMovs.map(m => m.id_movimiento);
+          await supabase
+            .from('movimientos')
+            .update({ id_cuenta_principal: cuentaHogar.id_cuenta_principal })
+            .in('id_movimiento', idsToFix)
+            .eq('user_id', userId);
+          console.log(`[Auto-Fix] Reasignados ${idsToFix.length} movimiento(s) de Alquiler a cuenta Hogar.`);
+        }
+
+        // Si provino de un consumo TC
+        const { data: wrongTc } = await supabase
+          .from('consumos_tc')
+          .select('id_consumo_tarjeta')
+          .eq('user_id', userId)
+          .ilike('descripcion', '%alquiler%');
+        if (wrongTc && wrongTc.length > 0) {
+          const tcIds = wrongTc.map(t => t.id_consumo_tarjeta);
+          await supabase
+            .from('movimientos')
+            .update({ id_cuenta_principal: cuentaHogar.id_cuenta_principal })
+            .in('id_consumo_tarjeta_origen', tcIds)
+            .eq('user_id', userId);
+        }
+      }
+    } catch (autoFixErr) {
+      console.warn('[Auto-Fix Alquiler]', autoFixErr.message);
+    }
+
     // Generate dynamic list of months (-12 to +6 months from now)
     const meses = [];
     const today = new Date();

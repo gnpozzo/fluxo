@@ -2249,6 +2249,9 @@ export class DashboardModule extends BaseModule {
     const optsCateg = categoriasFiltradas.map(c => `<option value="${c.id_categoria}" ${row.id_categoria === c.id_categoria ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`).join('');
 
     const rawFecha = (row.fecha?.value || row.fecha || '').substring(0, 10);
+    const cuentas = (App.Store?.cuentas && App.Store.cuentas.length) ? App.Store.cuentas : [];
+    const activeAccId = row.id_cuenta_principal || App.Store?.cuenta;
+    const optsCuentas = cuentas.map(c => `<option value="${c.id_cuenta_principal}" ${activeAccId === c.id_cuenta_principal ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`).join('');
 
     const body = `
       <form id="form-dash-mov-edit" class="form-grid">
@@ -2264,6 +2267,10 @@ export class DashboardModule extends BaseModule {
         <div class="form-group">
           <label>Categoría</label>
           <select class="input" name="id_categoria" required>${optsCateg}</select>
+        </div>
+        <div class="form-group">
+          <label>Cuenta</label>
+          <select class="input" name="id_cuenta">${optsCuentas}</select>
         </div>
         <div class="form-group">
           <label>Medio de Pago</label>
@@ -2288,7 +2295,7 @@ export class DashboardModule extends BaseModule {
       onConfirm: async (m) => {
         const fd = new FormData(m.getForm());
         const payload = {
-          idCuenta: App.Store.cuenta,
+          idCuenta: fd.get('id_cuenta') || row.id_cuenta_principal || App.Store.cuenta,
           tipo: tipo,
           fecha: fd.get('fecha'),
           idCategoria: fd.get('id_categoria'),

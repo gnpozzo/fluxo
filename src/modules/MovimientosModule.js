@@ -474,7 +474,7 @@ export class MovimientosModule extends BaseModule {
         </div>
 
         <div class="form-group">
-          <label>${esIngreso ? 'Cuenta de Destino' : 'Cuenta de Origen'}</label>
+          <label>${esIngreso ? 'Cuenta de Destino' : 'Cuenta del Gasto / Imputar a'}</label>
           <select class="input" name="id_cuenta_destino">
             ${optsCuentas}
           </select>
@@ -580,14 +580,14 @@ export class MovimientosModule extends BaseModule {
               </div>
               <div class="form-group">
                 <label>Porcentaje (%)</label>
-                <input class="input" type="number" name="split_porcentaje_1" min="1" max="99" value="50">
+                <input class="input" type="number" name="split_porcentaje_1" min="1" max="100" value="50">
               </div>
             </div>
           </div>
           <button type="button" id="btn-add-split" class="btn btn-ghost btn-sm" style="margin-top:4px">
             + Agregar otra distribución
           </button>
-          <p style="font-size:0.8rem;color:var(--texto-3);margin-top:8px;">El remanente (hasta completar 100%) quedará en la cuenta actual.</p>
+          <p style="font-size:0.8rem;color:var(--texto-3);margin-top:8px;">Podés imputar hasta el 100% a la cuenta seleccionada. El remanente no distribuido quedará en la cuenta actual.</p>
         </div>
 
         ${!esIngreso ? `
@@ -732,7 +732,7 @@ export class MovimientosModule extends BaseModule {
           </div>
           <div class="form-group">
             <label>Porcentaje (%)</label>
-            <input class="input" type="number" name="split_porcentaje_${splitCount}" min="1" max="99" value="">
+            <input class="input" type="number" name="split_porcentaje_${splitCount}" min="1" max="100" value="">
           </div>
         `;
         container.appendChild(newRow);
@@ -860,8 +860,8 @@ export class MovimientosModule extends BaseModule {
         if (c && p > 0) splitDestinos.push({ cuenta: c, pct: p });
       }
       const sumPct = splitDestinos.reduce((sum, d) => sum + d.pct, 0);
-      if (sumPct >= 100) {
-         App.Toast.error('La suma de porcentajes de distribución no puede ser >= 100%.');
+      if (sumPct > 100) {
+         App.Toast.error('La suma de porcentajes de distribución no puede superar el 100%.');
          return;
       }
     }
@@ -916,6 +916,13 @@ export class MovimientosModule extends BaseModule {
         }
         // _handleCreate ya cierra el modal, muestra toast, destruye y recarga
         await this._handleCreate(payload, modal);
+        if (payload.idCuenta && payload.idCuenta !== App.Store.cuenta) {
+          const allCuentas = this.#cuentas.length ? this.#cuentas : (App.Store?.cuentas || []);
+          const cuentaObj = allCuentas.find(c => c.id_cuenta_principal === payload.idCuenta);
+          const nombreC = cuentaObj?.nombre || 'la cuenta asignada';
+          App.Toast.info(`Mostrando cuenta ${nombreC}...`);
+          App.Store.setCuenta(payload.idCuenta);
+        }
       } else {
         const esSerio = !!this.#editData.recur_group_id || !!this.#editData.split_group_id;
         

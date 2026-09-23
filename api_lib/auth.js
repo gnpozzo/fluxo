@@ -78,7 +78,10 @@ export async function resolveUserCuenta(supabase, idCuenta, userId) {
 
     if (rawId) {
       const search = rawId.toLowerCase();
-      // Búsqueda por coincidencia de nombre exacto
+      // Búsqueda por coincidencia de ID exacto o nombre exacto
+      const byId = accounts.find(a => a.id_cuenta_principal && a.id_cuenta_principal.toLowerCase() === search);
+      if (byId) return byId.id_cuenta_principal;
+
       const byName = accounts.find(a => a.nombre && a.nombre.trim().toLowerCase() === search);
       if (byName) return byName.id_cuenta_principal;
     }

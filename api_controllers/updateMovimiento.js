@@ -131,20 +131,22 @@ export default async function handler(req, res) {
               split_rol: 'DESTINO'
             });
           });
-          rows.push({
-            id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: mov.idCuenta,
-            user_id: userId,
-            fecha: fechaISO,
-            id_categoria: mov.idCategoria,
-            tipo_mov: mov.tipo,
-            descripcion: desc,
-            importe: mov.importe * (pctRetenido / 100),
-            medio_pago: mov.medioPago,
-            recur_group_id: seriesGroupId,
-            split_group_id: splitGroupId,
-            split_rol: 'ORIGEN'
-          });
+          if (pctRetenido > 0) {
+            rows.push({
+              id_movimiento: crypto.randomUUID(),
+              id_cuenta_principal: mov.idCuenta,
+              user_id: userId,
+              fecha: fechaISO,
+              id_categoria: mov.idCategoria,
+              tipo_mov: mov.tipo,
+              descripcion: desc,
+              importe: mov.importe * (pctRetenido / 100),
+              medio_pago: mov.medioPago,
+              recur_group_id: seriesGroupId,
+              split_group_id: splitGroupId,
+              split_rol: 'ORIGEN'
+            });
+          }
         } else {
           rows.push({
             id_movimiento: crypto.randomUUID(),
