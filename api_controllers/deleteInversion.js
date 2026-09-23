@@ -20,8 +20,11 @@ export default async function handler(req, res) {
     if (movResult.error) throw movResult.error;
     
     // Delete from inversiones_movimientos scoped to user_id
-    const invResult = await supabase.from('inversiones_movimientos').delete().eq('id_inversion_mov', idOperacion).eq('user_id', userId);
+    const invResult = await supabase.from('inversiones_movimientos').delete().eq('id_inversion_mov', idOperacion).eq('user_id', userId).select();
     if (invResult.error) throw invResult.error;
+    if (!invResult.data || invResult.data.length === 0) {
+      return res.status(404).json({ success: false, error: 'No se encontró el movimiento de inversión para eliminar.' });
+    }
     
     return res.status(200).json({ success: true, data: { id_operacion: idOperacion } });
   } catch (err) {

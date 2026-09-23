@@ -24,8 +24,11 @@ export default async function handler(req, res) {
     if (movResult.error) throw movResult.error;
     
     // Delete from ahorros scoped to user_id
-    const ahResult = await supabase.from('ahorros').delete().eq('id_ahorro', idAhorro).eq('user_id', userId);
+    const ahResult = await supabase.from('ahorros').delete().eq('id_ahorro', idAhorro).eq('user_id', userId).select();
     if (ahResult.error) throw ahResult.error;
+    if (!ahResult.data || ahResult.data.length === 0) {
+      return res.status(404).json({ success: false, error: 'No se encontró el registro de ahorro para eliminar.' });
+    }
     
     return res.status(200).json({ success: true, data: { id_ahorro: idAhorro } });
   } catch (err) {

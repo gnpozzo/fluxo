@@ -74,12 +74,24 @@ export default async function handler(req, res) {
         }
 
         // Categorías activas
-        const { data: cats } = await supabase
-          .from('categorias')
-          .select('id_categoria, nombre, tipo_mov')
-          .eq('activa', true);
+        const [ { data: cats }, { data: perfil } ] = await Promise.all([
+          supabase
+            .from('categorias')
+            .select('id_categoria, nombre, tipo_mov')
+            .eq('activa', true),
+          supabase
+            .from('perfiles_usuario')
+            .select('preferencias')
+            .eq('id', userId)
+            .maybeSingle()
+        ]);
         if (cats) {
-          financialContext.categoriasDisponibles = cats;
+          const prefs = perfil?.preferencias || {};
+          const ocultas = new Set(prefs.categorias_ocultas || []);
+          const custom = prefs.categorias_personalizadas || {};
+          financialContext.categoriasDisponibles = cats
+            .filter(c => !ocultas.has(c.id_categoria))
+            .map(c => ({ ...c, ...(custom[c.id_categoria] || {}) }));
         }
 
         if (financialContext.cuentaId && mes) {

@@ -30,9 +30,12 @@ export default async function handler(req, res) {
     const consumoId = request.consumoId || request.id || request.id_consumo_tarjeta || request.id_consumo_tc || (rawArgs ? rawArgs[0] : null);
 
     if (scope === 'SINGLE') {
-      if (!consumoId) throw new Error('consumoId requerido');
       await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', consumoId).eq('user_id', userId);
-      await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', consumoId).eq('user_id', userId);
+      const { data: deleted, error: delErr } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', consumoId).eq('user_id', userId).select();
+      if (delErr) throw delErr;
+      if (!deleted || deleted.length === 0) {
+        return res.status(404).json({ success: false, error: 'No se encontró el consumo de tarjeta para eliminar.' });
+      }
     } else if (request.scope === 'SERIES') {
       if (!request.recurGroupId || !request.fecha) throw new Error('Faltan recurGroupId o fecha');
       

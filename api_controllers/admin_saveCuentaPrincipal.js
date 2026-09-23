@@ -32,7 +32,16 @@ export default async function handler(req, res) {
     };
 
     if (payload.es_predeterminada !== undefined) {
-      cleanPayload.es_predeterminada = payload.es_predeterminada;
+      cleanPayload.es_predeterminada = (payload.es_predeterminada === true || payload.es_predeterminada === 'true');
+    }
+
+    // Si se marca como predeterminada, asegurar que sea la única cuenta predeterminada del usuario
+    if (cleanPayload.es_predeterminada === true) {
+      await supabase
+        .from('cuentas_principales')
+        .update({ es_predeterminada: false })
+        .eq('user_id', userId)
+        .neq('id_cuenta_principal', cleanPayload.id_cuenta_principal);
     }
     
     const { data, error } = await supabase.from('cuentas_principales').upsert(cleanPayload).select().single();

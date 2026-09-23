@@ -30,7 +30,11 @@ export default async function handler(req, res) {
         if (linkedTC && linkedTC.id_consumo_tarjeta_origen) {
           await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', linkedTC.id_consumo_tarjeta_origen).eq('user_id', userId);
         }
-        await supabase.from('movimientos').delete().eq('id_movimiento', request.id).eq('user_id', userId);
+        const { data: deleted, error: delErr } = await supabase.from('movimientos').delete().eq('id_movimiento', request.id).eq('user_id', userId).select();
+        if (delErr) throw delErr;
+        if (!deleted || deleted.length === 0) {
+          return res.status(404).json({ success: false, error: 'No se encontró el movimiento para eliminar o no tienes permisos.' });
+        }
         break;
       }
       case 'GROUP': {

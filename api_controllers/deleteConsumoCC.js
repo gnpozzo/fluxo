@@ -27,8 +27,11 @@ export default async function handler(req, res) {
 
     if (scope === 'SINGLE') {
       if (!consumoId) throw new Error('consumoId requerido');
-      const { error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', consumoId).eq('user_id', userId);
+      const { data: deleted, error } = await supabase.from('cc_consumos').delete().eq('id_cc_consumo', consumoId).eq('user_id', userId).select();
       if (error) throw error;
+      if (!deleted || deleted.length === 0) {
+        return res.status(404).json({ success: false, error: 'No se encontró el consumo de cuenta corriente para eliminar.' });
+      }
     } else if (request.scope === 'SERIES') {
       if (!request.recurGroupId || !request.fecha) throw new Error('Faltan recurGroupId o fecha');
       const { error } = await supabase.from('cc_consumos').delete()

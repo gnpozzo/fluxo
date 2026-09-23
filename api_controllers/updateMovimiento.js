@@ -178,8 +178,11 @@ export default async function handler(req, res) {
       if (mov.idCuenta) updatePayload.id_cuenta_principal = mov.idCuenta;
       if (mov.tipo) updatePayload.tipo_mov = mov.tipo;
 
-      const { error } = await supabase.from('movimientos').update(updatePayload).eq('id_movimiento', targetId).eq('user_id', userId);
+      const { data: updated, error } = await supabase.from('movimientos').update(updatePayload).eq('id_movimiento', targetId).eq('user_id', userId).select();
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        return res.status(404).json({ success: false, error: 'No se encontró el movimiento para actualizar.' });
+      }
     }
 
     return res.status(200).json({ success: true, data: {} });

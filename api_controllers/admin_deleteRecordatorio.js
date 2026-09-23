@@ -11,10 +11,19 @@ export default async function handler(req, res) {
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
     if (!id) return res.status(400).json({ success: false, error: 'Falta id_recordatorio' });
 
-    const { error } = await supabase.from('recordatorios').delete().eq('id_recordatorio', id).eq('user_id', userId);
-    if (error) throw error;
+    const { data: deleted, error } = await supabase
+      .from('recordatorios')
+      .delete()
+      .eq('id_recordatorio', id)
+      .eq('user_id', userId)
+      .select();
 
-    return res.status(200).json({ success: true, id });
+    if (error) throw error;
+    if (!deleted || deleted.length === 0) {
+      return res.status(404).json({ success: false, error: 'No se encontró el recordatorio o no tienes permisos.' });
+    }
+
+    return res.status(200).json({ success: true, id, message: 'Recordatorio eliminado correctamente' });
   } catch (err) {
     console.error('[API -> admin_deleteRecordatorio]', err.message);
     return res.status(500).json({ success: false, error: err.message });

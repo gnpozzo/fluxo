@@ -11,7 +11,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: 'Unauthorized: User context missing' });
     }
 
-    let [cuentasRes, categoriasRes, tarjetasRes, usuariosCcRes, subcuentasRes] = await Promise.all([
+    let [cuentasRes, categoriasRes, tarjetasRes, usuariosCcRes, subcuentasRes, perfilRes] = await Promise.all([
       supabase.from('cuentas_principales')
         .select('id_cuenta_principal,nombre,moneda_principal,es_predeterminada,activa,fecha_creacion,modulo_tarjetas_activo,modulo_cc_activo,modulo_ahorro_activo,modulo_inversiones_activo,icono')
         .eq('user_id', userId)
@@ -36,7 +36,11 @@ export default async function handler(req, res) {
         .order('nombre', { ascending: true }),
       supabase.from('ahorro_subcuentas')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', userId),
+      supabase.from('perfiles_usuario')
+        .select('preferencias')
+        .eq('id', userId)
+        .maybeSingle()
     ]);
 
     if (cuentasRes.error) throw cuentasRes.error;
@@ -94,11 +98,22 @@ export default async function handler(req, res) {
       meses.push(`${yyyy}-${mm}`);
     }
 
+    const prefs = (perfilRes?.data && typeof perfilRes.data.preferencias === 'object' && perfilRes.data.preferencias) ? perfilRes.data.preferencias : {};
+    const ocultas = new Set(Array.isArray(prefs.categorias_ocultas) ? prefs.categorias_ocultas : []);
+    const customOverrides = prefs.categorias_personalizadas || {};
+
+    const categoriasFinal = (categoriasRes.data || [])
+      .filter(c => !ocultas.has(c.id_categoria))
+      .map(c => {
+        const custom = customOverrides[c.id_categoria] || {};
+        return { ...c, ...custom };
+      });
+
     return res.status(200).json({
       success: true,
       cuentas: cuentas,
       meses: meses,
-      categorias: categoriasRes.data || [],
+      categorias: categoriasFinal,
       tarjetas: tarjetasRes.data || [],
       subcuentas: subcuentas,
       usuarios_cc: usuariosCc
