@@ -1996,11 +1996,68 @@ export class DashboardModule extends BaseModule {
       return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
     });
 
+    // Group Ingresos by category
+    const incomeCatGroups = {};
+    ingresos.forEach(m => {
+      const catName = m.categoria_nombre || 'Ingresos Varios';
+      if (!incomeCatGroups[catName]) {
+        const catDef = (window._appCategorias || []).find(c => c.id_categoria === m.id_categoria || (c.nombre && c.nombre.toLowerCase() === catName.toLowerCase()));
+        incomeCatGroups[catName] = {
+          name: catName,
+          jerarquia: catDef?.jerarquia || '',
+          items: [],
+          subtotal: 0
+        };
+      }
+      incomeCatGroups[catName].items.push(m);
+      incomeCatGroups[catName].subtotal += Math.abs(Number(m.importe || 0));
+    });
+
+    // Sort Ingresos categories by jerarquia, then alphabetically
+    const sortedIncomeCatGroups = Object.values(incomeCatGroups).sort((a, b) => {
+      const jA = (a.jerarquia || '').trim();
+      const jB = (b.jerarquia || '').trim();
+      if (jA && jB) {
+        return jA.localeCompare(jB, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      if (jA && !jB) return -1;
+      if (!jA && jB) return 1;
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     let accordionsHtml = '';
 
-    // If Ingresos present and allowed by filter, render Ingresos accordion first
+    // If Ingresos present and allowed by filter, render Ingresos master accordion containing category accordions
     if (ingresos.length > 0 && this.#movFilter !== 'EGRESO') {
       const subtotalIngresos = ingresos.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
+
+      let incomeCategoriesHtml = '';
+      sortedIncomeCatGroups.forEach(group => {
+        incomeCategoriesHtml += `
+          <div class="finset-cat-accordion is-open" data-cat-group="${App.Utils.escapeHtml(group.name)}">
+            <div class="fca-header" role="button" tabindex="0" title="Clic para expandir / colapsar">
+              <div class="fca-header-left">
+                <span class="fca-chevron">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+                <span class="fca-icon icon-green">
+                  ${getCategoryIconSvg(group.name, 'INGRESO')}
+                </span>
+                <span class="fca-title">${App.Utils.escapeHtml(group.name)}</span>
+                ${group.jerarquia ? `<span class="fca-badge-jerarquia" title="Jerarquía">${App.Utils.escapeHtml(group.jerarquia)}</span>` : ''}
+                <span class="fca-count">${group.items.length} ${group.items.length === 1 ? 'ingreso' : 'ingresos'}</span>
+              </div>
+              <div class="fca-header-right">
+                <span class="fca-subtotal positivo">+ ${App.Utils.formatearMoneda(group.subtotal)}</span>
+              </div>
+            </div>
+            <div class="fca-body">
+              ${group.items.map(m => renderMovementRow(m, { hideCatIcon: true })).join('')}
+            </div>
+          </div>
+        `;
+      });
+
       accordionsHtml += `
         <div class="finset-cat-accordion is-open is-income" data-cat-group="Ingresos">
           <div class="fca-header" role="button" tabindex="0" title="Clic para expandir / colapsar">
@@ -2018,8 +2075,8 @@ export class DashboardModule extends BaseModule {
               <span class="fca-subtotal positivo">+ ${App.Utils.formatearMoneda(subtotalIngresos)}</span>
             </div>
           </div>
-          <div class="fca-body">
-            ${ingresos.map(renderMovementRow).join('')}
+          <div class="fca-body fca-body-nested">
+            ${incomeCategoriesHtml}
           </div>
         </div>
       `;
