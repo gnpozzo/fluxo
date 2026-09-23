@@ -22,6 +22,12 @@ export default async function handler(req, res) {
       finalArgs = req.body.args;
     } else if (typeof req.body === 'string') {
       try { finalArgs = JSON.parse(req.body); if (finalArgs.args) finalArgs = finalArgs.args; } catch(e){}
+    } else if (req.body && typeof req.body === 'object') {
+      finalArgs = [req.body.cuenta || req.body.idCuenta, req.body.fechaInicio, req.body.fechaFin];
+    }
+
+    if (Array.isArray(finalArgs[0])) {
+      finalArgs = finalArgs[0];
     }
     const [cuenta, fechaInicio, fechaFin] = finalArgs;
 

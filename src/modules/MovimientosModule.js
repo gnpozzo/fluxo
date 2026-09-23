@@ -1669,18 +1669,21 @@ export class MovimientosModule extends BaseModule {
     }
     const { fechaInicio, fechaFin } = this.#calcFechas(ym);
     try {
-      const resp = await App.API.call('api_getDashboardData', [idCuenta, fechaInicio, fechaFin, false]);
+      const respObj = await App.API.swr('api_getDashboardData', [idCuenta, fechaInicio, fechaFin, false], App.API.defaultTtl);
+      const resp = respObj?.data || respObj;
       const kpis = resp?.kpis || resp?.data?.kpis || {};
       const totalIngresos = Number(kpis.ingresos || 0);
       const movs = resp?.movimientos || resp?.data?.movimientos || [];
 
       // Agrupar ingresos por categoría
       const catMap = {};
+      const allCats = this.#categorias.length ? this.#categorias : (window._appCategorias || []);
       movs.forEach(m => {
         const isIngreso = m.tipo_mov === 'INGRESO' || (m.tipo_mov === 'TRANSFERENCIA' && m.id_cuenta_destino === idCuenta);
         if (isIngreso) {
           const catId = m.id_categoria || 'CAT_GENERAL';
-          const catNombre = m.categoria_nombre || (catId === 'CAT_GENERAL' ? 'General' : catId);
+          const catFound = allCats.find(c => c.id_categoria === catId);
+          const catNombre = m.categoria_nombre || catFound?.nombre || (catId === 'CAT_GENERAL' ? 'General' : catId);
           const amt = Math.abs(Number(m.importe || 0));
           if (!catMap[catId]) {
             catMap[catId] = {
@@ -1694,8 +1697,10 @@ export class MovimientosModule extends BaseModule {
       });
 
       const categorias = Object.values(catMap);
-      const res = { total: totalIngresos, categorias };
-      if (totalIngresos > 0 || categorias.length > 0) {
+      const sumCatTotal = categorias.reduce((s, c) => s + c.total, 0);
+      const finalTotal = totalIngresos > 0 ? totalIngresos : sumCatTotal;
+      const res = { total: finalTotal, categorias };
+      if (finalTotal > 0 || categorias.length > 0) {
         this.#cacheIngresos[cacheKey] = res;
       }
       return res;
