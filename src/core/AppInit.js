@@ -1158,7 +1158,7 @@ class AppInit {
       const renderHistoryList = (filterCat = 'todas') => {
         const filtered = allNotif.filter(n => {
           if (filterCat === 'todas') return true;
-          if (filterCat === 'cuotas') return n.categoria === 'cuotas' || (n.titulo || '').toLowerCase().includes('cuota');
+          if (filterCat === 'cuotas') return n.categoria === 'cuotas' || (n.titulo || '').toLowerCase().includes('cuota') || (n.titulo || '').toLowerCase().includes('recurrente');
           if (filterCat === 'recordatorios') return n.categoria === 'recordatorios' || (n.titulo || '').toLowerCase().includes('recordatorio');
           if (filterCat === 'vencimientos') return (n.titulo || '').toLowerCase().includes('venc') || (n.titulo || '').toLowerCase().includes('cierre');
           return true;

@@ -562,8 +562,9 @@ export class TarjetasModule extends BaseModule {
       rowId: row.id_consumo_tc || row.id_consumo_tarjeta
     };
     this.#editData = row;
+    const isUSD = row.moneda === 'USD';
     this.#modal.open({
-      titulo      : 'Editar Consumo',
+      titulo      : `Editar Consumo ${isUSD ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:var(--verde, #10b981); font-weight:700; font-size:0.75rem; margin-left:8px; vertical-align:middle; padding:2px 8px; border-radius:6px;">🇺🇸 Consumo en Dólares (USD)</span>' : ''}`,
       icono       : 'edit',
       body        : this.#buildFormHtml(row),
       confirmLabel: 'Actualizar',
@@ -597,10 +598,27 @@ export class TarjetasModule extends BaseModule {
     const rawFecha = App.Utils.toInputDate(data?.fecha?.value || data?.fecha);
 
     const tipoConsumo = data?.tipo_consumo || (data?.recur_group_id?.startsWith('REC_') ? 'RECURRENTE' : (Number(data?.cuota_total) > 1 ? 'CUOTAS' : 'COMUN'));
+    const moneda = data?.moneda || 'ARS';
+    const isUSD = moneda === 'USD';
 
     return `
       <form id="form-tc" class="form-grid">
         <input type="hidden" name="id_consumo" value="${data?.id_consumo_tc || data?.id_consumo_tarjeta || ''}">
+
+        <!-- Selector de Moneda del Consumo -->
+        <div class="form-group full-width" style="margin-bottom:2px">
+          <label style="font-weight:600;font-size:0.8rem;display:block;margin-bottom:5px;color:var(--texto-2);text-transform:uppercase;letter-spacing:0.03em">Moneda del Consumo <span class="required-mark">*</span></label>
+          <div style="display:flex; background:var(--bg-2, #f1f5f9); border:1px solid var(--borde); border-radius:8px; padding:3px; gap:4px; max-width:320px;">
+            <label id="lbl-tc-moneda-ars" class="tc-moneda-pill ${!isUSD ? 'active' : ''}" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.84rem; font-weight:700; transition:all 0.15s; ${!isUSD ? 'background:var(--primary); color:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);' : 'background:transparent; color:var(--texto-2);'}">
+              <input type="radio" name="moneda" value="ARS" ${!isUSD ? 'checked' : ''} style="display:none;">
+              🇦🇷 ARS ($)
+            </label>
+            <label id="lbl-tc-moneda-usd" class="tc-moneda-pill ${isUSD ? 'active' : ''}" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.84rem; font-weight:700; transition:all 0.15s; ${isUSD ? 'background:var(--verde, #10b981); color:#fff; box-shadow:0 1px 3px rgba(16,185,129,0.25);' : 'background:transparent; color:var(--texto-2);'}">
+              <input type="radio" name="moneda" value="USD" ${isUSD ? 'checked' : ''} style="display:none;">
+              🇺🇸 USD (US$)
+            </label>
+          </div>
+        </div>
 
         <div class="form-group">
           <label>Fecha <span class="required-mark">*</span></label>
@@ -639,9 +657,12 @@ export class TarjetasModule extends BaseModule {
         </div>
 
         <div class="form-group">
-          <label id="lbl-tc-importe">Importe <span class="required-mark">*</span></label>
-          <input class="input" type="number" name="importe" min="0.01" step="0.01"
-                 value="${data?.importe || ''}" required>
+          <label id="lbl-tc-importe">Importe (${moneda}) <span class="required-mark">*</span></label>
+          <div style="position:relative; display:flex; align-items:center;">
+            <span id="tc-importe-prefix" style="position:absolute; left:12px; font-weight:700; color:var(--texto-2); font-size:0.95rem;">${isUSD ? 'US$' : '$'}</span>
+            <input class="input" type="number" name="importe" min="0.01" step="0.01"
+                   value="${data?.importe || ''}" required style="padding-left:46px; font-size:1rem; font-weight:600;">
+          </div>
         </div>
 
         <div id="tc-cuotas-opts" class="form-group full-width ${tipoConsumo !== 'CUOTAS' ? 'hidden' : ''}">
@@ -731,6 +752,8 @@ export class TarjetasModule extends BaseModule {
       const modo = document.querySelector('input[name="cuotas_modo_monto"]:checked')?.value || 'cuota';
       const importeInput = document.querySelector('#form-tc input[name="importe"]');
       const cuotaTotInput = document.querySelector('#form-tc input[name="cuota_total"]');
+      const isUsd = document.querySelector('#form-tc input[name="moneda"]:checked')?.value === 'USD';
+      const curSign = isUsd ? 'US$' : '$';
       const cuotas = Math.max(1, Number(cuotaTotInput?.value || 1));
       const val = Number(String(importeInput?.value || '').replace(',', '.'));
 
@@ -742,12 +765,39 @@ export class TarjetasModule extends BaseModule {
       infoEl.style.display = 'block';
       if (modo === 'total') {
         const porCuota = val / cuotas;
-        infoEl.innerHTML = `💡 Se registrarán <strong>${cuotas} cuotas de $ ${porCuota.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (Monto total: $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+        infoEl.innerHTML = `💡 Se registrarán <strong>${cuotas} cuotas de ${curSign} ${porCuota.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (Monto total: ${curSign} ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
       } else {
         const total = val * cuotas;
-        infoEl.innerHTML = `💡 Total estimado de la compra: <strong>$ ${total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (${cuotas} cuotas de $ ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+        infoEl.innerHTML = `💡 Total estimado de la compra: <strong>${curSign} ${total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (${cuotas} cuotas de ${curSign} ${val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
       }
     };
+
+    // Moneda switch listeners
+    document.querySelectorAll('#form-tc input[name="moneda"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const isUsd = radio.value === 'USD';
+        const pillArs = document.getElementById('lbl-tc-moneda-ars');
+        const pillUsd = document.getElementById('lbl-tc-moneda-usd');
+        const lblImporte = document.getElementById('lbl-tc-importe');
+        const prefix = document.getElementById('tc-importe-prefix');
+
+        if (pillArs) {
+          pillArs.style.background = isUsd ? 'transparent' : 'var(--primary)';
+          pillArs.style.color = isUsd ? 'var(--texto-2)' : '#fff';
+        }
+        if (pillUsd) {
+          pillUsd.style.background = isUsd ? 'var(--verde, #10b981)' : 'transparent';
+          pillUsd.style.color = isUsd ? '#fff' : 'var(--texto-2)';
+        }
+        if (lblImporte) {
+          lblImporte.innerHTML = `Importe (${isUsd ? 'USD' : 'ARS'}) <span class="required-mark">*</span>`;
+        }
+        if (prefix) {
+          prefix.textContent = isUsd ? 'US$' : '$';
+        }
+        updateTcCuotasInfo();
+      });
+    });
 
     tipoSel?.addEventListener('change', () => {
       document.getElementById('tc-cuotas-opts')?.classList.toggle('hidden', tipoSel.value !== 'CUOTAS');
@@ -800,6 +850,7 @@ export class TarjetasModule extends BaseModule {
       idCategoria : d.id_categoria,
       descripcion : d.descripcion,
       importe     : cleanImporte,
+      moneda      : d.moneda || 'ARS',
       tipoConsumo : d.tipo_consumo || 'COMUN',
       cuotaActual : Number(d.cuota_actual || 1),
       cuotaTotal  : Number(d.cuota_total  || 1),
@@ -837,7 +888,8 @@ export class TarjetasModule extends BaseModule {
           original: {
             consumoId   : this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta,
             recurGroupId: this.#editData.recur_group_id || null,
-            fecha       : App.Utils.toInputDate(this.#editData.fecha?.value || this.#editData.fecha)
+            fecha       : App.Utils.toInputDate(this.#editData.fecha?.value || this.#editData.fecha),
+            moneda      : d.moneda || this.#editData.moneda || 'ARS'
           },
           scope: reqScope
         };
@@ -993,16 +1045,25 @@ export class TarjetasModule extends BaseModule {
     }
     if (row.imputado) badges.push('<span class="badge badge-tc">Imputado</span>');
 
+    const isUSD = row.moneda === 'USD';
+    const importeFmt = isUSD
+      ? 'US$ ' + Number(row.importe || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : App.Utils.formatearMoneda(row.importe);
+
     const detailModal = new App.Modal('modal-tc-detail');
     detailModal.open({
-      titulo: row.descripcion,
+      titulo: `${App.Utils.escapeHtml(row.descripcion)} ${isUSD ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:var(--verde, #10b981); font-weight:700; font-size:0.75rem; margin-left:6px; vertical-align:middle; padding:2px 8px; border-radius:6px;">🇺🇸 USD</span>' : ''}`,
       icono: 'card',
       size: 'md',
       body: `
         <div class="detail-grid">
           <div class="detail-item">
             <span class="detail-label">Importe</span>
-            <span class="detail-value detail-amount negativo">${App.Utils.formatearMoneda(row.importe)}</span>
+            <span class="detail-value detail-amount negativo">${importeFmt}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Moneda</span>
+            <span class="detail-value">${isUSD ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:var(--verde, #10b981); font-weight:700;">🇺🇸 Dólares (USD)</span>' : '<span class="badge badge-neutro">🇦🇷 Pesos (ARS)</span>'}</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">Tarjeta</span>

@@ -2326,6 +2326,10 @@ export class DashboardModule extends BaseModule {
   }
 
   #abrirModalEdicionMov(row) {
+    if (App.Modules?.movimientos) {
+      App.Modules.movimientos.abrirEdicion(row);
+      return;
+    }
     const modal = new App.Modal('modal-dash-mov-edit');
     const tipo = row.tipo_mov;
     const esIngreso = tipo === 'INGRESO';

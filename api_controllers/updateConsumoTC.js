@@ -97,15 +97,16 @@ export default async function handler(req, res) {
     let targetTarjetaId = consumo.idTarjeta || consumo.id_tarjeta || original.id_tarjeta || original.idTarjeta;
     let targetCategoriaId = consumo.idCategoria || consumo.id_categoria || original.id_categoria || original.idCategoria;
 
-    // Si faltan datos críticos o recurGrp, consultar el registro existente antes de borrar
-    if ((!targetTarjetaId || !recurGrp || !targetCategoriaId) && origId) {
-      const { data: existingTC } = await supabase
+    let existingTC = null;
+    if ((!targetTarjetaId || !recurGrp || !targetCategoriaId || !consumo.moneda) && origId) {
+      const { data: qTC } = await supabase
         .from('consumos_tc')
-        .select('id_tarjeta, id_categoria, recur_group_id, fecha, descripcion, importe')
+        .select('id_tarjeta, id_categoria, recur_group_id, fecha, descripcion, importe, moneda')
         .eq('id_consumo_tarjeta', origId)
         .eq('user_id', userId)
         .maybeSingle();
 
+      existingTC = qTC;
       if (existingTC) {
         if (!targetTarjetaId) targetTarjetaId = existingTC.id_tarjeta;
         if (!targetCategoriaId) targetCategoriaId = existingTC.id_categoria;
@@ -115,6 +116,8 @@ export default async function handler(req, res) {
         if (consumo.importe === undefined && existingTC.importe !== undefined) consumo.importe = existingTC.importe;
       }
     }
+
+    const targetMoneda = consumo.moneda || original.moneda || existingTC?.moneda || 'ARS';
 
     if (!targetTarjetaId) {
       return res.status(400).json({ success: false, error: 'Tarjeta de crédito no especificada o no encontrada.' });
@@ -197,7 +200,8 @@ export default async function handler(req, res) {
         user_id: userId,
         fecha: fechaISO,
         descripcion: consumo.descripcion,
-        importe: cleanImporte
+        importe: cleanImporte,
+        moneda: targetMoneda
       });
       if (consumo.imputar && targetAccountId && !isTaxConcept(consumo.descripcion)) {
         movRows.push({
@@ -209,6 +213,7 @@ export default async function handler(req, res) {
           tipo_mov: 'EGRESO',
           descripcion: consumo.descripcion,
           importe: cleanImporte,
+          moneda: targetMoneda,
           medio_pago: 'Tarjeta de Crédito',
           id_consumo_tarjeta_origen: idConsumo
         });
@@ -247,7 +252,8 @@ export default async function handler(req, res) {
           importe: cleanImporte,
           cuota_actual: cuotaNumActual,
           cuota_total: consumo.cuotaTotal,
-          recur_group_id: installmentGroupId
+          recur_group_id: installmentGroupId,
+          moneda: targetMoneda
         });
         if (consumo.imputar && targetAccountId && !isTaxConcept(consumo.descripcion)) {
           const descImputacion = consumo.descripcion + ' (Cuota ' + cuotaNumActual + '/' + consumo.cuotaTotal + ')';
@@ -260,6 +266,7 @@ export default async function handler(req, res) {
             tipo_mov: 'EGRESO',
             descripcion: descImputacion,
             importe: cleanImporte,
+            moneda: targetMoneda,
             medio_pago: 'Tarjeta de Crédito',
             recur_group_id: installmentGroupId,
             id_consumo_tarjeta_origen: idConsumo
@@ -297,7 +304,8 @@ export default async function handler(req, res) {
           fecha: fechaRec,
           descripcion: consumo.descripcion,
           importe: cleanImporte,
-          recur_group_id: recurGroupId
+          recur_group_id: recurGroupId,
+          moneda: targetMoneda
         });
         if (consumo.imputar && targetAccountId && !isTaxConcept(consumo.descripcion)) {
           movRows.push({
@@ -309,6 +317,7 @@ export default async function handler(req, res) {
             tipo_mov: 'EGRESO',
             descripcion: consumo.descripcion,
             importe: cleanImporte,
+            moneda: targetMoneda,
             medio_pago: 'Tarjeta de Crédito',
             recur_group_id: recurGroupId,
             id_consumo_tarjeta_origen: idConsumo

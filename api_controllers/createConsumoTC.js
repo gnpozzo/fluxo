@@ -363,7 +363,7 @@ export default async function handler(req, res) {
           await supabase.from('tarjetas').update(updateFields).eq('id_tarjeta', targetCardId).eq('user_id', userId);
         }
 
-        // Generar recordatorios automáticos de cierre y vencimiento
+        // Generar recordatorios automáticos de cierre y vencimiento sin duplicar
         if (st.fecha_vencimiento) {
           const vDate = new Date(st.fecha_vencimiento + 'T12:00:00Z');
           const reminderVto = new Date(vDate);
@@ -374,13 +374,20 @@ export default async function handler(req, res) {
           const saldoUsdStr = st.total_usd ? ` y U$S ${Number(st.total_usd).toFixed(2)}` : '';
           const msgVto = `Tu resumen de tarjeta vence el ${st.fecha_vencimiento.split('-').reverse().join('/')}. Saldo a pagar: ${saldoArsStr}${saldoUsdStr}`;
 
+          // Limpiar recordatorios previos de vencimiento de resumen de esta cuenta
+          await supabase.from('recordatorios')
+            .delete()
+            .eq('user_id', userId)
+            .eq('id_cuenta_principal', targetAccountId)
+            .ilike('mensaje', '%Tu resumen de tarjeta vence%');
+
           await supabase.from('recordatorios').insert([{
             id_recordatorio: crypto.randomUUID(),
             id_cuenta_principal: targetAccountId,
             user_id: userId,
             mensaje: msgVto,
             fecha_proxima: remVtoStr,
-            frecuencia: 'MENSUAL',
+            frecuencia: 'UNICA',
             canales: 'app,telegram',
             activa: true
           }]);
@@ -392,13 +399,20 @@ export default async function handler(req, res) {
           const remCierreStr = cDate.toISOString().split('T')[0];
           const msgCierre = `Aviso de cierre: Tu tarjeta cierra su ciclo el ${st.proximo_cierre.split('-').reverse().join('/')}`;
 
+          // Limpiar recordatorios previos de cierre de ciclo de esta cuenta
+          await supabase.from('recordatorios')
+            .delete()
+            .eq('user_id', userId)
+            .eq('id_cuenta_principal', targetAccountId)
+            .ilike('mensaje', '%Aviso de cierre: Tu tarjeta cierra su ciclo%');
+
           await supabase.from('recordatorios').insert([{
             id_recordatorio: crypto.randomUUID(),
             id_cuenta_principal: targetAccountId,
             user_id: userId,
             mensaje: msgCierre,
             fecha_proxima: remCierreStr,
-            frecuencia: 'MENSUAL',
+            frecuencia: 'UNICA',
             canales: 'app,telegram',
             activa: true
           }]);

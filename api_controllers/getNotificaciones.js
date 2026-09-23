@@ -54,6 +54,21 @@ export default async function handler(req, res) {
     if (error) throw error;
 
     if (consumos && consumos.length > 0) {
+      // Find future TC recurring items
+      const tcRecurIds = [...new Set(consumos.map(c => c.recur_group_id).filter(id => id && id.startsWith('REC_')))];
+      const futureTCRecurSet = new Set();
+      if (tcRecurIds.length > 0) {
+        const { data: futureTC } = await supabase
+          .from('consumos_tc')
+          .select('recur_group_id')
+          .in('recur_group_id', tcRecurIds)
+          .gt('fecha', dateEnd)
+          .eq('user_id', userId);
+        (futureTC || []).forEach(f => futureTCRecurSet.add(f.recur_group_id));
+      }
+
+      const seenLastRecurTC = new Set();
+
       consumos.forEach(c => {
          const cuotaTot = Number(c.cuota_total || 1);
          const cuotaAct = Number(c.cuota_actual || 1);
@@ -85,6 +100,20 @@ export default async function handler(req, res) {
                tipo_entidad: 'consumo_tc',
                id_entidad: c.id_consumo_tarjeta
             });
+         } else if (isRecur && c.recur_group_id && !futureTCRecurSet.has(c.recur_group_id) && !seenLastRecurTC.has(c.recur_group_id)) {
+            seenLastRecurTC.add(c.recur_group_id);
+            notificaciones.push({
+               id: c.id_consumo_tarjeta + '_fin_recur',
+               tipo: 'info',
+               icono: 'check_circle',
+               categoria: 'cuotas',
+               titulo: 'Último Consumo Recurrente (TC)',
+               mensaje: 'Finaliza el cargo recurrente de "' + c.descripcion + '".',
+               importe: c.importe,
+               fecha: c.fecha || (trimmed + '-01'),
+               tipo_entidad: 'consumo_tc',
+               id_entidad: c.id_consumo_tarjeta
+            });
          } else if (cuotaTot <= 1 && !isRecur) {
             notificaciones.push({
                id: c.id_consumo_tarjeta + '_unica',
@@ -108,44 +137,95 @@ export default async function handler(req, res) {
         .from('movimientos')
         .select('id_movimiento, fecha, descripcion, importe, tipo_mov, recur_group_id')
         .eq('id_cuenta_principal', cuenta)
-        .eq('tipo_mov', 'EGRESO')
+        .in('tipo_mov', ['EGRESO', 'INGRESO'])
         .gte('fecha', dateStart)
         .lte('fecha', dateEnd);
 
       if (!movsErr && movs && movs.length > 0) {
+        const movRecurIds = [...new Set(movs.map(m => m.recur_group_id).filter(id => id && id.startsWith('REC_')))];
+        const futureMovRecurSet = new Set();
+        if (movRecurIds.length > 0) {
+          const { data: futureMovs } = await supabase
+            .from('movimientos')
+            .select('recur_group_id')
+            .in('recur_group_id', movRecurIds)
+            .gt('fecha', dateEnd)
+            .eq('user_id', userId);
+          (futureMovs || []).forEach(f => futureMovRecurSet.add(f.recur_group_id));
+        }
+
+        const seenLastRecurMovs = new Set();
+
         movs.forEach(m => {
           const desc = m.descripcion || '';
           const matchCuota = desc.match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || desc.match(/\((\d+)\/(\d+)\)/);
+          const isIngreso = m.tipo_mov === 'INGRESO';
+
           if (matchCuota) {
             const act = parseInt(matchCuota[1], 10);
             const tot = parseInt(matchCuota[2], 10);
             if (tot > 1 && act === tot) {
               notificaciones.push({
-                id: m.id_movimiento + '_fin_gasto',
-                tipo: 'info',
-                icono: 'check_circle',
+                id: m.id_movimiento + (isIngreso ? '_fin_ingreso' : '_fin_gasto'),
+                tipo: isIngreso ? 'ingreso' : 'info',
+                icono: isIngreso ? 'savings' : 'check_circle',
                 categoria: 'cuotas',
-                titulo: 'Última Cuota de Gasto',
-                mensaje: 'Finaliza el pago de cuotas de "' + desc + '".',
+                titulo: isIngreso ? 'Última Cuota de Ingreso' : 'Última Cuota de Gasto',
+                mensaje: isIngreso
+                  ? 'Se percibe la última cuota de "' + desc + '".'
+                  : 'Finaliza el pago de cuotas de "' + desc + '".',
+                importe: m.importe,
+                fecha: m.fecha || (trimmed + '-01'),
+                tipo_entidad: 'movimiento',
+                id_entidad: m.id_movimiento
+              });
+            } else if (tot > 1 && act === 1) {
+              if (isIngreso) {
+                notificaciones.push({
+                  id: m.id_movimiento + '_nuevo_ingreso',
+                  tipo: 'ingreso',
+                  icono: 'fiber_new',
+                  categoria: 'cuotas',
+                  titulo: 'Nuevo Ingreso en Cuotas',
+                  mensaje: 'Inicia la 1° cuota de cobro de "' + desc + '".',
+                  importe: m.importe,
+                  fecha: m.fecha || (trimmed + '-01'),
+                  tipo_entidad: 'movimiento',
+                  id_entidad: m.id_movimiento
+                });
+              }
+            }
+          } else if (m.recur_group_id?.startsWith('REC_') && !futureMovRecurSet.has(m.recur_group_id) && !seenLastRecurMovs.has(m.recur_group_id)) {
+            seenLastRecurMovs.add(m.recur_group_id);
+            notificaciones.push({
+              id: m.id_movimiento + '_fin_recur',
+              tipo: isIngreso ? 'ingreso' : 'info',
+              icono: isIngreso ? 'savings' : 'check_circle',
+              categoria: 'cuotas',
+              titulo: isIngreso ? 'Último Ingreso Recurrente' : 'Último Pago Recurrente',
+              mensaje: isIngreso
+                ? 'Finaliza la serie recurrente de ingresos de "' + desc + '".'
+                : 'Finaliza la serie de pagos recurrentes de "' + desc + '".',
+              importe: m.importe,
+              fecha: m.fecha || (trimmed + '-01'),
+              tipo_entidad: 'movimiento',
+              id_entidad: m.id_movimiento
+            });
+          } else if (!m.recur_group_id?.startsWith('REC_') && !desc.toLowerCase().includes('reintegro tc')) {
+            if (!isIngreso) {
+              notificaciones.push({
+                id: m.id_movimiento + '_unica_gasto',
+                tipo: 'info',
+                icono: 'receipt',
+                categoria: 'cuotas',
+                titulo: 'Gasto en Única Cuota',
+                mensaje: 'Pago registrado: "' + desc + '".',
                 importe: m.importe,
                 fecha: m.fecha || (trimmed + '-01'),
                 tipo_entidad: 'movimiento',
                 id_entidad: m.id_movimiento
               });
             }
-          } else if (!m.recur_group_id?.startsWith('REC_') && !desc.toLowerCase().includes('reintegro tc')) {
-            notificaciones.push({
-              id: m.id_movimiento + '_unica_gasto',
-              tipo: 'info',
-              icono: 'receipt',
-              categoria: 'cuotas',
-              titulo: 'Gasto en Única Cuota',
-              mensaje: 'Pago registrado: "' + desc + '".',
-              importe: m.importe,
-              fecha: m.fecha || (trimmed + '-01'),
-              tipo_entidad: 'movimiento',
-              id_entidad: m.id_movimiento
-            });
           }
         });
       }
