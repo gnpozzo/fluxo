@@ -55,37 +55,114 @@ export default async function handler(req, res) {
 
     if (consumos && consumos.length > 0) {
       consumos.forEach(c => {
-         if (c.cuota_total > 1 && c.cuota_actual === c.cuota_total) {
+         const cuotaTot = Number(c.cuota_total || 1);
+         const cuotaAct = Number(c.cuota_actual || 1);
+         const isRecur = c.tipo_consumo === 'RECURRENTE' || c.recur_group_id?.startsWith('REC_');
+
+         if (cuotaTot > 1 && cuotaAct === cuotaTot) {
             notificaciones.push({
                id: c.id_consumo_tarjeta + '_fin',
                tipo: 'info',
                icono: 'check_circle',
+               categoria: 'cuotas',
                titulo: 'Última Cuota en Tarjeta',
                mensaje: 'El consumo "' + c.descripcion + '" finaliza este mes.',
                importe: c.importe,
-               fecha: c.fecha || (trimmed + '-01')
+               fecha: c.fecha || (trimmed + '-01'),
+               tipo_entidad: 'consumo_tc',
+               id_entidad: c.id_consumo_tarjeta
             });
-         } else if (c.cuota_total > 1 && c.cuota_actual === 1) {
+         } else if (cuotaTot > 1 && cuotaAct === 1) {
             notificaciones.push({
                id: c.id_consumo_tarjeta + '_nuevo',
                tipo: 'ingreso',
                icono: 'fiber_new',
+               categoria: 'cuotas',
                titulo: 'Nuevo Consumo en Cuotas',
                mensaje: 'Inicia la 1° cuota de "' + c.descripcion + '".',
                importe: c.importe,
-               fecha: c.fecha || (trimmed + '-01')
+               fecha: c.fecha || (trimmed + '-01'),
+               tipo_entidad: 'consumo_tc',
+               id_entidad: c.id_consumo_tarjeta
+            });
+         } else if (cuotaTot <= 1 && !isRecur) {
+            notificaciones.push({
+               id: c.id_consumo_tarjeta + '_unica',
+               tipo: 'info',
+               icono: 'credit_card',
+               categoria: 'cuotas',
+               titulo: 'Consumo Única Cuota (TC)',
+               mensaje: 'Consumo al contado: "' + c.descripcion + '".',
+               importe: c.importe,
+               fecha: c.fecha || (trimmed + '-01'),
+               tipo_entidad: 'consumo_tc',
+               id_entidad: c.id_consumo_tarjeta
             });
          }
       });
     }
 
-    // Fetch active reminders for the account that have APP channel
-    const { data: recordatorios, error: recError } = await supabase
+    // Fetch movements of the account in the month for cuota notifications
+    if (cuenta) {
+      const { data: movs, error: movsErr } = await supabase
+        .from('movimientos')
+        .select('id_movimiento, fecha, descripcion, importe, tipo_mov, recur_group_id')
+        .eq('id_cuenta_principal', cuenta)
+        .eq('tipo_mov', 'EGRESO')
+        .gte('fecha', dateStart)
+        .lte('fecha', dateEnd);
+
+      if (!movsErr && movs && movs.length > 0) {
+        movs.forEach(m => {
+          const desc = m.descripcion || '';
+          const matchCuota = desc.match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || desc.match(/\((\d+)\/(\d+)\)/);
+          if (matchCuota) {
+            const act = parseInt(matchCuota[1], 10);
+            const tot = parseInt(matchCuota[2], 10);
+            if (tot > 1 && act === tot) {
+              notificaciones.push({
+                id: m.id_movimiento + '_fin_gasto',
+                tipo: 'info',
+                icono: 'check_circle',
+                categoria: 'cuotas',
+                titulo: 'Última Cuota de Gasto',
+                mensaje: 'Finaliza el pago de cuotas de "' + desc + '".',
+                importe: m.importe,
+                fecha: m.fecha || (trimmed + '-01'),
+                tipo_entidad: 'movimiento',
+                id_entidad: m.id_movimiento
+              });
+            }
+          } else if (!m.recur_group_id?.startsWith('REC_') && !desc.toLowerCase().includes('reintegro tc')) {
+            notificaciones.push({
+              id: m.id_movimiento + '_unica_gasto',
+              tipo: 'info',
+              icono: 'receipt',
+              categoria: 'cuotas',
+              titulo: 'Gasto en Única Cuota',
+              mensaje: 'Pago registrado: "' + desc + '".',
+              importe: m.importe,
+              fecha: m.fecha || (trimmed + '-01'),
+              tipo_entidad: 'movimiento',
+              id_entidad: m.id_movimiento
+            });
+          }
+        });
+      }
+    }
+
+    // Fetch active reminders for the account (APP or Telegram or all)
+    let recQuery = supabase
       .from('recordatorios')
       .select('*')
-      .eq('id_cuenta_principal', cuenta)
       .eq('activa', true)
-      .like('canales', '%APP%');
+      .or('canales.ilike.%APP%,canales.ilike.%TELEGRAM%,canales.is.null');
+
+    if (cuenta) {
+      recQuery = recQuery.or(`id_cuenta_principal.eq.${cuenta},id_cuenta_principal.is.null`);
+    }
+
+    const { data: recordatorios, error: recError } = await recQuery;
 
     if (recError) throw recError;
 
@@ -113,10 +190,13 @@ export default async function handler(req, res) {
             id: r.id_recordatorio + '_' + trimmed,
             tipo: 'info',
             icono: 'clock',
-            titulo: 'Recordatorio',
+            categoria: 'recordatorios',
+            titulo: 'Recordatorio' + (r.chat_id || r.canales?.includes('TELEGRAM') ? ' (Bot)' : ''),
             mensaje: r.mensaje,
             importe: 0,
-            fecha: computedDateStr
+            fecha: computedDateStr,
+            tipo_entidad: 'recordatorio',
+            id_entidad: r.id_recordatorio
           });
         }
       });

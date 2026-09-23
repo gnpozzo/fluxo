@@ -150,6 +150,7 @@ export class AdminModule extends BaseModule {
             <tbody>
               ${cuentas.map(c => {
                 const iconSvg = CUENTA_ICON_SVGS[c.icono] || CUENTA_ICON_SVGS.home;
+                const isDefault = !!c.es_predeterminada;
                 return `
                 <tr>
                   <td>
@@ -158,6 +159,7 @@ export class AdminModule extends BaseModule {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
                       </span>
                       <strong>${App.Utils.escapeHtml(c.nombre)}</strong>
+                      ${isDefault ? '<span class="badge" style="background:rgba(234,179,8,0.15);color:#b45309;font-size:0.68rem;font-weight:600;padding:2px 6px;border-radius:6px;display:inline-flex;align-items:center;gap:3px;">⭐ Predeterminada</span>' : ''}
                     </div>
                   </td>
                   <td>${App.Utils.escapeHtml(c.moneda_principal || c.moneda || 'ARS')}</td>
@@ -165,6 +167,9 @@ export class AdminModule extends BaseModule {
                     ? '<span class="badge tipo-ingreso">Activa</span>'
                     : '<span class="badge badge-neutro">Inactiva</span>'}</td>
                   <td class="text-right">
+                    <button class="btn-accion ${isDefault ? 'is-fav' : ''}" style="${isDefault ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" onclick="App.Modules.admin._setDefaultCuenta('${c.id_cuenta_principal}')" title="${isDefault ? 'Cuenta predeterminada' : 'Fijar como predeterminada'}">
+                      ${isDefault ? '★' : '☆'}
+                    </button>
                     <button class="btn-accion" onclick="App.Modules.admin._editCuenta('${c.id_cuenta_principal}')" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
                     </button>
@@ -190,6 +195,7 @@ export class AdminModule extends BaseModule {
     try {
       const response = await App.API.cached('api_admin_getTarjetas', [], 2 * 60_000);
       const tarjetas = response?.data || [];
+      const favTcId = App.Store.preferencias?.tarjeta_favorita;
       content.innerHTML = `
         <div class="section-header">
           <h2 style="margin:0">Tarjetas de Crédito</h2>
@@ -201,14 +207,24 @@ export class AdminModule extends BaseModule {
           <table class="table">
             <thead><tr><th>Nombre</th><th>Banco</th><th>Estado</th><th></th></tr></thead>
             <tbody>
-              ${tarjetas.map(t => `
+              ${tarjetas.map(t => {
+                const isFav = favTcId ? (t.id_tarjeta === favTcId) : !!t.es_predeterminada;
+                return `
                 <tr>
-                  <td>${App.Utils.escapeHtml(t.nombre)}</td>
+                  <td>
+                    <div style="display:inline-flex;align-items:center;gap:8px;">
+                      <strong>${App.Utils.escapeHtml(t.nombre)}</strong>
+                      ${isFav ? '<span class="badge" style="background:rgba(234,179,8,0.15);color:#b45309;font-size:0.68rem;font-weight:600;padding:2px 6px;border-radius:6px;">⭐ Favorita</span>' : ''}
+                    </div>
+                  </td>
                   <td>${App.Utils.escapeHtml(t.banco || '—')}</td>
                   <td>${t.activa
                     ? '<span class="badge tipo-ingreso">Activa</span>'
                     : '<span class="badge badge-neutro">Inactiva</span>'}</td>
                   <td class="text-right">
+                    <button class="btn-accion ${isFav ? 'is-fav' : ''}" style="${isFav ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" onclick="App.Modules.admin._setDefaultTarjeta('${t.id_tarjeta}')" title="${isFav ? 'Tarjeta favorita' : 'Fijar como favorita'}">
+                      ${isFav ? '★' : '☆'}
+                    </button>
                     <button class="btn-accion" onclick="App.Modules.admin._editTarjeta('${t.id_tarjeta}')" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
                     </button>
@@ -216,7 +232,8 @@ export class AdminModule extends BaseModule {
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>
-                </tr>`).join('')}
+                </tr>`;
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -326,12 +343,22 @@ export class AdminModule extends BaseModule {
               ${subs.map(s => {
                 const cObj = cuentas.find(c => c.id_cuenta_principal === s.id_cuenta_principal);
                 const cuentaNombre = cObj ? cObj.nombre : '—';
+                const favSubId = App.Store.preferencias?.alcancia_favorita;
+                const isFav = favSubId ? (s.id_subcuenta === favSubId) : !!s.es_predeterminada;
                 return `
                 <tr>
-                  <td>${App.Utils.escapeHtml(s.nombre)}</td>
+                  <td>
+                    <div style="display:inline-flex;align-items:center;gap:8px;">
+                      <strong>${App.Utils.escapeHtml(s.nombre)}</strong>
+                      ${isFav ? '<span class="badge" style="background:rgba(234,179,8,0.15);color:#b45309;font-size:0.68rem;font-weight:600;padding:2px 6px;border-radius:6px;">⭐ Favorita</span>' : ''}
+                    </div>
+                  </td>
                   <td>${App.Utils.escapeHtml(cuentaNombre)}</td>
                   <td>${App.Utils.escapeHtml(s.moneda || 'ARS')}</td>
                   <td class="text-right">
+                    <button class="btn-accion ${isFav ? 'is-fav' : ''}" style="${isFav ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" onclick="App.Modules.admin._setDefaultSubcuenta('${s.id_subcuenta}')" title="${isFav ? 'Alcancía favorita' : 'Fijar como favorita'}">
+                      ${isFav ? '★' : '☆'}
+                    </button>
                     <button class="btn-accion" onclick="App.Modules.admin._editSubcuenta('${s.id_subcuenta}')" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
                     </button>
@@ -466,10 +493,14 @@ export class AdminModule extends BaseModule {
               </label>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-switch" style="margin-top:16px">
+          <div class="form-group" style="display:flex;gap:20px;flex-wrap:wrap;margin-top:16px;">
+            <label class="form-switch">
               <input type="checkbox" class="toggle-switch" name="activa" ${(!data || data.activa) ? 'checked':''}>
               <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Activa</span>
+            </label>
+            <label class="form-switch">
+              <input type="checkbox" class="toggle-switch" name="es_predeterminada" ${data?.es_predeterminada ? 'checked':''}>
+              <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">⭐ Predeterminada (abrir app aquí)</span>
             </label>
           </div>
         </form>`,
@@ -483,6 +514,7 @@ export class AdminModule extends BaseModule {
           moneda_principal: form.querySelector('[name="moneda_principal"]').value,
           icono: selectedIcon,
           activa: form.querySelector('[name="activa"]').checked,
+          es_predeterminada: form.querySelector('[name="es_predeterminada"]')?.checked || false,
           modulo_tarjetas_activo: form.querySelector('[name="modulo_tarjetas_activo"]').checked,
           modulo_cc_activo: form.querySelector('[name="modulo_cc_activo"]').checked,
           modulo_ahorro_activo: form.querySelector('[name="modulo_ahorro_activo"]').checked,
@@ -527,6 +559,55 @@ export class AdminModule extends BaseModule {
           if (rad) rad.checked = true;
         });
       });
+    }
+  }
+
+  async _setDefaultCuenta(id) {
+    try {
+      const resp = await App.API.cached('api_admin_getCuentasPrincipales', [], 0);
+      const target = (resp?.data || []).find(c => c.id_cuenta_principal === id);
+      if (!target) return;
+      if (target.es_predeterminada) {
+        App.Toast.info('Esta cuenta ya está configurada como predeterminada.');
+        return;
+      }
+      await App.API.call('api_admin_saveCuentaPrincipal', { ...target, es_predeterminada: true });
+      App.API.invalidatePattern('api_admin_getCuentasPrincipales');
+      App.API.invalidatePattern('api_getInitialData');
+      
+      const initData = await App.API.call('api_getInitialData');
+      if (initData?.cuentas) {
+        App.Store.setCuentas(initData.cuentas);
+        App.Store.setCuenta(id);
+      }
+      App.Toast.success(`Cuenta "${target.nombre}" fijada como predeterminada.`);
+      this.#renderCuentas();
+    } catch (err) {
+      App.Toast.error('Error al definir cuenta predeterminada: ' + err.message);
+    }
+  }
+
+  async _setDefaultTarjeta(id) {
+    try {
+      await App.API.call('admin_saveUserPreferences', { tarjeta_favorita: id });
+      App.Store.setPreferencias({ tarjeta_favorita: id });
+      App.API.invalidatePattern('api_admin_getTarjetas');
+      App.Toast.success('Tarjeta favorita actualizada.');
+      this.#renderTarjetas();
+    } catch (err) {
+      App.Toast.error('Error al definir tarjeta favorita: ' + err.message);
+    }
+  }
+
+  async _setDefaultSubcuenta(id) {
+    try {
+      await App.API.call('admin_saveUserPreferences', { alcancia_favorita: id });
+      App.Store.setPreferencias({ alcancia_favorita: id });
+      App.API.invalidatePattern('api_admin_getAhorroSubcuentas');
+      App.Toast.success('Alcancía favorita actualizada.');
+      this.#renderAhorroSubs();
+    } catch (err) {
+      App.Toast.error('Error al definir alcancía favorita: ' + err.message);
     }
   }
 

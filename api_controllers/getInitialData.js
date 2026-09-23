@@ -157,7 +157,8 @@ export default async function handler(req, res) {
       categorias: categoriasFinal,
       tarjetas: tarjetasRes.data || [],
       subcuentas: subcuentas,
-      usuarios_cc: usuariosCc
+      usuarios_cc: usuariosCc,
+      preferencias: prefs
     });
   } catch (err) {
     console.error('[API -> getInitialData Error]', err.message);

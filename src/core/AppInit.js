@@ -196,6 +196,7 @@ class AppInit {
       // Llenar Store con datos maestros
       App.Store.setCuentas(cuentas);
       if (meses.length) App.Store.setMeses(meses);
+      if (initialData?.preferencias) App.Store.setPreferencias(initialData.preferencias);
 
       // Cachear categorías y tarjetas en los módulos
       window._appCategorias = initialData?.categorias || [];
@@ -828,9 +829,16 @@ class AppInit {
     }
 
     dropdown.innerHTML = `
-      <div class="notifications-dropdown-header">
-        <span>Notificaciones</span>
-        <span style="font-size:0.8rem; font-weight:normal; color:var(--texto-2);">${unread.length} pendientes</span>
+      <div class="notifications-dropdown-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span>Notificaciones</span>
+          <span style="font-size:0.8rem; font-weight:normal; color:var(--texto-2); margin-left:6px;">${unread.length} pendientes</span>
+        </div>
+        ${unread.length > 0 ? `
+          <button id="btn-notif-mark-all" style="background:none; border:none; color:var(--primary, #4f46e5); font-size:0.75rem; font-weight:600; cursor:pointer; padding:4px 6px; border-radius:4px;">
+            Marcar todas como leídas
+          </button>
+        ` : ''}
       </div>
       <div class="notifications-dropdown-body">
         ${bodyHtml}
@@ -840,15 +848,29 @@ class AppInit {
       </div>
     `;
 
+    // Mark all as read listener
+    dropdown.querySelector('#btn-notif-mark-all')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      unread.forEach(n => this.#markNotificationAsRead(n.id));
+      App.Toast.success('Todas las notificaciones marcadas como leídas');
+      this.#actualizarBadgeNotifications();
+      this.#renderNotificationsDropdown();
+    });
+
     // Bind event listeners to notification items
     dropdown.querySelectorAll('.notification-item').forEach(item => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = item.dataset.id;
+        const targetNotif = this.#notificacionesMes.find(n => n.id === id);
         this.#markNotificationAsRead(id);
-        App.Toast.success('Notificación marcada como leída');
         this.#actualizarBadgeNotifications();
         this.#renderNotificationsDropdown();
+        dropdown.classList.remove('open');
+
+        if (targetNotif) {
+          this.#abrirDetalleDesdeNotificacion(targetNotif);
+        }
       });
     });
 
@@ -857,6 +879,51 @@ class AppInit {
       dropdown.classList.remove('open');
       this.#abrirCentroNotificaciones();
     });
+  }
+
+  async #abrirDetalleDesdeNotificacion(notif) {
+    if (!notif) return;
+    try {
+      if (notif.tipo_entidad === 'consumo_tc' && notif.id_entidad) {
+        if (App.Modules.tarjetas?.abrirModalDetalleConsumoById?.(notif.id_entidad)) {
+          return;
+        }
+        const cuenta = App.Store.cuenta;
+        const baseMonth = App.Store.mes || new Date().toISOString().substring(0, 7);
+        const [y, mo] = baseMonth.split('-').map(Number);
+        const ultimo = new Date(y, mo, 0).getDate();
+        const res = await App.API.call('api_getConsumosTC', [cuenta, `${y}-${String(mo).padStart(2,'0')}-01`, `${y}-${String(mo).padStart(2,'0')}-${ultimo}`, false]);
+        const target = (res?.data || []).find(c => (c.id_consumo_tarjeta || c.id) == notif.id_entidad);
+        if (target && App.Modules.tarjetas) {
+          App.Modules.tarjetas.abrirModalDetalleConsumoById(target.id_consumo_tarjeta || target.id);
+          return;
+        }
+      } else if (notif.tipo_entidad === 'movimiento' && notif.id_entidad) {
+        if (App.Modules.dashboard?.abrirModalDetalleMovById?.(notif.id_entidad)) {
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Error al abrir detalle desde notificación:', e);
+    }
+
+    const modalNotif = new App.Modal('modal-quick-notif-detail');
+    modalNotif.open({
+      titulo: notif.titulo || 'Detalle de Notificación',
+      icono: notif.icono || 'info',
+      size: 'sm',
+      body: `
+        <div style="padding:16px 4px;">
+          <p style="font-size:0.95rem; margin-bottom:12px; color:var(--texto); line-height:1.4;">${App.Utils.escapeHtml(notif.mensaje)}</p>
+          ${notif.fecha ? `<p style="font-size:0.8rem; color:var(--texto-3); margin-bottom:8px;">📅 Fecha: ${App.Utils.formatearFecha(notif.fecha)}</p>` : ''}
+          ${notif.importe ? `<p style="font-size:1.15rem; font-weight:700; color:var(--texto); margin-top:12px;">Importe: ${App.Utils.formatearMoneda(notif.importe)}</p>` : ''}
+        </div>
+      `,
+      confirmLabel: '',
+      cancelLabel: 'Cerrar'
+    });
+    const cb = modalNotif.el.querySelector('.modal-confirm');
+    if (cb) cb.style.display = 'none';
   }
 
   #abrirCentroNotificaciones() {
@@ -951,10 +1018,10 @@ class AppInit {
             <div class="reminder-card ${!isActiva ? 'inactive' : ''}" data-id="${r.id_recordatorio}">
               <div class="reminder-card-content">
                 <p class="reminder-msg">${App.Utils.escapeHtml(r.mensaje)}</p>
-                <div class="reminder-meta">
+                <div class="reminder-meta" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:6px;">
                   <span>📅 Próximo: <strong>${fechaFormateada}</strong></span>
                   <span>🔄 ${App.Utils.escapeHtml(freqLabel)}</span>
-                  <span>📡 Canales: ${App.Utils.escapeHtml(r.canales || 'App')}</span>
+                  ${(r.chat_id || r.canales?.includes('TELEGRAM')) ? '<span class="badge" style="background:rgba(59,130,246,0.12); color:#2563eb; font-size:0.68rem; font-weight:600;">🤖 Bot Telegram</span>' : '<span class="badge" style="background:rgba(107,114,128,0.12); color:var(--texto-2); font-size:0.68rem;">🌐 Web Fluxo</span>'}
                 </div>
               </div>
               <div class="reminder-actions">
@@ -1088,49 +1155,103 @@ class AppInit {
 
       const readIds = this.#getReadNotificationIds();
 
-      let contentHtml = '';
-      if (allNotif.length === 0) {
-        contentHtml = '<div style="padding:24px; color:var(--texto-3); text-align:center;">No hay alertas ni avisos registrados en los últimos 6 meses.</div>';
-      } else {
-        contentHtml = '<div style="display:flex; flex-direction:column; gap:10px;">' +
-          allNotif.map(n => {
-            const isRead = readIds.includes(n.id);
-            return `
-              <div class="notification-item ${isRead ? 'read-in-history' : ''}" style="border:1px solid var(--borde); border-radius:var(--r); padding:12px; background:var(--superficie); display:flex; gap:12px; align-items:center; cursor:pointer;" data-id="${n.id}">
-                <div class="notification-icon-wrapper ${n.tipo === 'info' ? 'info' : 'ingreso'}">
-                  ${App.Icons?.get(n.icono, 'icon-md') || ''}
-                </div>
-                <div style="flex-grow:1">
-                  <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h4 style="margin:0; font-size:0.9rem; color:var(--texto); font-weight:700;">${App.Utils.escapeHtml(n.titulo)}</h4>
-                    <span style="font-size:0.75rem; color:var(--texto-3);">${App.Utils.formatearFecha(n.fecha)}</span>
-                  </div>
-                  <p style="margin:4px 0 0; font-size:0.8rem; color:var(--texto-2); line-height:1.3;">${App.Utils.escapeHtml(n.mensaje)}</p>
-                  ${n.importe ? `
-                  <div style="margin-top:6px; font-weight:600; font-size:0.85rem; color:${n.tipo === 'info' ? 'var(--color-info)' : 'var(--color-success)'}">
-                    ${App.Utils.formatearMoneda(n.importe)}
-                  </div>` : ''}
-                </div>
-                ${!isRead ? '<div class="notification-badge-unread"></div>' : ''}
-              </div>
-            `;
-          }).join('') +
-          '</div>';
-      }
-
-      area.innerHTML = contentHtml;
-      area.querySelectorAll('.notification-item').forEach(item => {
-        item.addEventListener('click', () => {
-          const id = item.dataset.id;
-          const currentRead = this.#getReadNotificationIds();
-          if (!currentRead.includes(id)) {
-            this.#markNotificationAsRead(id);
-            App.Toast.success('Notificación marcada como leída');
-            this.#actualizarBadgeNotifications();
-            item.classList.add('read-in-history');
-            item.querySelector('.notification-badge-unread')?.remove();
-          }
+      const renderHistoryList = (filterCat = 'todas') => {
+        const filtered = allNotif.filter(n => {
+          if (filterCat === 'todas') return true;
+          if (filterCat === 'cuotas') return n.categoria === 'cuotas' || (n.titulo || '').toLowerCase().includes('cuota');
+          if (filterCat === 'recordatorios') return n.categoria === 'recordatorios' || (n.titulo || '').toLowerCase().includes('recordatorio');
+          if (filterCat === 'vencimientos') return (n.titulo || '').toLowerCase().includes('venc') || (n.titulo || '').toLowerCase().includes('cierre');
+          return true;
         });
+
+        let listHtml = '';
+        if (filtered.length === 0) {
+          listHtml = '<div style="padding:28px 16px; color:var(--texto-3); text-align:center;">No se encontraron alertas en esta categoría.</div>';
+        } else {
+          listHtml = '<div style="display:flex; flex-direction:column; gap:10px;">' +
+            filtered.map(n => {
+              const isRead = readIds.includes(n.id);
+              return `
+                <div class="notification-item ${isRead ? 'read-in-history' : ''}" style="border:1px solid var(--borde); border-radius:var(--r); padding:12px; background:var(--superficie); display:flex; gap:12px; align-items:center; cursor:pointer;" data-id="${n.id}">
+                  <div class="notification-icon-wrapper ${n.tipo === 'info' ? 'info' : 'ingreso'}">
+                    ${App.Icons?.get(n.icono, 'icon-md') || ''}
+                  </div>
+                  <div style="flex-grow:1">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <h4 style="margin:0; font-size:0.9rem; color:var(--texto); font-weight:700;">${App.Utils.escapeHtml(n.titulo)}</h4>
+                      <span style="font-size:0.75rem; color:var(--texto-3);">${App.Utils.formatearFecha(n.fecha)}</span>
+                    </div>
+                    <p style="margin:4px 0 0; font-size:0.8rem; color:var(--texto-2); line-height:1.3;">${App.Utils.escapeHtml(n.mensaje)}</p>
+                    ${n.importe ? `
+                    <div style="margin-top:6px; font-weight:600; font-size:0.85rem; color:${n.tipo === 'info' ? 'var(--color-info)' : 'var(--color-success)'}">
+                      ${App.Utils.formatearMoneda(n.importe)}
+                    </div>` : ''}
+                  </div>
+                  ${!isRead ? '<div class="notification-badge-unread"></div>' : ''}
+                </div>
+              `;
+            }).join('') +
+            '</div>';
+        }
+
+        const container = area.querySelector('#notif-history-items-wrap');
+        if (container) {
+          container.innerHTML = listHtml;
+          container.querySelectorAll('.notification-item').forEach(item => {
+            item.addEventListener('click', () => {
+              const id = item.dataset.id;
+              const targetNotif = allNotif.find(x => x.id === id);
+              if (!readIds.includes(id)) {
+                this.#markNotificationAsRead(id);
+                this.#actualizarBadgeNotifications();
+                item.classList.add('read-in-history');
+                item.querySelector('.notification-badge-unread')?.remove();
+              }
+              if (targetNotif) {
+                this.#abrirDetalleDesdeNotificacion(targetNotif);
+              }
+            });
+          });
+        }
+      };
+
+      area.innerHTML = `
+        <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;" id="notif-history-filters">
+            <button class="btn btn-sm btn-primary filter-pill active" data-filter="todas">Todas (${allNotif.length})</button>
+            <button class="btn btn-sm btn-outline filter-pill" data-filter="cuotas">Cuotas</button>
+            <button class="btn btn-sm btn-outline filter-pill" data-filter="recordatorios">Recordatorios</button>
+            <button class="btn btn-sm btn-outline filter-pill" data-filter="vencimientos">Vencimientos</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="btn-history-mark-all" style="font-size:0.75rem; color:var(--primary);">
+            Marcar todas como leídas
+          </button>
+        </div>
+        <div id="notif-history-items-wrap"></div>
+      `;
+
+      renderHistoryList('todas');
+
+      // Filter click listeners
+      area.querySelectorAll('#notif-history-filters .filter-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+          area.querySelectorAll('#notif-history-filters .filter-pill').forEach(b => {
+            b.classList.remove('btn-primary', 'active');
+            b.classList.add('btn-outline');
+          });
+          btn.classList.remove('btn-outline');
+          btn.classList.add('btn-primary', 'active');
+          renderHistoryList(btn.dataset.filter);
+        });
+      });
+
+      // Mark all as read in history
+      area.querySelector('#btn-history-mark-all')?.addEventListener('click', () => {
+        allNotif.forEach(n => this.#markNotificationAsRead(n.id));
+        App.Toast.success('Historial marcado como leído');
+        this.#actualizarBadgeNotifications();
+        const activeFilter = area.querySelector('#notif-history-filters .filter-pill.active')?.dataset.filter || 'todas';
+        renderHistoryList(activeFilter);
       });
     } catch (err) {
       console.error('Error loading notification history:', err);

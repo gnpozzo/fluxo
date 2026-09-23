@@ -1895,7 +1895,7 @@ export class DashboardModule extends BaseModule {
       return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
     };
 
-    const renderMovementRow = (r) => {
+    const renderMovementRow = (r, opts = {}) => {
       const esIngreso = r.tipo_mov === 'INGRESO';
       const iconClass = esIngreso ? 'icon-green' : 'icon-subtle';
       const sign = esIngreso ? '+' : '-';
@@ -1909,17 +1909,37 @@ export class DashboardModule extends BaseModule {
       const badgeConsolidado = isConsolidado ? `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${r.items_agrupados?.length || 0} reintegros</span>` : '';
       const badgePagoTC = isPago ? `<span class="badge" style="background:rgba(37,99,235,0.12); color:#2563eb; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:6px; margin-left:4px;">💳 Flujo de Pago TC</span>` : '';
 
+      // Cuota badge logic
+      let badgeCuota = '';
+      const cuotaMatch = (r.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (r.descripcion || '').match(/\((\d+)\/(\d+)\)/);
+      if (cuotaMatch) {
+        const act = parseInt(cuotaMatch[1], 10);
+        const tot = parseInt(cuotaMatch[2], 10);
+        if (tot > 1 && act === tot) {
+          badgeCuota = `<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:6px; margin-left:4px;">🏁 Última cuota</span>`;
+        } else if (tot > 1) {
+          badgeCuota = `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Cuota ${act}/${tot}</span>`;
+        }
+      } else if (!esIngreso && !isPago && !r.recur_group_id?.startsWith('REC_') && !isConsolidado) {
+        badgeCuota = `<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-size:0.68rem; font-weight:500; padding:2px 7px; border-radius:6px; margin-left:4px;">1️⃣ Única cuota</span>`;
+      }
+
+      const iconMarkup = (opts.hideCatIcon && !isPago)
+        ? `<div class="dh-item-dot" style="width:6px; height:6px; border-radius:50%; background:var(--texto-3); opacity:0.6; margin-right:10px; margin-left:4px; flex-shrink:0;"></div>`
+        : `<div class="dh-item-icon ${iconClass}">
+            ${isPago ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>` : getCategoryIconSvg(catName, r.tipo_mov)}
+          </div>`;
+
       return `
         <div class="dh-drill-row ${isConsolidado ? 'is-consolidated' : ''} ${isPago ? 'is-pago-tc' : ''}" data-id="${r.id_movimiento || r.id}">
           <div class="dh-col-main">
-            <div class="dh-item-icon ${iconClass}">
-              ${isPago ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>` : getCategoryIconSvg(catName, r.tipo_mov)}
-            </div>
+            ${iconMarkup}
             <div class="dh-col-desc-wrap">
               <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
                 <span class="dh-row-desc">${App.Utils.escapeHtml(desc)}</span>
                 ${badgeConsolidado}
                 ${badgePagoTC}
+                ${badgeCuota}
               </div>
               <span class="dh-row-date">${fechaStr}</span>
             </div>
@@ -2030,7 +2050,7 @@ export class DashboardModule extends BaseModule {
               </div>
             </div>
             <div class="fca-body">
-              ${group.items.map(renderMovementRow).join('')}
+              ${group.items.map(m => renderMovementRow(m, { hideCatIcon: true })).join('')}
             </div>
           </div>
         `;
@@ -2096,6 +2116,15 @@ export class DashboardModule extends BaseModule {
         if (row) this.#abrirModalDetalleMov(row);
       });
     });
+  }
+
+  abrirModalDetalleMovById(id) {
+    const row = (this.#movData || []).find(m => (m.id_movimiento || m.id) == id);
+    if (row) {
+      this.#abrirModalDetalleMov(row);
+      return true;
+    }
+    return false;
   }
 
   #abrirModalDetalleMov(row) {

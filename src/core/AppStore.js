@@ -13,6 +13,7 @@ export class AppStore {
     meses         : [],
     modulosLoaded : new Set(),
     usuario       : null,
+    preferencias  : {},
     globalCurrency: 'ARS',
     exchangeRate  : 1,
     dolarOficial  : 1535,
@@ -30,6 +31,7 @@ export class AppStore {
   get meses()    { return [...this.#state.meses]; }
   get version()  { return this.#state.version; }
   get usuario()  { return this.#state.usuario ? { ...this.#state.usuario } : null; }
+  get preferencias() { return this.#state.preferencias ? { ...this.#state.preferencias } : {}; }
   get globalCurrency() { return this.#state.globalCurrency; }
   get currency() { return this.#state.globalCurrency; }
   get monedaGlobal() { return this.#state.globalCurrency; }
@@ -87,6 +89,11 @@ export class AppStore {
   setCuentas(listaCuentas) {
     this.#state.cuentas = Array.isArray(listaCuentas) ? listaCuentas : [];
     if(App.Events) App.Events.emit('store:cuentas-loaded', { cuentas: this.cuentas });
+  }
+
+  setPreferencias(prefs) {
+    this.#state.preferencias = { ...(this.#state.preferencias || {}), ...(prefs || {}) };
+    if(App.Events) App.Events.emit('store:preferencias-changed', { preferencias: this.preferencias });
   }
 
   setMeses(listaMeses) {

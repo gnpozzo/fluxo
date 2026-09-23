@@ -48,6 +48,7 @@ import admin_saveRecordatorio from '../api_controllers/admin_saveRecordatorio.js
 import admin_deleteRecordatorio from '../api_controllers/admin_deleteRecordatorio.js';
 import togglePago from '../api_controllers/togglePago.js';
 import searchTickers from '../api_controllers/searchTickers.js';
+import admin_saveUserPreferences from '../api_controllers/admin_saveUserPreferences.js';
 import { authenticateUser } from '../api_lib/auth.js';
 
 
@@ -116,6 +117,8 @@ export default async function handler(req, res) {
       case 'api_togglePago': return await togglePago(req, res);
       case 'searchTickers':
       case 'api_searchTickers': return await searchTickers(req, res);
+      case 'admin_saveUserPreferences':
+      case 'api_admin_saveUserPreferences': return await admin_saveUserPreferences(req, res);
 
       default:
         return res.status(404).json({ success: false, error: 'Endpoint not found: ' + endpoint });

@@ -965,12 +965,32 @@ export class TarjetasModule extends BaseModule {
     }
   }
 
+  abrirModalDetalleConsumoById(id) {
+    const row = (this.#allConsumos || []).find(c => (c.id_consumo_tarjeta || c.id) == id);
+    if (row) {
+      this.#abrirModalDetalle(row);
+      return true;
+    }
+    return false;
+  }
+
   // --- SECCIÓN 7: DETAIL MODAL & HELPERS ---
 
   #abrirModalDetalle(row) {
     const badges = [];
-    if (row.tipo_consumo === 'CUOTAS')     badges.push(`<span class="badge badge-recur">Cuota ${row.cuota_actual}/${row.cuota_total}</span>`);
-    else if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
+    const cuotaTotal = Number(row.cuota_total || 1);
+    const cuotaActual = Number(row.cuota_actual || 1);
+    if (row.tipo_consumo === 'CUOTAS' || cuotaTotal > 1) {
+      if (cuotaActual === cuotaTotal && cuotaTotal > 1) {
+        badges.push('<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px;">🏁 Última cuota</span>');
+      } else {
+        badges.push(`<span class="badge badge-recur">Cuota ${cuotaActual}/${cuotaTotal}</span>`);
+      }
+    } else if (row.tipo_consumo === 'RECURRENTE') {
+      badges.push('<span class="badge badge-recur">Recurrente</span>');
+    } else {
+      badges.push('<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-weight:500; font-size:0.68rem; padding:2px 7px; border-radius:6px;">1️⃣ Única cuota</span>');
+    }
     if (row.imputado) badges.push('<span class="badge badge-tc">Imputado</span>');
 
     const detailModal = new App.Modal('modal-tc-detail');
@@ -1037,8 +1057,19 @@ export class TarjetasModule extends BaseModule {
 
   #renderDescripcion(row) {
     const badges = [];
-    if (row.tipo_consumo === 'CUOTAS')     badges.push(`<span class="badge badge-recur">Cuota ${row.cuota_actual}/${row.cuota_total}</span>`);
-    else if (row.tipo_consumo === 'RECURRENTE') badges.push('<span class="badge badge-recur">Recurrente</span>');
+    const cuotaTotal = Number(row.cuota_total || 1);
+    const cuotaActual = Number(row.cuota_actual || 1);
+    if (row.tipo_consumo === 'CUOTAS' || cuotaTotal > 1) {
+      if (cuotaActual === cuotaTotal && cuotaTotal > 1) {
+        badges.push('<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px;">🏁 Última cuota</span>');
+      } else {
+        badges.push(`<span class="badge badge-recur" style="font-size:0.68rem; padding:2px 7px; border-radius:6px;">Cuota ${cuotaActual}/${cuotaTotal}</span>`);
+      }
+    } else if (row.tipo_consumo === 'RECURRENTE') {
+      badges.push('<span class="badge badge-recur">Recurrente</span>');
+    } else {
+      badges.push('<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-weight:500; font-size:0.68rem; padding:2px 7px; border-radius:6px;">1️⃣ Única cuota</span>');
+    }
     if (row.imputado) {
       if (row.es_incidencia_externa) {
         badges.push(`<span class="badge badge-recur">🏛️ ${App.Utils.escapeHtml(row.cuenta_imputada_nombre || 'Externa')}</span>`);
@@ -1099,6 +1130,15 @@ export class TarjetasModule extends BaseModule {
       totalConsolUsd += (isDueInMonth && Number(tc.total_resumen_usd || 0) > 0) ? Number(tc.total_resumen_usd) : subUsd;
     });
 
+    const favTcId = App.Store.preferencias?.tarjeta_favorita;
+    const sortedTarjetas = [...this.#tarjetas].sort((a, b) => {
+      const aIsFav = (a.id_tarjeta === favTcId) || a.es_predeterminada;
+      const bIsFav = (b.id_tarjeta === favTcId) || b.es_predeterminada;
+      if (aIsFav && !bIsFav) return -1;
+      if (!aIsFav && bIsFav) return 1;
+      return 0;
+    });
+
     this._tcList = [
       {
         id_tarjeta: null,
@@ -1107,7 +1147,7 @@ export class TarjetasModule extends BaseModule {
         totalArs: totalConsolArs,
         totalUsd: totalConsolUsd
       },
-      ...this.#tarjetas.map(tc => {
+      ...sortedTarjetas.map(tc => {
         const subArs = subtotalsArs[tc.id_tarjeta] || 0;
         const subUsd = subtotalsUsd[tc.id_tarjeta] || 0;
         const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
