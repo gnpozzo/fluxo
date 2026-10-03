@@ -21,6 +21,7 @@ export class DashboardModule extends BaseModule {
   #movFilter = 'ALL'; // 'ALL' | 'INGRESO' | 'EGRESO'
   #movSearch = '';
   #selectedMovCategoria = 'ALL';
+  #selectedMovMedio = 'ALL';
   #moneyFlowChartInstance = null;
   #categoriesDonutInstance = null;
   #evolucionMode = 'ingresos_vs_gastos'; // 'ingresos_vs_gastos' | 'balance'
@@ -344,6 +345,7 @@ export class DashboardModule extends BaseModule {
     this.#renderMovimientos();
     this.#updateMetaKpi();
     this.#updateTcLimitKpi();
+    this.#updateBalanceGoalProgress();
   }
 
   // --- SECCIÓN 3: BUILD DOM ---
@@ -393,8 +395,13 @@ export class DashboardModule extends BaseModule {
                 </div>
               </div>
               <div class="finset-kpi-value" id="dash-saldo-val">$ 0,00</div>
-              <div class="finset-kpi-footer">
-                <span class="finset-kpi-subtext" id="dash-conversion-val">≈ US$ 0,00</span>
+              <div class="finset-goal-progress-wrap" id="dash-balance-goal-progress-wrap" style="margin: 6px 0 8px; cursor: pointer;" title="Configurar objetivo de ahorro / margen libre mensual">
+                <div class="finset-goal-progress-bar">
+                  <div class="finset-goal-progress-fill" id="dash-balance-goal-progress-fill" style="width: 0%; background: var(--verde);"></div>
+                </div>
+              </div>
+              <div class="finset-kpi-footer" id="dash-balance-footer-wrap" style="cursor: pointer;" title="Configurar objetivo de ahorro / margen libre mensual">
+                <span class="finset-kpi-subtext" id="dash-balance-goal-sub">Objetivo libre: —</span>
                 <span class="finset-trend-pill trend-up" id="dash-balance-trend">
                   <span>Neto</span>
                 </span>
@@ -531,8 +538,12 @@ export class DashboardModule extends BaseModule {
                     <input type="text" id="dash-mov-search" placeholder="Buscar..." class="finset-search-input" style="width:110px;">
                   </div>
 
-                  <select id="dash-mov-cat-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:28px; max-width:130px;" title="Filtrar por categoría">
-                    <option value="ALL">Todas las categorías</option>
+                  <select id="dash-mov-cat-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:32px; max-width:130px;" title="Filtrar por categoría">
+                    <option value="ALL">Categoría: Todas</option>
+                  </select>
+
+                  <select id="dash-mov-medio-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:32px; max-width:130px;" title="Filtrar por tipo de pago">
+                    <option value="ALL">Tipo de pago: Todos</option>
                   </select>
                 </div>
               </div>
@@ -715,6 +726,15 @@ export class DashboardModule extends BaseModule {
       document.querySelector('[data-vista="vista-ahorro"]')?.click();
     });
 
+    // Balance Goal / Margen Libre modal
+    document.getElementById('dash-balance-goal-progress-wrap')?.addEventListener('click', () => {
+      this.#abrirModalMetaAhorro();
+    });
+    document.getElementById('dash-balance-footer-wrap')?.addEventListener('click', (e) => {
+      if (e.target.closest('#dash-balance-trend')) return;
+      this.#abrirModalMetaAhorro();
+    });
+
     // Objetivo de Ahorro modal (Card 4)
     document.getElementById('dash-kpi-card-meta')?.addEventListener('click', () => {
       this.#abrirModalMetaAhorro();
@@ -774,6 +794,11 @@ export class DashboardModule extends BaseModule {
       this.#renderMovimientos();
     });
 
+    document.getElementById('dash-mov-medio-filter')?.addEventListener('change', (e) => {
+      this.#selectedMovMedio = e.target.value;
+      this.#renderMovimientos();
+    });
+
     // Tarjetas carousel
     document.getElementById('dash-tc-prev')?.addEventListener('click', (e) => { e.stopPropagation(); this.#navigateTc(-1); });
     document.getElementById('dash-tc-next')?.addEventListener('click', (e) => { e.stopPropagation(); this.#navigateTc(1); });
@@ -814,6 +839,7 @@ export class DashboardModule extends BaseModule {
     App.Events.on('meta:updated', (meta) => {
       this.#metaAhorro = meta || this.#getMetaAhorro();
       this.#updateMetaKpi();
+      this.#updateBalanceGoalProgress();
     });
     App.Events.on('tope_tc:updated', (tope) => {
       this.#topeTC = tope || this.#getTopeTC();
@@ -1264,42 +1290,85 @@ export class DashboardModule extends BaseModule {
     }
   }
 
+  #updateBalanceGoalProgress() {
+    const meta = this.#getMetaAhorro();
+    const saldoNeto = Number(this.#kpisData?.resultado ?? 0);
+    const ingresos = Number(this.#kpisData?.ingresos ?? 0);
+    
+    // Meta mensual libre: si el usuario fijó metaAhorroMensual o margenLibreMensual, usarlo; de lo contrario usar un objetivo sugerido (20% de ingresos o montoObjetivo mensualizado)
+    const targetMensual = Number(meta.margenLibreMensual) > 0 
+      ? Number(meta.margenLibreMensual) 
+      : (ingresos > 0 ? Math.round(ingresos * 0.20) : (Number(meta.montoObjetivo) > 0 ? Math.round(Number(meta.montoObjetivo) / 12) : 500000));
+
+    const fillEl = document.getElementById('dash-balance-goal-progress-fill');
+    const subEl = document.getElementById('dash-balance-goal-sub');
+    if (!fillEl || !subEl) return;
+
+    if (targetMensual <= 0) {
+      fillEl.style.width = '0%';
+      subEl.textContent = 'Objetivo libre: —';
+      return;
+    }
+
+    const pct = Math.max(0, Math.min(Math.round((saldoNeto / targetMensual) * 100), 100));
+    fillEl.style.width = `${pct}%`;
+
+    if (saldoNeto < 0) {
+      fillEl.style.background = 'var(--rojo, #ef4444)';
+      subEl.textContent = `Déficit vs meta: ${App.Utils.formatearMoneda(targetMensual)}`;
+    } else if (pct >= 100) {
+      fillEl.style.background = 'var(--verde, #10b981)';
+      subEl.textContent = `🎯 100% de la meta mensual (${App.Utils.formatearMoneda(targetMensual)})`;
+    } else {
+      fillEl.style.background = pct >= 50 ? 'var(--verde, #10b981)' : 'var(--amarillo, #f59e0b)';
+      subEl.textContent = `${pct}% de meta mensual (${App.Utils.formatearMoneda(targetMensual)})`;
+    }
+  }
+
   #abrirModalMetaAhorro() {
     const meta = this.#getMetaAhorro();
     const modal = new App.Modal('modal-dash-meta-ahorro');
     const body = `
       <form id="form-meta-ahorro" style="display:flex; flex-direction:column; gap:14px;">
         <div class="form-group">
-          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Título del objetivo</label>
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Título del objetivo patrimonial</label>
           <input class="input" type="text" name="titulo" value="${App.Utils.escapeHtml(meta.titulo || 'Objetivo de Ahorro')}" placeholder="Ej: Ahorro para vacaciones, Fondo de emergencia" required>
         </div>
         <div class="form-group">
-          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Monto objetivo (ARS)</label>
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Meta acumulada total (ARS)</label>
           <input class="input" type="number" name="montoObjetivo" step="1000" min="1" value="${meta.montoObjetivo || 3000000}" required>
+          <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Progreso medido sobre la suma de Alcancías e Inversiones.</span>
         </div>
         <div class="form-group">
-          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Fecha límite (opcional)</label>
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Objetivo mensual de margen libre / ahorro (ARS)</label>
+          <input class="input" type="number" name="margenLibreMensual" step="1000" min="0" value="${meta.margenLibreMensual || ''}" placeholder="Ej: 500000 (dejar vacío para calcular el 20% de tus ingresos)">
+          <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Progreso mensual visualizado en la tarjeta de Balance Total.</span>
+        </div>
+        <div class="form-group">
+          <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Fecha límite acumulada (opcional)</label>
           <input class="input" type="date" name="fechaLimite" value="${meta.fechaLimite || ''}">
           <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Dejar vacío si no tiene fecha de vencimiento (objetivo definitivo).</span>
         </div>
         <div style="background:var(--card-bg, #f8fafc); border:1px solid var(--borde); border-radius:10px; padding:12px; font-size:0.82rem; color:var(--texto-2);">
-          💡 <em>El progreso se mide automáticamente sumando tus fondos en <strong>Ahorro</strong> y el valor de tus <strong>Inversiones</strong>. También puedes definir o ajustar metas conversando con <strong>FluxoAI</strong>.</em>
+          💡 <em>El progreso del Balance Total mide cuánto te queda libre respecto a tu meta mensual. También puedes configurar metas reductoras por categoría interactuando con <strong>FluxoAI</strong>.</em>
         </div>
       </form>
     `;
 
     modal.open({
-      titulo: 'Configurar Objetivo de Ahorro',
+      titulo: 'Configurar Objetivos y Metas Financieras',
       body,
-      confirmLabel: 'Guardar Meta',
+      confirmLabel: 'Guardar Metas',
       onConfirm: (m) => {
         const fd = new FormData(m.getForm());
         const titulo = (fd.get('titulo') || '').trim() || 'Objetivo de Ahorro';
         const montoObjetivo = Number(fd.get('montoObjetivo')) || 3000000;
+        const margenLibreMensual = fd.get('margenLibreMensual') ? Number(fd.get('margenLibreMensual')) : null;
         const fechaLimite = fd.get('fechaLimite') || null;
 
-        this.#saveMetaAhorro({ titulo, montoObjetivo, fechaLimite });
-        App.Toast.success('Objetivo de ahorro actualizado.');
+        this.#saveMetaAhorro({ titulo, montoObjetivo, margenLibreMensual, fechaLimite });
+        this.#updateBalanceGoalProgress();
+        App.Toast.success('Objetivos financieros actualizados.');
         m.close();
       }
     });
@@ -1757,7 +1826,7 @@ export class DashboardModule extends BaseModule {
 
     const cleanData = (this.#movData || []).filter(m => !isTaxConsumo(m));
 
-    // 1. Populate category filter options from current data
+    // 1. Populate category and payment method filter options from current data
     if (catFilterSelect) {
       const currentVal = this.#selectedMovCategoria || 'ALL';
       const availableCats = new Set();
@@ -1778,6 +1847,26 @@ export class DashboardModule extends BaseModule {
       catFilterSelect.value = currentVal;
     }
 
+    const medioFilterSelect = document.getElementById('dash-mov-medio-filter');
+    if (medioFilterSelect) {
+      const currentMedio = this.#selectedMovMedio || 'ALL';
+      const availableMedios = new Set();
+      cleanData.forEach(m => {
+        const rawM = (m.medio_pago || '').trim().toLowerCase();
+        if (rawM) {
+          if (rawM === 'transferencia') availableMedios.add('Transferencia');
+          else if (rawM.includes('tarjeta') || rawM.includes('credito') || rawM.includes('crédito')) availableMedios.add('Tarjeta de Crédito');
+          else if (rawM.includes('debito') || rawM.includes('débito')) availableMedios.add('Tarjeta de Débito');
+          else if (rawM === 'efectivo') availableMedios.add('Efectivo');
+          else availableMedios.add(rawM.charAt(0).toUpperCase() + rawM.slice(1));
+        }
+      });
+      const sortedMedios = Array.from(availableMedios).sort();
+      medioFilterSelect.innerHTML = `<option value="ALL">Tipo de pago: Todos</option>` +
+        sortedMedios.map(med => `<option value="${App.Utils.escapeHtml(med)}" ${med === currentMedio ? 'selected' : ''}>${App.Utils.escapeHtml(med)}</option>`).join('');
+      medioFilterSelect.value = currentMedio;
+    }
+
     // 2. Filter by type (ALL, INGRESO, EGRESO)
     // Filosofía Copilot/Monarch: En 'Gastos' se muestran egresos operativos (sin duplicar pago de resumen).
     // En 'Todos' se ve el flujo completo de dinero incluyendo la liquidación de la tarjeta.
@@ -1793,6 +1882,19 @@ export class DashboardModule extends BaseModule {
       filtered = filtered.filter(m => {
         const cat = isPagoTC(m) ? 'Pago de Tarjeta de Crédito' : (m.categoria_nombre || (m.tipo_mov === 'INGRESO' ? 'Ingreso' : 'General'));
         return cat === this.#selectedMovCategoria;
+      });
+    }
+
+    // 3b. Filter by medio de pago selection
+    if (this.#selectedMovMedio && this.#selectedMovMedio !== 'ALL') {
+      filtered = filtered.filter(m => {
+        const rawM = (m.medio_pago || '').trim().toLowerCase();
+        let normalized = rawM ? rawM.charAt(0).toUpperCase() + rawM.slice(1) : '';
+        if (rawM === 'transferencia') normalized = 'Transferencia';
+        else if (rawM.includes('tarjeta') || rawM.includes('credito') || rawM.includes('crédito')) normalized = 'Tarjeta de Crédito';
+        else if (rawM.includes('debito') || rawM.includes('débito')) normalized = 'Tarjeta de Débito';
+        else if (rawM === 'efectivo') normalized = 'Efectivo';
+        return normalized === this.#selectedMovMedio;
       });
     }
 
@@ -1877,22 +1979,54 @@ export class DashboardModule extends BaseModule {
 
     const getCategoryIconSvg = (catName, tipo) => {
       const cat = (catName || '').toLowerCase();
-      if (tipo === 'INGRESO' || cat.includes('ingreso') || cat.includes('reintegro')) {
-        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+      // Sueldos / Salarios / Honorarios / Trabajo
+      if (cat.includes('sueldo') || cat.includes('salario') || cat.includes('honorario') || cat.includes('nomina') || cat.includes('nómina') || cat.includes('laboral') || cat.includes('trabajo') || cat.includes('empleo')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`;
       }
+      // Inversiones / Rendimientos / Dividendos
+      if (cat.includes('invers') || cat.includes('rendim') || cat.includes('dividend') || cat.includes('plazo fijo') || cat.includes('interes') || cat.includes('interés')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
+      }
+      // Reintegros / Devoluciones / Reembolsos
+      if (cat.includes('reintegro') || cat.includes('devoluc') || cat.includes('reembolso')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
+      }
+      // Ventas / Comercio
+      if (cat.includes('venta') || cat.includes('comercio')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`;
+      }
+      // Alimentos / Supermercado
       if (cat.includes('super') || cat.includes('alimen') || cat.includes('comida')) {
-        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
       }
+      // Servicios / Luz / Gas / Internet
       if (cat.includes('serv') || cat.includes('luz') || cat.includes('gas') || cat.includes('internet')) {
-        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
       }
-      if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje')) {
-        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+      // Auto / Combustible / Transporte
+      if (cat.includes('auto') || cat.includes('combust') || cat.includes('nafta') || cat.includes('viaje') || cat.includes('transporte')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
       }
+      // Salud / Farmacia
       if (cat.includes('salud') || cat.includes('farmacia')) {
-        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
       }
-      return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
+      // Vivienda / Alquiler / Hogar
+      if (cat.includes('vivienda') || cat.includes('alquiler') || cat.includes('hogar')) {
+        return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
+      }
+      // Default (billetera/carpeta neutral, exactamente igual que el criterio utilizado para Gastos)
+      return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>`;
+    };
+
+    const formatMedioPago = (mStr) => {
+      if (!mStr) return '';
+      const s = String(mStr).trim().toLowerCase();
+      if (s === 'transferencia') return 'Transferencia';
+      if (s.includes('tarjeta') || s.includes('credito') || s.includes('crédito')) return 'Tarjeta de Crédito';
+      if (s.includes('debito') || s.includes('débito')) return 'Tarjeta de Débito';
+      if (s === 'efectivo') return 'Efectivo';
+      return s.charAt(0).toUpperCase() + s.slice(1);
     };
 
     const renderMovementRow = (r, opts = {}) => {
@@ -1904,7 +2038,8 @@ export class DashboardModule extends BaseModule {
       const catName = isPago ? 'Pago Tarjeta de Crédito' : (r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General'));
       const desc = r.descripcion || catName;
       const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
-      const medio = r.medio_pago ? `<span class="dh-pill-medio">${App.Utils.escapeHtml(r.medio_pago)}</span>` : '';
+      const medioFmt = formatMedioPago(r.medio_pago);
+      const medio = medioFmt ? `<span class="dh-pill-medio">${App.Utils.escapeHtml(medioFmt)}</span>` : '';
       const isConsolidado = !!r.es_consolidado;
       const badgeConsolidado = isConsolidado ? `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${r.items_agrupados?.length || 0} reintegros</span>` : '';
       const badgePagoTC = isPago ? `<span class="badge" style="background:rgba(37,99,235,0.12); color:#2563eb; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:6px; margin-left:4px;">💳 Flujo de Pago TC</span>` : '';
@@ -1930,8 +2065,15 @@ export class DashboardModule extends BaseModule {
             ${isPago ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>` : getCategoryIconSvg(catName, r.tipo_mov)}
           </div>`;
 
+      const showCatBadge = !opts.hideCatBadge;
+      const catColMarkup = showCatBadge
+        ? `<div class="dh-col-cat">
+            <span class="dh-cat-pill">${App.Utils.escapeHtml(catName)}</span>
+          </div>`
+        : '';
+
       return `
-        <div class="dh-drill-row ${isConsolidado ? 'is-consolidated' : ''} ${isPago ? 'is-pago-tc' : ''}" data-id="${r.id_movimiento || r.id}">
+        <div class="dh-drill-row ${!showCatBadge ? 'no-cat' : ''} ${isConsolidado ? 'is-consolidated' : ''} ${isPago ? 'is-pago-tc' : ''}" data-id="${r.id_movimiento || r.id}">
           <div class="dh-col-main">
             ${iconMarkup}
             <div class="dh-col-desc-wrap">
@@ -1944,9 +2086,7 @@ export class DashboardModule extends BaseModule {
               <span class="dh-row-date">${fechaStr}</span>
             </div>
           </div>
-          <div class="dh-col-cat">
-            <span class="dh-cat-pill">${App.Utils.escapeHtml(catName)}</span>
-          </div>
+          ${catColMarkup}
           <div class="dh-col-medio">
             ${medio}
           </div>
@@ -2040,7 +2180,7 @@ export class DashboardModule extends BaseModule {
                 <span class="fca-chevron">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                 </span>
-                <span class="fca-icon icon-green">
+                <span class="fca-icon icon-subtle">
                   ${getCategoryIconSvg(group.name, 'INGRESO')}
                 </span>
                 <span class="fca-title">${App.Utils.escapeHtml(group.name)}</span>
@@ -2052,7 +2192,7 @@ export class DashboardModule extends BaseModule {
               </div>
             </div>
             <div class="fca-body">
-              ${group.items.map(m => renderMovementRow(m, { hideCatIcon: true })).join('')}
+              ${group.items.map(m => renderMovementRow(m, { hideCatIcon: true, hideCatBadge: true })).join('')}
             </div>
           </div>
         `;
@@ -2107,7 +2247,7 @@ export class DashboardModule extends BaseModule {
               </div>
             </div>
             <div class="fca-body">
-              ${group.items.map(m => renderMovementRow(m, { hideCatIcon: true })).join('')}
+              ${group.items.map(m => renderMovementRow(m, { hideCatIcon: true, hideCatBadge: true })).join('')}
             </div>
           </div>
         `;

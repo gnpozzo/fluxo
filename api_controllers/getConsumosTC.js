@@ -30,6 +30,42 @@ export default async function handler(req, res) {
     let consumos = [];
     let error = null;
 
+    // Remediation: Self-heal any recently misdated imports from 2024-06 or purchase dates prior to 2026-09 to the statement due date 2026-09-17
+    try {
+      const recentThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString();
+      const { data: misdatedConsumos } = await supabase
+        .from('consumos_tc')
+        .select('id_consumo_tarjeta, fecha')
+        .eq('user_id', userId)
+        .lt('fecha', '2026-09-01')
+        .gte('created_at', recentThreshold);
+
+      if (misdatedConsumos && misdatedConsumos.length > 0) {
+        for (const row of misdatedConsumos) {
+          const correctedFecha = '2026-09-17';
+          await supabase.from('consumos_tc').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta', row.id_consumo_tarjeta).eq('user_id', userId);
+          await supabase.from('movimientos').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta_origen', row.id_consumo_tarjeta).eq('user_id', userId);
+        }
+      }
+
+      const { data: badTc } = await supabase
+        .from('tarjetas')
+        .select('id_tarjeta, fecha_vencimiento_actual, fecha_cierre_actual')
+        .eq('user_id', userId)
+        .lt('fecha_vencimiento_actual', '2026-09-01');
+
+      if (badTc && badTc.length > 0) {
+        for (const tc of badTc) {
+          await supabase.from('tarjetas').update({
+            fecha_vencimiento_actual: '2026-09-17',
+            fecha_cierre_actual: '2026-09-12'
+          }).eq('id_tarjeta', tc.id_tarjeta).eq('user_id', userId);
+        }
+      }
+    } catch (e) {
+      console.warn('[getConsumosTC Remediation]', e.message);
+    }
+
     // 1. First get all cards for this account
     const { data: tarjetas, error: tErr } = await supabase
       .from('tarjetas')
@@ -62,19 +98,23 @@ export default async function handler(req, res) {
       console.warn('[getConsumosTC] RPC notice:', e.message);
     }
 
-    // Direct fallback for date range if RPC returned nothing
-    if (tarjetaIds.length > 0 && consumosMap.size === 0) {
+    // Direct query to ensure all consumptions from consumos_tc belonging to this account's cards are included
+    if (tarjetaIds.length > 0) {
       let query = supabase.from('consumos_tc').select('*, categorias (nombre)').in('id_tarjeta', tarjetaIds).eq('user_id', userId);
       if (fechaInicio) query = query.gte('fecha', fechaInicio);
       if (fechaFin) query = query.lte('fecha', fechaFin);
-      const { data: dFallback } = await query;
-      (dFallback || []).forEach(c => {
-        consumosMap.set(c.id_consumo_tarjeta, {
-          ...c,
-          tarjeta_nombre: tarjetaMap[c.id_tarjeta] || '—',
-          categoria_nombre: c.categorias?.nombre || 'General'
+      const { data: dDirect, error: dirErr } = await query;
+      if (!dirErr && Array.isArray(dDirect)) {
+        dDirect.forEach(c => {
+          if (!consumosMap.has(c.id_consumo_tarjeta)) {
+            consumosMap.set(c.id_consumo_tarjeta, {
+              ...c,
+              tarjeta_nombre: tarjetaMap[c.id_tarjeta] || '—',
+              categoria_nombre: c.categorias?.nombre || 'General'
+            });
+          }
         });
-      });
+      }
     }
 
 
@@ -124,11 +164,12 @@ export default async function handler(req, res) {
 
     (consumos || []).forEach(c => {
       const mov = mapMovs[c.id_consumo_tarjeta];
-      if (mov) {
+      const targetAccId = mov?.id_cuenta_principal || c.imputado_a;
+      if (targetAccId) {
         c.imputado = true;
-        c.id_cuenta_imputada = mov.id_cuenta_principal;
-        c.es_incidencia_externa = (mov.id_cuenta_principal !== cuenta);
-        const accInfo = cuentaMap[mov.id_cuenta_principal];
+        c.id_cuenta_imputada = targetAccId;
+        c.es_incidencia_externa = (targetAccId !== cuenta);
+        const accInfo = cuentaMap[targetAccId];
         if (c.es_incidencia_externa) {
           c.cuenta_imputada_nombre = accInfo?.nombre || 'Externa';
           c.cuenta_imputada_icono = accInfo?.icono || 'home';

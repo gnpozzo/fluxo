@@ -5,14 +5,15 @@ const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora de caché
 
 // Modelos de respaldo en caso de fallo de red en /models
 export const DEFAULT_FLASH_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
   'gemini-3.6-flash',
-  'gemini-3.8-flash',
-  'gemini-3.5-flash',
-  'gemini-3.0-flash'
+  'gemini-3.8-flash'
 ];
 
 /**
- * Extrae la versión numérica de un modelo (ej. "gemini-3.6-flash" -> 3.6)
+ * Extrae la versión numérica de un modelo (ej. "gemini-3.6-flash" -> 3.6, "gemini-2.5-flash" -> 2.5)
  */
 export function parseModelVersion(modelName) {
   if (!modelName) return 0;

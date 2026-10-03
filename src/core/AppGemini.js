@@ -467,6 +467,71 @@ export class GeminiChatController {
       }
     }
 
+    // 1d. Extraer bloque de acción para meta programada de reducción: [ACCION_PROGRAMAR_META_REDUCCION: {...}]
+    let metaReduccionHtml = '';
+    const metaReduccionMatch = cleanText.match(/\[ACCION_PROGRAMAR_META_REDUCCION:\s*(\{.+?\})\]/s);
+    if (metaReduccionMatch) {
+      try {
+        const metaRed = JSON.parse(metaReduccionMatch[1]);
+        const categoria = metaRed.categoria || 'General';
+        const tipo = metaRed.tipo || 'PORCENTAJE';
+        const valor = Number(metaRed.valor) || 0;
+        const desc = metaRed.descripcion || `Reducir gastos en ${categoria}`;
+        const mesInicio = metaRed.mesInicio || App.Store?.mes;
+
+        // Persistir en metas de gastos en localStorage
+        let metasGastos = [];
+        try {
+          const stored = localStorage.getItem('fluxo_metas_gastos');
+          if (stored) metasGastos = JSON.parse(stored);
+        } catch (_) {}
+        metasGastos = metasGastos.filter(m => m.categoria !== categoria);
+        metasGastos.push({
+          id: 'META_' + Date.now(),
+          categoria,
+          tipo,
+          valor,
+          mesInicio,
+          descripcion: desc,
+          creadoEl: new Date().toISOString()
+        });
+        localStorage.setItem('fluxo_metas_gastos', JSON.stringify(metasGastos));
+
+        // Registrar recordatorio en la base de datos para evaluación mensual
+        try {
+          if (window.App?.API) {
+            window.App.API.call('admin_saveRecordatorio', {
+              recordatorio: {
+                id_cuenta_principal: App.Store?.cuenta || null,
+                titulo: `🎯 Auditoría de Meta: ${categoria}`,
+                mensaje: `El bot analizará el cumplimiento de tu meta: ${desc}. Desvío y resultado mensual.`,
+                frecuencia: 'MENSUAL',
+                dia_mes: 1,
+                canales: 'APP,TELEGRAM',
+                activa: true
+              }
+            }).catch(e => console.warn('[FluxoAI -> saveRecordatorio error]:', e));
+          }
+        } catch (_) {}
+
+        const valorTxt = tipo === 'PORCENTAJE' ? `-${valor}%` : `-$${valor.toLocaleString('es-AR')}`;
+        metaReduccionHtml = `
+          <div class="gemini-meta-card" style="margin-top:14px; padding:12px 14px; background:linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(234, 88, 12, 0.05) 100%); border:1.5px solid rgba(245, 158, 11, 0.3); border-radius:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:1.4rem;">🎯</span>
+              <div>
+                <strong style="display:block; color:var(--texto); font-size:0.9rem;">Meta de Reducción Programada</strong>
+                <span style="font-size:0.78rem; color:var(--texto-2);">Rubro: <strong>${App.Utils.escapeHtml(categoria)}</strong> • Objetivo: <strong>${valorTxt}</strong> a partir de <strong>${mesInicio}</strong></span>
+              </div>
+            </div>
+          </div>
+        `;
+        cleanText = cleanText.replace(metaReduccionMatch[0], '').trim();
+      } catch (err) {
+        console.warn('[FluxoAI] Error parsing ACCION_PROGRAMAR_META_REDUCCION:', err);
+      }
+    }
+
     // 2. Extraer bloque de opciones interactivas si existe
     let optionsHtml = '';
     const optionsMatch = cleanText.match(/\[OPCIONES:\s*(.+?)\]/i);
@@ -559,7 +624,7 @@ export class GeminiChatController {
       }
     }
 
-    return finalHtml + optionsHtml + importActionHtml + metaActionHtml + topeActionHtml;
+    return finalHtml + optionsHtml + importActionHtml + metaActionHtml + topeActionHtml + metaReduccionHtml;
   }
 
   async #handleUserMessage(message) {
@@ -628,7 +693,7 @@ export class GeminiChatController {
 
       const headers = { 'Content-Type': 'application/json' };
       if (window.App && window.App.Auth) {
-        const token = window.App.Auth.getToken();
+        const token = window.App.Auth.getValidToken ? await window.App.Auth.getValidToken() : window.App.Auth.getToken();
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 

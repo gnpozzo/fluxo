@@ -282,6 +282,72 @@ export default async function handler(req, res) {
       });
     }
 
+    // Evaluar metas de reducción de gastos si el recordatorio corresponde a auditoría de metas
+    try {
+      const metaRecs = (recordatorios || []).filter(r => r.titulo && r.titulo.includes('Auditoría de Meta'));
+      if (metaRecs.length > 0 && movimientos && movimientos.length > 0) {
+        // Calcular gastos del mes actual por categoría
+        const gastosActualesPorCat = {};
+        movimientos.forEach(m => {
+          if (m.tipo_mov === 'EGRESO') {
+            const cat = (m.categoria_nombre || 'General').toLowerCase();
+            gastosActualesPorCat[cat] = (gastosActualesPorCat[cat] || 0) + Number(m.importe || 0);
+          }
+        });
+
+        // Obtener gastos del mes previo para comparar el desvío
+        const prevM = m === 1 ? 12 : m - 1;
+        const prevY = m === 1 ? y - 1 : y;
+        const prevDateStart = `${prevY}-${String(prevM).padStart(2, '0')}-01`;
+        const prevEndM = new Date(Date.UTC(prevY, prevM, 0));
+        const prevDateEnd = prevEndM.toISOString().split('T')[0];
+
+        const { data: prevMovs } = await supabase.rpc('get_movimientos_list', {
+          p_id_cuenta: cuenta,
+          p_fecha_inicio: prevDateStart,
+          p_fecha_fin: prevDateEnd
+        });
+
+        const gastosPreviosPorCat = {};
+        (prevMovs || []).forEach(m => {
+          if (m.tipo_mov === 'EGRESO') {
+            const cat = (m.categoria_nombre || 'General').toLowerCase();
+            gastosPreviosPorCat[cat] = (gastosPreviosPorCat[cat] || 0) + Number(m.importe || 0);
+          }
+        });
+
+        metaRecs.forEach(mr => {
+          const catMatch = mr.titulo.split(':')[1]?.trim() || '';
+          const catKey = catMatch.toLowerCase();
+          const gastoActual = gastosActualesPorCat[catKey] || 0;
+          const gastoPrevio = gastosPreviosPorCat[catKey] || 0;
+
+          if (gastoPrevio > 0) {
+            const diff = gastoActual - gastoPrevio;
+            const pctCambio = ((diff / gastoPrevio) * 100).toFixed(1);
+            const cumplio = diff <= 0;
+
+            notificaciones.push({
+              id: 'eval_meta_' + catKey + '_' + trimmed,
+              tipo: cumplio ? 'ingreso' : 'alerta',
+              icono: cumplio ? 'verified' : 'warning',
+              categoria: 'alertas',
+              titulo: cumplio ? `🎯 Meta Cumplida en ${catMatch}` : `⚠️ Desvío de Meta en ${catMatch}`,
+              mensaje: cumplio
+                ? `¡Felicitaciones! Redujiste los gastos de ${catMatch} en un ${Math.abs(pctCambio)}% ($${Math.abs(diff).toLocaleString('es-AR')} menos que el mes anterior).`
+                : `Los gastos en ${catMatch} aumentaron un ${pctCambio}% ($${diff.toLocaleString('es-AR')} más que el mes anterior). Revisa los consumos para corregir el desvío.`,
+              importe: Math.abs(diff),
+              fecha: `${trimmed}-01`,
+              tipo_entidad: 'meta_reduccion',
+              id_entidad: mr.id_recordatorio
+            });
+          }
+        });
+      }
+    } catch (evalErr) {
+      console.warn('[getNotificaciones -> eval metas error]:', evalErr.message);
+    }
+
     return res.status(200).json({ success: true, data: notificaciones });
   } catch (err) {
     console.error('[API -> getNotificaciones Error]', err.message);

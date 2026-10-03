@@ -166,6 +166,41 @@ class AuthService {
   getToken() {
     return this.session?.access_token || null;
   }
+
+  async getValidToken() {
+    if (!supabase?.auth) return this.getToken();
+    const expiresAt = this.session?.expires_at; // unix timestamp en segundos
+    const now = Math.floor(Date.now() / 1000);
+    // Si no hay sesión o expira en los próximos 120 segundos, renovar de forma transparente
+    if (!this.session || (expiresAt && (expiresAt - now) < 120)) {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!error && data?.session) {
+          this.session = data.session;
+          this.user = data.session.user;
+          return data.session.access_token;
+        }
+      } catch (e) {
+        console.warn('[Auth] Error al refrescar token expirado:', e);
+      }
+    }
+    return this.session?.access_token || null;
+  }
+
+  async refreshSession() {
+    if (!supabase?.auth) return false;
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (!error && data?.session) {
+        this.session = data.session;
+        this.user = data.session.user;
+        return true;
+      }
+    } catch (e) {
+      console.warn('[Auth] refreshSession fallo:', e);
+    }
+    return false;
+  }
 }
 
 export const Auth = new AuthService();

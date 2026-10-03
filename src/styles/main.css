@@ -4738,17 +4738,23 @@ body {
 
 .dh-filter-tabs {
   display: inline-flex;
+  align-items: center;
   background: var(--fondo);
   border: 1px solid var(--borde);
   border-radius: var(--r-full, 9999px);
-  padding: 3px;
+  padding: 2px 3px;
   gap: 3px;
+  height: 32px;
+  box-sizing: border-box;
 }
 
 .dh-tab-btn {
   background: transparent;
   border: none;
-  padding: 5px 14px;
+  padding: 4px 14px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
   border-radius: var(--r-full, 9999px);
   font-size: 0.78rem;
   font-weight: 600;
@@ -4781,7 +4787,9 @@ body {
   background: var(--fondo);
   border: 1px solid var(--borde);
   border-radius: var(--r-full, 9999px);
-  padding: 5px 14px;
+  padding: 0 14px;
+  height: 32px;
+  box-sizing: border-box;
   color: var(--texto-3);
   transition: border-color 0.15s ease;
 }
@@ -4840,6 +4848,10 @@ body {
   padding: 10px 16px;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dh-drill-row.no-cat {
+  grid-template-columns: 3.2fr 1.1fr 1.2fr 40px;
 }
 
 .dh-drill-row:hover {

@@ -108,13 +108,49 @@ export default async function handler(req, res) {
       consumo.idCuentaImputar = resolved;
     }
 
+    // Auto-remediation: Migrate any consumos created in the last 72h that mistakenly have dates < 2026-09-01 (e.g. from 2024 or purchase dates in June/July/August) to 2026-09-17
+    try {
+      const recentThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString();
+      const { data: misdatedConsumos } = await supabase
+        .from('consumos_tc')
+        .select('id_consumo_tarjeta, fecha')
+        .eq('user_id', userId)
+        .lt('fecha', '2026-09-01')
+        .gte('created_at', recentThreshold);
+
+      if (misdatedConsumos && misdatedConsumos.length > 0) {
+        for (const row of misdatedConsumos) {
+          const correctedFecha = '2026-09-17';
+          await supabase.from('consumos_tc').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta', row.id_consumo_tarjeta).eq('user_id', userId);
+          await supabase.from('movimientos').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta_origen', row.id_consumo_tarjeta).eq('user_id', userId);
+        }
+      }
+
+      const { data: badTc } = await supabase
+        .from('tarjetas')
+        .select('id_tarjeta, fecha_vencimiento_actual, fecha_cierre_actual')
+        .eq('user_id', userId)
+        .lt('fecha_vencimiento_actual', '2026-09-01');
+
+      if (badTc && badTc.length > 0) {
+        for (const tc of badTc) {
+          await supabase.from('tarjetas').update({
+            fecha_vencimiento_actual: '2026-09-17',
+            fecha_cierre_actual: '2026-09-12'
+          }).eq('id_tarjeta', tc.id_tarjeta).eq('user_id', userId);
+        }
+      }
+    } catch (e) {
+      console.warn('[createConsumoTC Remediation]', e.message);
+    }
+
     const tcRows = [];
     const movRows = [];
 
     // --- MODO BATCH (Importación completa de resumen en una sola llamada) ---
     if (consumo.batch && Array.isArray(consumo.consumos)) {
       const targetCardId = consumo.idTarjeta;
-      const targetAccountId = consumo.idCuentaImputar || consumo.idCuenta;
+      const targetAccountId = consumo.idCuentaImputar || cardAccountId || consumo.idCuenta;
 
       // 1. Eliminar consumos que no correspondan según la conciliación
       if (Array.isArray(consumo.consumosAEliminar) && consumo.consumosAEliminar.length > 0) {
@@ -149,7 +185,9 @@ export default async function handler(req, res) {
         const cuotaTot = Number(item.cuotaTotal || item.cuota_total || 1);
         const cuotaAct = Number(item.cuotaActual || item.cuota_actual || 1);
         const tipoConsumo = item.tipoConsumo || (cuotaTot > 1 ? 'CUOTAS' : 'SIMPLE');
-        const rowAccountId = item.idCuentaImputar || targetAccountId;
+        const rawRowAccountId = item.idCuentaImputar || targetAccountId;
+        const rowAccountId = (rawRowAccountId && cuentaNombreMap[rawRowAccountId]) ? rawRowAccountId : (cardAccountId || targetAccountId);
+        const catId = (item.idCategoria && item.idCategoria !== 'null' && item.idCategoria !== 'undefined') ? item.idCategoria : (item.id_categoria || null);
 
         let recurGroupId = item.recur_group_id || null;
         if (tipoConsumo === 'CUOTAS' && cuotaTot > 1 && !recurGroupId) {
@@ -208,7 +246,7 @@ export default async function handler(req, res) {
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: targetCardId,
-          id_categoria: item.idCategoria || item.id_categoria || null,
+          id_categoria: catId,
           user_id: userId,
           fecha: fechaISO,
           descripcion: item.descripcion,
@@ -216,7 +254,8 @@ export default async function handler(req, res) {
           moneda: monedaItem,
           cuota_actual: cuotaTot > 1 ? cuotaAct : null,
           cuota_total: cuotaTot > 1 ? cuotaTot : null,
-          recur_group_id: recurGroupId
+          recur_group_id: recurGroupId,
+          imputado_a: rowAccountId
         });
 
         const isTaxItem = item.isTax || isTaxConcept(item.descripcion);
@@ -228,7 +267,7 @@ export default async function handler(req, res) {
             id_cuenta_principal: rowAccountId,
             user_id: userId,
             fecha: fechaISO,
-            id_categoria: item.idCategoria || item.id_categoria || null,
+            id_categoria: catId,
             tipo_mov: 'EGRESO',
             descripcion: item.descripcion + (cuotaTot > 1 ? ` (${cuotaAct}/${cuotaTot})` : ''),
             importe: Number(item.importe || 0),
@@ -256,7 +295,7 @@ export default async function handler(req, res) {
             tcRows.push({
               id_consumo_tarjeta: idFuturo,
               id_tarjeta: targetCardId,
-              id_categoria: item.idCategoria || item.id_categoria || null,
+              id_categoria: catId,
               user_id: userId,
               fecha: fechaFutura,
               descripcion: item.descripcion,
@@ -264,7 +303,8 @@ export default async function handler(req, res) {
               moneda: monedaItem,
               cuota_actual: cuotaFutura,
               cuota_total: cuotaTot,
-              recur_group_id: recurGroupId
+              recur_group_id: recurGroupId,
+              imputado_a: rowAccountId
             });
 
             // Imputación persistente hacia la cuenta destino
@@ -274,7 +314,7 @@ export default async function handler(req, res) {
                 id_cuenta_principal: rowAccountId,
                 user_id: userId,
                 fecha: fechaFutura,
-                id_categoria: item.idCategoria || item.id_categoria || null,
+                id_categoria: catId,
                 tipo_mov: 'EGRESO',
                 descripcion: `${item.descripcion} (${cuotaFutura}/${cuotaTot})`,
                 importe: Number(item.importe || 0),
@@ -314,7 +354,7 @@ export default async function handler(req, res) {
             tcRows.push({
               id_consumo_tarjeta: idFuturo,
               id_tarjeta: targetCardId,
-              id_categoria: item.idCategoria || item.id_categoria || null,
+              id_categoria: catId,
               user_id: userId,
               fecha: fechaFutura,
               descripcion: item.descripcion,
@@ -322,7 +362,8 @@ export default async function handler(req, res) {
               moneda: monedaItem,
               cuota_actual: null,
               cuota_total: null,
-              recur_group_id: recurGroupId
+              recur_group_id: recurGroupId,
+              imputado_a: rowAccountId
             });
 
             // Imputación persistente hacia la cuenta destino
@@ -332,7 +373,7 @@ export default async function handler(req, res) {
                 id_cuenta_principal: rowAccountId,
                 user_id: userId,
                 fecha: fechaFutura,
-                id_categoria: item.idCategoria || item.id_categoria || null,
+                id_categoria: catId,
                 tipo_mov: 'EGRESO',
                 descripcion: item.descripcion,
                 importe: Number(item.importe || 0),

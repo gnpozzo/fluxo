@@ -383,15 +383,25 @@ export class TarjetasModule extends BaseModule {
 
               <div class="dh-search-box" style="margin:0;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="tc-consumos-search" placeholder="Buscar..." class="finset-search-input" style="width:130px;">
+                <input type="text" id="tc-consumos-search" placeholder="Buscar..." class="finset-search-input" style="width:120px;">
               </div>
 
-              <button class="btn btn-secondary btn-sm" id="tc-btn-importar-inline" style="display:inline-flex;align-items:center;gap:6px;" title="Importar resumen bancario (PDF o Excel)">
+              <select id="tc-cuenta-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:32px; max-width:140px;" title="Filtrar por cuenta imputada">
+                <option value="">Cuenta: Todas</option>
+                <option value="personal">Cuenta Titular / Propios</option>
+              </select>
+
+              <button class="btn btn-secondary btn-sm" id="tc-btn-importar-inline" style="display:inline-flex;align-items:center;gap:6px;height:32px;box-sizing:border-box;" title="Importar resumen bancario (PDF o Excel)">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 <span>Importar Resumen</span>
               </button>
 
-              <button class="btn btn-primary btn-sm" id="tc-btn-nuevo-inline" style="display:inline-flex;align-items:center;gap:6px;">
+              <button class="btn btn-secondary btn-sm" id="tc-btn-vaciar-inline" style="display:inline-flex;align-items:center;gap:6px;height:32px;box-sizing:border-box;color:var(--peligro, #dc3545);" title="Eliminar todos los consumos">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                <span>Vaciar Consumos</span>
+              </button>
+
+              <button class="btn btn-primary btn-sm" id="tc-btn-nuevo-inline" style="display:inline-flex;align-items:center;gap:6px;height:32px;box-sizing:border-box;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 <span>Nuevo Consumo</span>
               </button>
@@ -940,6 +950,8 @@ export class TarjetasModule extends BaseModule {
           this.#abrirModalAlta();
         } else if (btn.id === 'tc-btn-importar' || btn.id === 'tc-btn-importar-inline') {
           this.#abrirModalImportar();
+        } else if (btn.id === 'tc-btn-vaciar' || btn.id === 'tc-btn-vaciar-inline') {
+          this.#confirmarVaciarConsumos();
         } else if (btn.id === 'tc-btn-pagar-resumen') {
           this.#confirmarPagarResumen();
         } else if (btn.dataset.togglePagoTc) {
@@ -968,6 +980,12 @@ export class TarjetasModule extends BaseModule {
       // Search box
       document.getElementById('tc-consumos-search')?.addEventListener('input', (e) => {
         this.#consumosSearch = e.target.value || '';
+        this.#filterConsumos();
+      });
+
+      // Filter by imputed account
+      document.getElementById('tc-cuenta-filter')?.addEventListener('change', (e) => {
+        this.#selectedCuentaId = e.target.value || '';
         this.#filterConsumos();
       });
 
@@ -1543,7 +1561,44 @@ export class TarjetasModule extends BaseModule {
     this.#updateSubcards();
   }
 
+  #renderCuentaFilter() {
+    const cuentaFilterSelect = document.getElementById('tc-cuenta-filter');
+    if (!cuentaFilterSelect) return;
+
+    const currentVal = this.#selectedCuentaId || '';
+    const pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
+    
+    // Identificar cuentas imputadas en los consumos
+    const cuentasMap = new Map();
+    pool.forEach(c => {
+      if (c.imputado && c.cuenta_imputada_nombre && c.cuenta_imputada_nombre !== 'Propios') {
+        const idC = c.id_cuenta_imputada || c.cuenta_imputada_nombre;
+        cuentasMap.set(idC, c.cuenta_imputada_nombre);
+      }
+    });
+
+    // También agregar todas las cuentas del usuario conocidas en App.Store.cuentas
+    (this.#cuentas || App.Store.cuentas || []).forEach(acc => {
+      if (acc.id_cuenta_principal !== App.Store.cuenta) {
+        cuentasMap.set(acc.id_cuenta_principal, acc.nombre);
+      }
+    });
+
+    let optsHtml = `<option value="" ${currentVal === '' ? 'selected' : ''}>Cuenta: Todas</option>`;
+    optsHtml += `<option value="personal" ${currentVal === 'personal' ? 'selected' : ''}>Cuenta Titular / Propios</option>`;
+
+    cuentasMap.forEach((nombre, idCuenta) => {
+      optsHtml += `<option value="${App.Utils.escapeHtml(idCuenta)}" ${currentVal === idCuenta ? 'selected' : ''}>${App.Utils.escapeHtml(nombre)}</option>`;
+    });
+
+    optsHtml += `<option value="sin_imputar" ${currentVal === 'sin_imputar' ? 'selected' : ''}>Sin Imputar</option>`;
+
+    cuentaFilterSelect.innerHTML = optsHtml;
+    cuentaFilterSelect.value = currentVal;
+  }
+
   #renderCategoryFilter() {
+    this.#renderCuentaFilter();
     const pillsContainer = document.getElementById('tc-cat-filter-pills');
     if (!pillsContainer) return;
 
@@ -1733,10 +1788,18 @@ export class TarjetasModule extends BaseModule {
       const tcName = r.tarjeta_nombre || 'TC';
 
       let badgesHtml = '';
-      if (r.tipo_consumo === 'CUOTAS' || Number(r.cuota_total) > 1) {
-        badgesHtml += `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Cuota ${r.cuota_actual || 1}/${r.cuota_total || 12}</span>`;
+      const cuotaActual = Number(r.cuota_actual || 1);
+      const cuotaTotal = Number(r.cuota_total || 1);
+      if (r.tipo_consumo === 'CUOTAS' || cuotaTotal > 1) {
+        if (cuotaActual === cuotaTotal && cuotaTotal > 1) {
+          badgesHtml += `<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px; margin-left:4px;">🏁 Última cuota</span>`;
+        } else {
+          badgesHtml += `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Cuota ${cuotaActual}/${cuotaTotal}</span>`;
+        }
       } else if (r.tipo_consumo === 'RECURRENTE') {
         badgesHtml += `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Recurrente</span>`;
+      } else {
+        badgesHtml += `<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-weight:500; font-size:0.68rem; padding:2px 7px; border-radius:6px; margin-left:4px;">1️⃣ Única cuota</span>`;
       }
       if (r.imputado && r.cuenta_imputada_nombre && r.cuenta_imputada_nombre !== 'Propios') {
         badgesHtml += `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${App.Utils.escapeHtml(r.cuenta_imputada_nombre)}</span>`;
@@ -2120,24 +2183,51 @@ export class TarjetasModule extends BaseModule {
   }
 
   #updateTopeKpi(saldoTotal) {
-    let tope = { topePorcentaje: 25 };
+    let tope = { 
+      topePorcentaje: 25,
+      modo: 'TOTAL', // 'TOTAL' o 'PERSONAL'
+      baseIngreso: 'TOTAL' // 'TOTAL' o 'SUELDO'
+    };
     try {
       const stored = localStorage.getItem('fluxo_tope_tc');
-      if (stored) tope = JSON.parse(stored);
+      if (stored) tope = { ...tope, ...JSON.parse(stored) };
     } catch (_) {}
 
     const topePct = Number(tope.topePorcentaje) || 25;
     const targetEl = document.getElementById('tc-tope-kpi-target');
-    if (targetEl) targetEl.textContent = `Tope: ${topePct}% de ingresos`;
+    const modoLabel = tope.modo === 'PERSONAL' ? 'Consumo Personal' : 'Total Resumen';
+    const baseLabel = tope.baseIngreso === 'SUELDO' ? 'Sueldo' : 'Ingresos';
+    if (targetEl) targetEl.textContent = `Tope: ${topePct}% de ${baseLabel} (${modoLabel})`;
 
-    // Estimate user monthly income from store or movements
-    const monthlyIncome = Number(App.Store.kpis?.ingresos || 0);
+    // Calcular el monto de consumo a contrastar según modo (Total o Personal)
+    let consumoAContrastar = saldoTotal;
+    if (tope.modo === 'PERSONAL') {
+      const personalSum = (this.#allConsumos || []).reduce((acc, c) => {
+        if (c.moneda === 'USD') return acc;
+        if (c.imputado && c.cuenta_imputada_nombre && c.cuenta_imputada_nombre !== 'Propios') return acc;
+        return acc + Number(c.importe || 0);
+      }, 0);
+      consumoAContrastar = personalSum;
+    }
+
+    // Calcular la base de ingreso (Total Ingresos o categoría Sueldo)
+    let incomeBase = Number(App.Store.kpis?.ingresos || 0);
+    if (tope.baseIngreso === 'SUELDO') {
+      const sueldoMovs = (App.Store.movimientos || []).filter(m => {
+        const cat = (m.categoria_nombre || '').toLowerCase();
+        const desc = (m.descripcion || '').toLowerCase();
+        return (m.tipo_mov === 'INGRESO' || m.tipoMov === 'INGRESO') && (cat.includes('sueldo') || desc.includes('sueldo') || cat.includes('haberes'));
+      });
+      const sueldoTotal = sueldoMovs.reduce((acc, m) => acc + Number(m.importe || 0), 0);
+      if (sueldoTotal > 0) incomeBase = sueldoTotal;
+    }
+
     const valEl = document.getElementById('tc-tope-kpi-val');
     const fillEl = document.getElementById('tc-tope-progress-fill');
     const subEl = document.getElementById('tc-tope-kpi-sub');
     const statusPill = document.getElementById('tc-tope-status-pill');
 
-    if (monthlyIncome <= 0) {
+    if (incomeBase <= 0) {
       if (valEl) valEl.textContent = 'En rango';
       if (fillEl) fillEl.style.width = '15%';
       if (subEl) subEl.textContent = 'Configurá tus ingresos';
@@ -2145,12 +2235,12 @@ export class TarjetasModule extends BaseModule {
       return;
     }
 
-    const actualPct = (saldoTotal / monthlyIncome) * 100;
+    const actualPct = (consumoAContrastar / incomeBase) * 100;
     const ratio = actualPct / topePct;
     const progressWidth = Math.min(100, Math.round(ratio * 100));
 
     if (fillEl) fillEl.style.width = `${progressWidth}%`;
-    if (subEl) subEl.textContent = `${actualPct.toFixed(1)}% de ingresos consumido`;
+    if (subEl) subEl.textContent = `${actualPct.toFixed(1)}% de ${baseLabel.toLowerCase()} (${App.Utils.formatearMoneda(consumoAContrastar)})`;
 
     if (ratio <= 0.8) {
       if (valEl) { valEl.textContent = `${actualPct.toFixed(0)}%`; valEl.style.color = 'var(--verde)'; }
@@ -2168,40 +2258,104 @@ export class TarjetasModule extends BaseModule {
   }
 
   #abrirModalTopeTC() {
-    let tope = { topePorcentaje: 25 };
+    let tope = { 
+      topePorcentaje: 25,
+      modo: 'TOTAL',
+      baseIngreso: 'TOTAL'
+    };
     try {
       const stored = localStorage.getItem('fluxo_tope_tc');
-      if (stored) tope = JSON.parse(stored);
+      if (stored) tope = { ...tope, ...JSON.parse(stored) };
     } catch (_) {}
 
     const modal = new App.Modal('modal-tc-tope');
     modal.open({
-      titulo: 'Configurar Tope de Tarjeta de Crédito',
+      titulo: 'Configurar Tope y Salud de Tarjeta de Crédito',
       icono: 'credit_card',
       body: `
         <form id="form-tc-tope" style="display:flex; flex-direction:column; gap:14px;">
           <div>
-            <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Tope de gasto con Tarjetas (% de tus ingresos)</label>
-            <p style="font-size:0.8rem; color:var(--texto-3); margin:4px 0 8px;">Recomendación financiera: no superar el 25% - 30% de tus ingresos en cuotas y consumos con tarjeta.</p>
+            <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Tope de gasto con Tarjetas (% del ingreso)</label>
+            <p style="font-size:0.8rem; color:var(--texto-3); margin:4px 0 8px;">Recomendación financiera: no superar el 25% - 30% de tus ingresos en tarjeta.</p>
             <div style="display:flex; align-items:center; gap:8px;">
               <input class="input" type="number" name="topePorcentaje" min="5" max="100" step="1" value="${tope.topePorcentaje || 25}" required style="width:120px;">
               <span style="font-weight:700; color:var(--texto); font-size:1rem;">%</span>
             </div>
           </div>
+          <div>
+            <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">¿Qué consumo medir contra el tope?</label>
+            <select class="input" name="modo" style="margin-top:4px;">
+              <option value="TOTAL" ${tope.modo === 'TOTAL' ? 'selected' : ''}>Consumo Total del Resumen (Todas las imputaciones)</option>
+              <option value="PERSONAL" ${tope.modo === 'PERSONAL' ? 'selected' : ''}>Solo Consumos Personales / Titular (Sin imputar a Hogar u otras cuentas)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Comparar contra:</label>
+            <select class="input" name="baseIngreso" style="margin-top:4px;">
+              <option value="TOTAL" ${tope.baseIngreso === 'TOTAL' ? 'selected' : ''}>Ingresos Totales del Mes</option>
+              <option value="SUELDO" ${tope.baseIngreso === 'SUELDO' ? 'selected' : ''}>Solo Sueldo / Haberes</option>
+            </select>
+          </div>
         </form>
       `,
-      confirmLabel: 'Guardar Tope',
+      confirmLabel: 'Guardar Configuración',
       onConfirm: (m) => {
         const form = document.getElementById('form-tc-tope');
         if (!form) return;
         const fd = new FormData(form);
         const topePorcentaje = Number(fd.get('topePorcentaje')) || 25;
-        const nuevoTope = { topePorcentaje, topeMonto: null };
+        const modo = fd.get('modo') || 'TOTAL';
+        const baseIngreso = fd.get('baseIngreso') || 'TOTAL';
+        const nuevoTope = { topePorcentaje, modo, baseIngreso, topeMonto: null };
         localStorage.setItem('fluxo_tope_tc', JSON.stringify(nuevoTope));
         App.Events.emit('tope_tc:updated', nuevoTope);
         App.Toast.success('Tope de tarjeta actualizado.');
         m.close();
         this._render({ success: true, consumos: this.#allConsumos });
+      }
+    });
+  }
+
+  async #confirmarVaciarConsumos() {
+    const activeCard = this.#selectedTcId
+      ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId)
+      : null;
+    const nombreObjetivo = activeCard ? `la tarjeta "${activeCard.nombre}"` : 'todas las tarjetas de crédito';
+
+    const modal = new App.Modal('modal-tc-vaciar-confirm');
+    modal.open({
+      titulo: 'Vaciar consumos de tarjeta',
+      icono: 'delete',
+      body: `
+        <div style="text-align:center;padding:12px 0;">
+          <p style="margin:0 0 10px 0;font-size:0.95rem;color:var(--texto);">
+            ¿Confirmas que deseas eliminar <strong>todos los consumos</strong> asociados a <strong>${App.Utils.escapeHtml(nombreObjetivo)}</strong>?
+          </p>
+          <p style="font-size:0.82rem;color:var(--peligro, #dc3545);margin:0;">
+            ⚠️ Esta acción es irreversible. También se eliminarán los egresos generados en las cuentas vinculadas.
+          </p>
+        </div>
+      `,
+      confirmLabel: 'Sí, vaciar consumos',
+      danger: true,
+      onConfirm: async (m) => {
+        m.setLoading(true);
+        try {
+          await App.API.call(this._deleteEndpoint, {
+            scope: 'ALL',
+            idTarjeta: this.#selectedTcId || null
+          });
+          App.Toast.success('Consumos eliminados correctamente.');
+          App.API.invalidateAll();
+          if (App.Events) App.Events.emit('data:changed');
+          m.close();
+          this.destruir();
+          await this.cargar();
+        } catch (err) {
+          App.Toast.error(err.message || 'Error al vaciar los consumos.');
+        } finally {
+          m.setLoading(false);
+        }
       }
     });
   }
@@ -2361,9 +2515,13 @@ export class TarjetasModule extends BaseModule {
       <button id="tc-btn-importar" class="btn btn-secondary" style="display:inline-flex;align-items:center;gap:6px;">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-sm"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar resumen
       </button>
+      <button id="tc-btn-vaciar" class="btn btn-secondary" style="display:inline-flex;align-items:center;gap:6px;color:var(--peligro, #dc3545);">
+        ${App.Icons.get('delete', 'icon-sm')} Vaciar consumos
+      </button>
     `;
     
     document.getElementById('tc-btn-importar')?.addEventListener('click', () => this.#abrirModalImportar());
+    document.getElementById('tc-btn-vaciar')?.addEventListener('click', () => this.#confirmarVaciarConsumos());
   }
 
   #abrirModalImportar() {
@@ -2394,8 +2552,9 @@ export class TarjetasModule extends BaseModule {
               <strong id="tc-res-cierre" style="font-size:0.95rem; color:var(--texto-1)">—</strong>
             </div>
             <div>
-              <span style="font-size:0.8rem; color:var(--texto-3); display:block">Vencimiento</span>
-              <strong id="tc-res-venc" style="font-size:0.95rem; color:var(--texto-1)">—</strong>
+              <label for="tc-res-venc-input" style="font-size:0.8rem; color:var(--texto-3); display:block; margin-bottom:2px" title="Período al que se imputan los consumos">Vencimiento (Período)</label>
+              <input type="date" id="tc-res-venc-input" class="input" style="padding:2px 6px; font-size:0.85rem; height:28px; width:135px; font-weight:600; color:var(--texto-1); background:var(--bg-1); border:1px solid var(--border-color); border-radius:4px" />
+              <strong id="tc-res-venc" style="display:none">—</strong>
             </div>
             <div>
               <span style="font-size:0.8rem; color:var(--texto-3); display:block">Total Pesos</span>
@@ -2407,14 +2566,10 @@ export class TarjetasModule extends BaseModule {
             </div>
           </div>
 
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
-            <div class="form-group">
-              <label style="font-weight:500; margin-bottom:4px; display:block">Tarjeta Destino</label>
+          <div style="margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+              <label style="font-weight:500; margin-bottom:4px; display:block">Tarjeta Destino (Plástico)</label>
               <select class="input" id="tc-import-card-select"></select>
-            </div>
-            <div class="form-group">
-              <label style="font-weight:500; margin-bottom:4px; display:block">Cuenta de Imputación (Débito)</label>
-              <select class="input" id="tc-import-account-select"></select>
             </div>
           </div>
 
@@ -2543,7 +2698,7 @@ export class TarjetasModule extends BaseModule {
       const mimeType = file.type || (file.name.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf');
 
       try {
-        const resp = await App.API.call('parseStatement', { fileBase64: base64, mimeType });
+        const resp = await App.API.call('parseStatement', { fileBase64: base64, mimeType, fileName: file.name });
         if (resp && resp.success && resp.payload) {
           this.#showImportResults(resp.payload);
         } else {
@@ -2573,26 +2728,57 @@ export class TarjetasModule extends BaseModule {
 
     const stInfo = payload.statement_info || {};
     document.getElementById('tc-res-cierre').textContent = App.Utils.formatearFecha(stInfo.fecha_cierre) || '—';
-    document.getElementById('tc-res-venc').textContent = App.Utils.formatearFecha(stInfo.fecha_vencimiento) || '—';
+    const oldVencEl = document.getElementById('tc-res-venc');
+    if (oldVencEl) oldVencEl.textContent = App.Utils.formatearFecha(stInfo.fecha_vencimiento) || '—';
+    const vtoInput = document.getElementById('tc-res-venc-input');
+    const defaultVto = stInfo.fecha_vencimiento || (App.Store.mes ? `${App.Store.mes}-17` : '2026-09-17');
+    if (vtoInput) {
+      vtoInput.value = defaultVto;
+      vtoInput.onchange = () => {
+        const newVto = vtoInput.value;
+        if (this.#lastStatementPayload?.statement_info) {
+          this.#lastStatementPayload.statement_info.fecha_vencimiento = newVto;
+        }
+        (this.#txListImportar || []).forEach(tx => {
+          tx.fecha = newVto;
+          const dateEl = document.getElementById(`tx-date-${tx.id}`);
+          if (dateEl) dateEl.textContent = App.Utils.formatearFecha(newVto);
+        });
+      };
+    }
     document.getElementById('tc-res-total-ars').textContent = App.Utils.formatearMoneda(stInfo.total_ars) || '—';
     document.getElementById('tc-res-total-usd').textContent = 'USD ' + (stInfo.total_usd?.toLocaleString('es-AR') || '0,00');
 
     const cardSelect = document.getElementById('tc-import-card-select');
-    if (cardSelect) {
-      cardSelect.innerHTML = this.#tarjetas.map(t => `
-        <option value="${t.id_tarjeta}" ${t.id_tarjeta === payload.card_info?.id_tarjeta || t.ultimos_4_digitos === payload.card_info?.ultimos_4_digitos ? 'selected' : ''}>
-          ${App.Utils.escapeHtml(t.nombre)} (${t.ultimos_4_digitos || '—'})
-        </option>
-      `).join('');
-    }
+    const cuentasList = (this.#cuentas && this.#cuentas.length > 0) ? this.#cuentas : (App.Store?.cuentas || []);
+    const categoriasList = (this.#categorias && this.#categorias.length > 0) ? this.#categorias : (window._appCategorias || []);
+    const cuentaMap = {};
+    cuentasList.forEach(c => { cuentaMap[c.id_cuenta_principal] = c.nombre; });
 
-    const accSelect = document.getElementById('tc-import-account-select');
-    if (accSelect) {
-      accSelect.innerHTML = this.#cuentas.map(c => `
-        <option value="${c.id_cuenta_principal}" ${c.id_cuenta_principal === App.Store.cuenta ? 'selected' : ''}>
-          ${App.Utils.escapeHtml(c.nombre)}
-        </option>
-      `).join('');
+    if (cardSelect) {
+      const cardsList = (window._appTarjetas && window._appTarjetas.length > 0) ? window._appTarjetas : (this.#tarjetas || []);
+      let autoSelected = false;
+      cardSelect.innerHTML = cardsList.map(t => {
+        let isMatch = false;
+        if (!autoSelected) {
+          if (payload.card_info?.id_tarjeta && t.id_tarjeta === payload.card_info.id_tarjeta) {
+            isMatch = true;
+          } else if (payload.card_info?.ultimos_4_digitos && t.ultimos_4_digitos === payload.card_info.ultimos_4_digitos) {
+            isMatch = true;
+          } else if (payload.card_info?.nombre_tarjeta && t.nombre && t.nombre.toLowerCase().includes(payload.card_info.nombre_tarjeta.toLowerCase())) {
+            isMatch = true;
+          } else if (payload.card_info?.banco_o_emisor && t.nombre && t.nombre.toLowerCase().includes(payload.card_info.banco_o_emisor.toLowerCase())) {
+            isMatch = true;
+          }
+          if (isMatch) autoSelected = true;
+        }
+        const accLabel = cuentaMap[t.id_cuenta_principal] ? ` — ${cuentaMap[t.id_cuenta_principal]}` : '';
+        return `
+          <option value="${t.id_tarjeta}" ${isMatch ? 'selected' : ''}>
+            ${App.Utils.escapeHtml(t.nombre)}${accLabel} (${t.ultimos_4_digitos || '—'})
+          </option>
+        `;
+      }).join('');
     }
 
     const txList = [];
@@ -2660,11 +2846,21 @@ export class TarjetasModule extends BaseModule {
       const defaultAccountId = tx.id_cuenta_imputar || App.Store.cuenta;
       const accSelectHtml = `
         <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-acc-${tx.id}">
-          ${this.#cuentas.map(c => `
+          ${cuentasList.map(c => `
             <option value="${c.id_cuenta_principal}" ${c.id_cuenta_principal === defaultAccountId ? 'selected' : ''}>
               ${App.Utils.escapeHtml(c.nombre)}
             </option>
           `).join('')}
+        </select>
+      `;
+
+      const catSelectHtml = `
+        <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-cat-${tx.id}">
+          <option value="">(Sin categoría)</option>
+          ${categoriasList
+            .filter(c => (c.tipo_mov === 'EGRESO' || c.tipo === 'EGRESO' || !c.tipo_mov) && c.activa !== false)
+            .map(c => `<option value="${c.id_categoria}" ${c.id_categoria === tx.id_categoria ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
+            .join('')}
         </select>
       `;
 
@@ -2693,19 +2889,17 @@ export class TarjetasModule extends BaseModule {
           <td style="padding:10px; text-align:center">
             <input type="checkbox" class="tx-select-row" data-id="${tx.id}" ${isChecked ? 'checked' : ''}>
           </td>
-          <td style="padding:10px; white-space:nowrap">${App.Utils.formatearFecha(tx.fecha)}</td>
+          <td style="padding:10px; white-space:nowrap">
+            <span id="tx-date-${tx.id}" style="font-weight:500">${App.Utils.formatearFecha(tx.fecha)}</span>
+            ${tx.fecha_compra && tx.fecha_compra !== tx.fecha ? `<small style="display:block; font-size:0.75rem; color:var(--texto-3)">(Compra: ${App.Utils.formatearFecha(tx.fecha_compra)})</small>` : ''}
+          </td>
           <td style="padding:10px; text-align:center">${badgeHtml}</td>
           <td style="padding:10px">
             <input class="input" type="text" style="padding:4px 8px; font-size:0.8rem; margin:0; width:100%" id="tx-desc-${tx.id}" value="${App.Utils.escapeHtml(tx.descripcion)}">
             ${diffDescHtml}
           </td>
           <td style="padding:10px">
-            <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-cat-${tx.id}">
-              ${this.#categorias
-                .filter(c => c.tipo_mov === 'EGRESO' && c.activa)
-                .map(c => `<option value="${c.id_categoria}" ${c.id_categoria === tx.id_categoria ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
-                .join('')}
-            </select>
+            ${catSelectHtml}
           </td>
           <td style="padding:10px">
             ${accSelectHtml}
@@ -2815,12 +3009,10 @@ export class TarjetasModule extends BaseModule {
     }
 
     const cardSelect = document.getElementById('tc-import-card-select');
-    const accSelect = document.getElementById('tc-import-account-select');
     const targetCard = cardSelect ? cardSelect.value : null;
-    const targetAccount = accSelect ? accSelect.value : null;
 
-    if (!targetCard || !targetAccount) {
-      App.Toast.warning('Selecciona la tarjeta y la cuenta de imputación.');
+    if (!targetCard) {
+      App.Toast.warning('Selecciona la tarjeta destino para imputar los consumos.');
       return;
     }
 
@@ -2847,18 +3039,24 @@ export class TarjetasModule extends BaseModule {
       });
 
       // 3. Construir batch con todos los consumos seleccionados
+      const vtoInput = document.getElementById('tc-res-venc-input');
+      const selectedVto = vtoInput?.value || this.#lastStatementPayload?.statement_info?.fecha_vencimiento;
+      if (this.#lastStatementPayload?.statement_info && selectedVto) {
+        this.#lastStatementPayload.statement_info.fecha_vencimiento = selectedVto;
+      }
+
       const batchConsumos = [];
       for (const chk of checkedRowChks) {
         const txId = chk.dataset.id;
         const originalTx = this.#txListImportar.find(t => t.id === txId);
         if (!originalTx) continue;
 
-        const desc = document.getElementById(`tx-desc-${txId}`).value;
-        const cat = document.getElementById(`tx-cat-${txId}`).value;
-        const rowAcc = document.getElementById(`tx-acc-${txId}`)?.value || targetAccount;
-        const type = document.getElementById(`tx-type-${txId}`).value;
-        const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`).value || 1);
-        const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`).value || 1);
+        const desc = document.getElementById(`tx-desc-${txId}`)?.value || originalTx.descripcion;
+        const cat = document.getElementById(`tx-cat-${txId}`)?.value || null;
+        const rowAcc = document.getElementById(`tx-acc-${txId}`)?.value || App.Store.cuenta;
+        const type = document.getElementById(`tx-type-${txId}`)?.value || 'SIMPLE';
+        const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`)?.value || 1);
+        const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`)?.value || 1);
 
         batchConsumos.push({
           descripcion: desc,
@@ -2866,11 +3064,12 @@ export class TarjetasModule extends BaseModule {
           idCuentaImputar: rowAcc,
           importe: Number(originalTx.importe || 0),
           moneda: originalTx.moneda || 'ARS',
-          fecha: originalTx.fecha,
+          fecha: selectedVto || originalTx.fecha,
           tipoConsumo: type,
           cuotaActual: cuotaAct,
           cuotaTotal: cuotaTot,
-          recur_group_id: originalTx.recur_group_id || null
+          recur_group_id: originalTx.recur_group_id || null,
+          isTax: !!originalTx.isTax
         });
       }
 
@@ -2879,19 +3078,22 @@ export class TarjetasModule extends BaseModule {
         batch: true,
         idCuenta: App.Store.cuenta,
         idTarjeta: targetCard,
-        idCuentaImputar: targetAccount,
         imputar: true,
         statementInfo: this.#lastStatementPayload?.statement_info || null,
         consumos: batchConsumos,
         consumosAEliminar: consumosAEliminar,
         bajasRecurrencias: bajasRecurrencias
       };
+      if (selectedVto && batchPayload.statementInfo) {
+        batchPayload.statementInfo.fecha_vencimiento = selectedVto;
+      }
 
       await App.API.call(this._createEndpoint, batchPayload);
 
-      // Check which month the imported transactions belong to
-      const sampleTx = batchConsumos[0];
-      const txMonth = sampleTx?.fecha ? sampleTx.fecha.substring(0, 7) : null;
+      // Check which month the imported statement belongs to
+      const stVto = selectedVto || this.#lastStatementPayload?.statement_info?.fecha_vencimiento;
+      const stCierre = this.#lastStatementPayload?.statement_info?.fecha_cierre;
+      const txMonth = (stVto ? stVto.substring(0, 7) : (stCierre ? stCierre.substring(0, 7) : App.Store.mes));
 
       let msg = `¡Importación finalizada con éxito! Se cargaron ${batchConsumos.length} consumos.`;
       if (txMonth && txMonth !== App.Store.mes) {
@@ -2901,11 +3103,37 @@ export class TarjetasModule extends BaseModule {
         msg += ` (Quedaron registrados en el período ${mesNombre})`;
       }
       App.Toast.success(msg, 7000);
+
+      // Identify account owner of the target card
+      const allCards = (window._appTarjetas && window._appTarjetas.length > 0) ? window._appTarjetas : (this.#tarjetas || []);
+      const targetCardObj = allCards.find(c => c.id_tarjeta === targetCard);
+      const cardAccountId = targetCardObj?.id_cuenta_principal;
+
       App.API.invalidateAll();
-      if (App.Events) App.Events.emit('data:changed');
-      this.destruir();
+      window._appTarjetas = null;
+      this.#selectedTcId = targetCard;
+
+      let contextChanged = false;
+      if (cardAccountId && cardAccountId !== App.Store.cuenta) {
+        App.Store.setCuenta(cardAccountId);
+        const selAcc = document.getElementById('selector-cuenta');
+        if (selAcc) selAcc.value = cardAccountId;
+        contextChanged = true;
+      }
+
+      if (txMonth && txMonth !== App.Store.mes) {
+        App.Store.setMes(txMonth);
+        const selMes = document.getElementById('selector-mes');
+        if (selMes) selMes.value = txMonth;
+        contextChanged = true;
+      }
+
       modal.close();
-      await this.cargar();
+      if (!contextChanged) {
+        if (App.Events) App.Events.emit('data:changed');
+        this.destruir();
+        await this.cargar();
+      }
     } catch (err) {
       App.Toast.error(err.message || 'Error al guardar consumos.');
     } finally {

@@ -54,6 +54,21 @@ class AppInit {
       this.#showLoginUI();
       return;
     }
+
+    // Listener global ante expiración de sesión definitiva
+    let isHandlingAuthError = false;
+    App.Events.on('auth:unauthorized', async () => {
+      if (isHandlingAuthError) return;
+      isHandlingAuthError = true;
+      const restored = App.Auth?.getValidToken ? await App.Auth.getValidToken() : null;
+      if (restored) {
+        isHandlingAuthError = false;
+        return;
+      }
+      this.#showLoginUI();
+      App.Toast.warning('Tu sesión ha expirado. Por favor, ingresa tus credenciales nuevamente.');
+      setTimeout(() => { isHandlingAuthError = false; }, 3000);
+    });
     
     this.#proceedWithBoot();
   }

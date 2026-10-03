@@ -102,7 +102,7 @@ class ApiService {
         'Content-Type': 'application/json',
       };
       if (window.App && window.App.Auth) {
-        const token = window.App.Auth.getToken();
+        const token = window.App.Auth.getValidToken ? await window.App.Auth.getValidToken() : window.App.Auth.getToken();
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
@@ -152,6 +152,19 @@ class ApiService {
           if (window.App) window.App.warn('AppAPI', 'fetch:server_retry', { endpoint, attempt, status: response?.status || 504 });
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
           return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
+        }
+
+        // Retry on 401: attempt to refresh the session token seamlessly before throwing
+        if (response && response.status === 401 && attempt < 2 && window.App && window.App.Auth && window.App.Auth.refreshSession) {
+          try {
+            const refreshed = await window.App.Auth.refreshSession();
+            if (refreshed) {
+              if (window.App) window.App.log('AppAPI', 'fetch:token_refreshed_retry', { endpoint, attempt });
+              return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
+            }
+          } catch (refErr) {
+            console.warn('[AppAPI] Token refresh attempt failed:', refErr);
+          }
         }
 
         if (response && response.status === 401 && window.App && window.App.Events) {

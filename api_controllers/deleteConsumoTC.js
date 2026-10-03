@@ -26,17 +26,42 @@ export default async function handler(req, res) {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
 
-    const scope = request.scope || 'SINGLE';
+    const rawScope = request.scope || 'SINGLE';
     const consumoId = request.consumoId || request.id || request.id_consumo_tarjeta || request.id_consumo_tc || (rawArgs ? rawArgs[0] : null);
+    const scope = (rawScope === 'ALL' || consumoId === 'ALL') ? 'ALL' : rawScope;
 
-    if (scope === 'SINGLE') {
+    if (scope === 'ALL') {
+      const targetCardId = request.idTarjeta || request.id_tarjeta;
+      if (targetCardId) {
+        const { data: tcs } = await supabase.from('consumos_tc')
+          .select('id_consumo_tarjeta')
+          .eq('id_tarjeta', targetCardId)
+          .eq('user_id', userId);
+        if (tcs && tcs.length > 0) {
+          const ids = tcs.map(r => r.id_consumo_tarjeta);
+          await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids).eq('user_id', userId);
+          await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids).eq('user_id', userId);
+        }
+        await supabase.from('tarjetas')
+          .update({ total_resumen_ars: 0, total_resumen_usd: 0 })
+          .eq('id_tarjeta', targetCardId)
+          .eq('user_id', userId);
+      } else {
+        await supabase.from('movimientos').delete().not('id_consumo_tarjeta_origen', 'is', null).eq('user_id', userId);
+        await supabase.from('consumos_tc').delete().eq('user_id', userId);
+        await supabase.from('tarjetas')
+          .update({ total_resumen_ars: 0, total_resumen_usd: 0 })
+          .eq('user_id', userId);
+      }
+      return res.status(200).json({ success: true, data: { message: 'Consumos eliminados correctamente.' } });
+    } else if (scope === 'SINGLE') {
       await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', consumoId).eq('user_id', userId);
       const { data: deleted, error: delErr } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', consumoId).eq('user_id', userId).select();
       if (delErr) throw delErr;
       if (!deleted || deleted.length === 0) {
         return res.status(404).json({ success: false, error: 'No se encontró el consumo de tarjeta para eliminar.' });
       }
-    } else if (request.scope === 'SERIES') {
+    } else if (scope === 'SERIES') {
       if (!request.recurGroupId || !request.fecha) throw new Error('Faltan recurGroupId o fecha');
       
       const { data: tcs } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
