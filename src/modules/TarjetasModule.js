@@ -386,7 +386,7 @@ export class TarjetasModule extends BaseModule {
                 <input type="text" id="tc-consumos-search" placeholder="Buscar..." class="finset-search-input" style="width:120px;">
               </div>
 
-              <select id="tc-cuenta-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:32px; max-width:140px;" title="Filtrar por cuenta imputada">
+              <select id="tc-cuenta-filter" class="finset-select-sm" title="Filtrar por cuenta imputada">
                 <option value="">Cuenta: Todas</option>
                 <option value="personal">Cuenta Titular / Propios</option>
               </select>
@@ -2470,7 +2470,7 @@ export class TarjetasModule extends BaseModule {
     const html = `
       <div style="display:flex;align-items:center;gap:8px;">
         <label for="tc-filter-cuenta" style="font-size:0.8rem;color:var(--texto-2);font-weight:600;white-space:nowrap;">Cuenta:</label>
-        <select id="tc-filter-cuenta" class="input" style="padding:6px 10px;font-size:0.82rem;height:34px;border-radius:var(--r-sm);background:var(--fondo);color:var(--texto);border:1px solid var(--borde);cursor:pointer;">
+        <select id="tc-filter-cuenta" class="finset-select-sm" title="Filtrar por cuenta imputada">
           <option value="">Todas las cuentas</option>
           ${opts}
           <option value="sin_imputar" ${this.#selectedCuentaId === 'sin_imputar' ? 'selected' : ''}>Sin Imputar</option>

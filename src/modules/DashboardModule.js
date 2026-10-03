@@ -538,11 +538,11 @@ export class DashboardModule extends BaseModule {
                     <input type="text" id="dash-mov-search" placeholder="Buscar..." class="finset-search-input" style="width:110px;">
                   </div>
 
-                  <select id="dash-mov-cat-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:32px; max-width:130px;" title="Filtrar por categoría">
+                  <select id="dash-mov-cat-filter" class="finset-select-sm" title="Filtrar por categoría">
                     <option value="ALL">Categoría: Todas</option>
                   </select>
 
-                  <select id="dash-mov-medio-filter" class="finset-select-sm" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--borde); background:var(--card-bg, #fff); color:var(--texto); cursor:pointer; height:32px; max-width:130px;" title="Filtrar por tipo de pago">
+                  <select id="dash-mov-medio-filter" class="finset-select-sm" title="Filtrar por tipo de pago">
                     <option value="ALL">Tipo de pago: Todos</option>
                   </select>
                 </div>

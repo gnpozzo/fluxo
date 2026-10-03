@@ -845,21 +845,26 @@ p  { font-size: 0.9rem;  color: var(--texto-2); }
   color: var(--texto-3);
   pointer-events: none;
 }
-.dt-search-input {
+.dt-search-input,
+.dt-search input {
   width: 100%;
-  padding: 8px 12px 8px 36px !important;
-  font-size: 0.875rem !important;
+  height: 32px !important;
+  line-height: 30px !important;
+  padding: 0 14px 0 34px !important;
+  font-size: 0.78rem !important;
   font-family: inherit !important;
-  border-radius: var(--r-sm) !important;
+  border-radius: var(--r-full, 9999px) !important;
   border: 1px solid var(--borde) !important;
   background: var(--fondo) !important;
   color: var(--texto) !important;
+  box-sizing: border-box !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.dt-search-input:focus {
+.dt-search-input:focus,
+.dt-search input:focus {
   outline: none;
   border-color: var(--primary) !important;
-  box-shadow: 0 0 0 3px var(--primary-tint);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important;
 }
 .dt-toolbar-actions {
   display: flex;
@@ -3052,23 +3057,29 @@ body {
   align-items: center;
   background: var(--fondo);
   border: 1px solid var(--borde);
-  border-radius: var(--r-full);
-  padding: 3px;
+  border-radius: var(--r-full, 9999px);
+  padding: 2px 3px;
   gap: 2px;
-  height: 36px;
+  height: 32px;
+  box-sizing: border-box;
 }
 
 .currency-pill {
-  padding: 5px 12px;
+  padding: 0 10px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.75rem;
   font-weight: 700;
-  border-radius: var(--r-full);
+  border-radius: var(--r-full, 9999px);
   border: none;
   background: transparent;
   color: var(--texto-3);
   cursor: pointer;
   transition: all 0.15s;
   line-height: 1;
+  box-sizing: border-box;
 }
 
 .currency-pill.active#pill-ars {
@@ -4751,16 +4762,19 @@ body {
 .dh-tab-btn {
   background: transparent;
   border: none;
-  padding: 4px 14px;
+  padding: 3px 12px;
   height: 26px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border-radius: var(--r-full, 9999px);
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--texto-2);
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .dh-tab-btn:hover {
@@ -4777,34 +4791,81 @@ body {
 .dh-drilldown-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .dh-search-box {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   background: var(--fondo);
   border: 1px solid var(--borde);
   border-radius: var(--r-full, 9999px);
-  padding: 0 14px;
+  padding: 0 12px;
   height: 32px;
   box-sizing: border-box;
   color: var(--texto-3);
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .dh-search-box:focus-within {
   border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
-.dh-search-box input {
-  border: none;
-  background: transparent;
-  outline: none;
-  color: var(--texto);
-  font-size: 0.8rem;
-  width: 200px;
+.dh-search-box input,
+.finset-search-input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+  color: var(--texto) !important;
+  font-size: 0.78rem !important;
+  font-family: inherit !important;
+  padding: 0 !important;
+  height: 100% !important;
+  line-height: 30px !important;
+}
+
+/* ── Unified Pill Dropdowns / Selects ── */
+.finset-select-sm,
+.dh-select {
+  height: 32px !important;
+  line-height: 30px !important;
+  font-size: 0.78rem !important;
+  font-weight: 500 !important;
+  font-family: inherit !important;
+  padding: 0 28px 0 14px !important;
+  border-radius: var(--r-full, 9999px) !important;
+  border: 1px solid var(--borde) !important;
+  background-color: var(--fondo) !important;
+  color: var(--texto) !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+  max-width: 170px;
+}
+
+.finset-select-sm:hover,
+.dh-select:hover {
+  border-color: var(--borde-fuerte, #94a3b8) !important;
+}
+
+.finset-select-sm:focus,
+.dh-select:focus {
+  outline: none !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important;
+}
+
+[data-theme="dark"] .finset-select-sm,
+[data-theme="dark"] .dh-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
 }
 
 .dh-close-btn {
@@ -4940,8 +5001,18 @@ body {
 .dh-col-amount {
   font-size: 0.95rem;
   font-weight: 700;
-  text-align: right;
+  text-align: right !important;
+  justify-self: end !important;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dh-col-amount.positivo {
+  color: var(--verde, #10b981) !important;
+}
+
+.dh-col-amount.negativo {
+  color: var(--rojo, #ef4444) !important;
 }
 
 .dh-col-action {
@@ -6983,24 +7054,44 @@ input:checked + .toggle-slider:before {
 }
 
 .fintech-pill-switch {
-  display: inline-flex;
-  gap: 3px;
-  background: var(--bg-2);
-  padding: 2px;
-  border-radius: var(--r-full);
-  border: 1px solid var(--borde);
+  display: inline-flex !important;
+  align-items: center !important;
+  background: var(--fondo) !important;
+  border: 1px solid var(--borde) !important;
+  border-radius: var(--r-full, 9999px) !important;
+  padding: 2px 3px !important;
+  gap: 3px !important;
+  height: 32px !important;
+  box-sizing: border-box !important;
 }
 
 .fintech-pill-switch .fintech-pill-btn {
-  border: none;
-  background: transparent;
-  padding: 3px 10px;
+  border: none !important;
+  background: transparent !important;
+  padding: 3px 12px !important;
+  height: 26px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: var(--r-full, 9999px) !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: var(--texto-2) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+
+.fintech-pill-switch .fintech-pill-btn:hover {
+  color: var(--texto) !important;
 }
 
 .fintech-pill-switch .fintech-pill-btn.active {
-  background: var(--primary);
-  color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  background: var(--superficie) !important;
+  color: var(--texto) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  font-weight: 700 !important;
 }
 
 /* FinSet Donut Center Typography & Positioning */
@@ -7244,16 +7335,22 @@ input:checked + .toggle-slider:before {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+  justify-content: flex-end;
+  text-align: right;
 }
 .finset-cat-accordion .fca-subtotal {
   font-weight: 700;
   font-size: 0.88rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .finset-cat-accordion .fca-subtotal.positivo {
-  color: var(--verde, #10b981);
+  color: var(--verde, #10b981) !important;
 }
 .finset-cat-accordion .fca-subtotal.negativo {
-  color: var(--texto, #0f172a);
+  color: var(--rojo, #ef4444) !important;
 }
 .finset-cat-accordion > .fca-body {
   display: none;
@@ -7328,6 +7425,40 @@ input:checked + .toggle-slider:before {
 .tc-filter-pill-count {
   font-size: 0.70rem;
   opacity: 0.8;
+}
+
+/* ── Global Text Alignment Utilities ── */
+.text-right,
+th.text-right,
+td.text-right {
+  text-align: right !important;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-left,
+th.text-left,
+td.text-left {
+  text-align: left !important;
+}
+
+.text-center,
+th.text-center,
+td.text-center {
+  text-align: center !important;
+}
+
+/* ── Financial Amount Color Utilities ── */
+.monto-ingreso,
+.monto-positivo,
+.positivo {
+  color: var(--verde, #10b981) !important;
+}
+
+.monto-egreso,
+.monto-negativo,
+.negativo {
+  color: var(--rojo, #ef4444) !important;
 }
 
 

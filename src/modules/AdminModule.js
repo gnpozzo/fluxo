@@ -259,10 +259,10 @@ export class AdminModule extends BaseModule {
         </div>
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
           <div style="flex:1;min-width:200px;position:relative;">
-            <input type="text" id="adm-cat-search" class="input" placeholder="Buscar categoría..." style="width:100%;padding-left:34px;">
-            <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--texto-3);pointer-events:none;" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="adm-cat-search" class="dt-search-input" placeholder="Buscar categoría...">
+            <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--texto-3);pointer-events:none;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </div>
-          <select id="adm-cat-filter-tipo" class="input select" style="width:auto;min-width:150px;">
+          <select id="adm-cat-filter-tipo" class="finset-select-sm">
             <option value="ALL">Todos los tipos</option>
             <option value="EGRESO">Gastos</option>
             <option value="INGRESO">Ingresos</option>
