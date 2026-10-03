@@ -526,7 +526,7 @@ export class DashboardModule extends BaseModule {
                   <div class="dh-drilldown-summary" id="dash-mov-summary">—</div>
                 </div>
 
-                <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
+                <div class="finset-card-actions dh-pills-row" style="margin-left:auto; gap:6px; align-items:center;">
                   <div class="dh-filter-tabs" id="dash-mov-tabs">
                     <button class="dh-tab-btn active" data-filter="ALL" id="dash-mov-tab-all">Todos</button>
                     <button class="dh-tab-btn" data-filter="INGRESO" id="dash-mov-tab-ing">Ingresos</button>
@@ -535,7 +535,7 @@ export class DashboardModule extends BaseModule {
 
                   <div class="dh-search-box" style="margin:0;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input type="text" id="dash-mov-search" placeholder="Buscar..." class="finset-search-input" style="width:110px;">
+                    <input type="text" id="dash-mov-search" placeholder="Buscar..." class="finset-search-input" style="width:80px;">
                   </div>
 
                   <select id="dash-mov-cat-filter" class="finset-select-sm" title="Filtrar por categoría">
@@ -543,7 +543,7 @@ export class DashboardModule extends BaseModule {
                   </select>
 
                   <select id="dash-mov-medio-filter" class="finset-select-sm" title="Filtrar por tipo de pago">
-                    <option value="ALL">Tipo de pago: Todos</option>
+                    <option value="ALL">Medio: Todos</option>
                   </select>
                 </div>
               </div>
@@ -1862,7 +1862,7 @@ export class DashboardModule extends BaseModule {
         }
       });
       const sortedMedios = Array.from(availableMedios).sort();
-      medioFilterSelect.innerHTML = `<option value="ALL">Tipo de pago: Todos</option>` +
+      medioFilterSelect.innerHTML = `<option value="ALL">Medio: Todos</option>` +
         sortedMedios.map(med => `<option value="${App.Utils.escapeHtml(med)}" ${med === currentMedio ? 'selected' : ''}>${App.Utils.escapeHtml(med)}</option>`).join('');
       medioFilterSelect.value = currentMedio;
     }
