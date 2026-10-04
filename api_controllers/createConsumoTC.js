@@ -279,8 +279,6 @@ export default async function handler(req, res) {
           imputado_a: rowAccountId
         });
 
-        const isTaxItem = item.isTax || isTaxConcept(item.descripcion);
-
         if (consumo.imputar && rowAccountId && !isTaxItem) {
           // 1. Egreso en la cuenta imputada (ej: Hogar)
           movRows.push({
