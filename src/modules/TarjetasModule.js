@@ -2298,16 +2298,52 @@ export class TarjetasModule extends BaseModule {
       : null;
     const nombreObjetivo = activeCard ? `la tarjeta "${activeCard.nombre}"` : 'todas las tarjetas de crédito';
 
+    const mesActual = App.Store.mes || new Date().toISOString().substring(0, 7);
+    const mesNombre = (() => {
+      const [y, m] = mesActual.split('-');
+      const d = new Date(Number(y), Number(m) - 1, 1);
+      const str = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    })();
+
     const modal = new App.Modal('modal-tc-vaciar-confirm');
     modal.open({
       titulo: 'Vaciar consumos de tarjeta',
       icono: 'delete',
+      size: 'md',
       body: `
-        <div style="text-align:center;padding:12px 0;">
-          <p style="margin:0 0 10px 0;font-size:0.95rem;color:var(--texto);">
-            ¿Confirmas que deseas eliminar <strong>todos los consumos</strong> asociados a <strong>${App.Utils.escapeHtml(nombreObjetivo)}</strong>?
+        <div style="text-align:left; padding:4px 0;">
+          <p style="margin:0 0 14px 0; font-size:0.95rem; color:var(--texto-1);">
+            ¿Qué consumos deseas eliminar de <strong>${App.Utils.escapeHtml(nombreObjetivo)}</strong>?
           </p>
-          <p style="font-size:0.82rem;color:var(--peligro, #dc3545);margin:0;">
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+            <label style="display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border:1px solid var(--borde-1); border-radius:var(--radius-md); background:var(--bg-2); cursor:pointer;">
+              <input type="radio" name="vaciar_tc_scope" value="MONTH" checked style="margin-top:3px; cursor:pointer;">
+              <div style="flex:1;">
+                <div style="font-weight:600; font-size:0.9rem; color:var(--texto-1);">Solo los consumos de ${mesNombre}</div>
+                <div style="font-size:0.8rem; color:var(--texto-3); margin-top:2px; line-height:1.3;">Elimina únicamente los consumos correspondientes al resumen de este mes.</div>
+              </div>
+            </label>
+
+            <label style="display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border:1px solid var(--borde-1); border-radius:var(--radius-md); background:var(--bg-2); cursor:pointer;">
+              <input type="radio" name="vaciar_tc_scope" value="MONTH_AND_FUTURE" style="margin-top:3px; cursor:pointer;">
+              <div style="flex:1;">
+                <div style="font-weight:600; font-size:0.9rem; color:var(--texto-1);">Consumos de ${mesNombre} y futuros</div>
+                <div style="font-size:0.8rem; color:var(--texto-3); margin-top:2px; line-height:1.3;">Elimina este mes y todas las cuotas o consumos proyectados hacia adelante.</div>
+              </div>
+            </label>
+
+            <label style="display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border:1px solid var(--borde-1); border-radius:var(--radius-md); background:var(--bg-2); cursor:pointer;">
+              <input type="radio" name="vaciar_tc_scope" value="ALL" style="margin-top:3px; cursor:pointer;">
+              <div style="flex:1;">
+                <div style="font-weight:600; font-size:0.9rem; color:var(--texto-1);">Todos los consumos (histórico completo)</div>
+                <div style="font-size:0.8rem; color:var(--texto-3); margin-top:2px; line-height:1.3;">Elimina todos los consumos pasados, presentes y futuros registrados para esta tarjeta.</div>
+              </div>
+            </label>
+          </div>
+
+          <p style="font-size:0.82rem; color:var(--peligro, #dc3545); margin:0;">
             ⚠️ Esta acción es irreversible. También se eliminarán los egresos generados en las cuentas vinculadas.
           </p>
         </div>
@@ -2317,9 +2353,14 @@ export class TarjetasModule extends BaseModule {
       onConfirm: async (m) => {
         m.setLoading(true);
         try {
+          const selectedScope = document.querySelector('input[name="vaciar_tc_scope"]:checked')?.value || 'MONTH';
+          const { fechaInicio, fechaFin } = this.#calcFechas(mesActual);
           await App.API.call(this._deleteEndpoint, {
-            scope: 'ALL',
-            idTarjeta: this.#selectedTcId || null
+            scope: selectedScope,
+            idTarjeta: this.#selectedTcId || null,
+            mes: mesActual,
+            fechaInicio,
+            fechaFin
           });
           App.Toast.success('Consumos eliminados correctamente.');
           App.API.invalidateAll();
