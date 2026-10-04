@@ -144,6 +144,18 @@ export default async function handler(req, res) {
       console.warn('[createConsumoTC Remediation]', e.message);
     }
 
+    // Garantizar que id_categoria nunca sea NULL (cumplir restricción NOT NULL de consumos_tc)
+    const { data: userCategorias } = await supabase
+      .from('categorias')
+      .select('id_categoria, nombre, tipo_mov')
+      .or(`user_id.eq.${userId},user_id.is.null`);
+
+    const egresoCats = (userCategorias || []).filter(c => c.tipo_mov === 'EGRESO');
+    const taxCat = egresoCats.find(c => c.nombre.toLowerCase().includes('impuesto') || c.id_categoria.toLowerCase().includes('impuesto'));
+    const servCat = egresoCats.find(c => c.nombre.toLowerCase().includes('servicio'));
+    const variosCat = egresoCats.find(c => c.nombre.toLowerCase().includes('general') || c.nombre.toLowerCase().includes('varios') || c.nombre.toLowerCase().includes('otro'));
+    const fallbackCatId = (variosCat || servCat || egresoCats[0] || userCategorias?.[0])?.id_categoria || 'CAT_GENERAL';
+
     const tcRows = [];
     const movRows = [];
 
@@ -187,7 +199,16 @@ export default async function handler(req, res) {
         const tipoConsumo = item.tipoConsumo || (cuotaTot > 1 ? 'CUOTAS' : 'SIMPLE');
         const rawRowAccountId = item.idCuentaImputar || targetAccountId;
         const rowAccountId = (rawRowAccountId && cuentaNombreMap[rawRowAccountId]) ? rawRowAccountId : (cardAccountId || targetAccountId);
-        const catId = (item.idCategoria && item.idCategoria !== 'null' && item.idCategoria !== 'undefined') ? item.idCategoria : (item.id_categoria || null);
+        
+        const isTaxItem = item.isTax || isTaxConcept(item.descripcion);
+        let rawCat = (item.idCategoria && item.idCategoria !== 'null' && item.idCategoria !== 'undefined' && String(item.idCategoria).trim() !== '')
+          ? String(item.idCategoria).trim()
+          : (item.id_categoria && String(item.id_categoria).trim() !== '' ? String(item.id_categoria).trim() : null);
+
+        let catId = rawCat;
+        if (!catId) {
+          catId = (isTaxItem && taxCat) ? taxCat.id_categoria : fallbackCatId;
+        }
 
         let recurGroupId = item.recur_group_id || null;
         if (tipoConsumo === 'CUOTAS' && cuotaTot > 1 && !recurGroupId) {
@@ -465,6 +486,11 @@ export default async function handler(req, res) {
       const fechaBase = new Date(consumo.fecha + 'T12:00:00Z');
       const moneda = consumo.moneda || 'ARS';
       const isTaxItem = consumo.isTax || isTaxConcept(consumo.descripcion);
+      
+      const rawConsumoCat = (consumo.idCategoria && consumo.idCategoria !== 'null' && consumo.idCategoria !== 'undefined' && String(consumo.idCategoria).trim() !== '')
+        ? String(consumo.idCategoria).trim()
+        : (consumo.id_categoria && String(consumo.id_categoria).trim() !== '' ? String(consumo.id_categoria).trim() : null);
+      const safeCatId = rawConsumoCat || ((isTaxItem && taxCat) ? taxCat.id_categoria : fallbackCatId);
 
       const targetImputacion = (consumo.imputar && consumo.idCuentaImputar) ? consumo.idCuentaImputar : (cardAccountId || consumo.idCuenta);
 
@@ -475,7 +501,7 @@ export default async function handler(req, res) {
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
-          id_categoria: consumo.idCategoria,
+          id_categoria: safeCatId,
           user_id: userId,
           fecha: fechaISO,
           descripcion: consumo.descripcion,
@@ -489,7 +515,7 @@ export default async function handler(req, res) {
             id_cuenta_principal: targetImputacion,
             user_id: userId,
             fecha: fechaISO,
-            id_categoria: consumo.idCategoria,
+            id_categoria: safeCatId,
             tipo_mov: 'EGRESO',
             descripcion: consumo.descripcion,
             importe: consumo.importe,
@@ -512,7 +538,7 @@ export default async function handler(req, res) {
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
-          id_categoria: consumo.idCategoria,
+          id_categoria: safeCatId,
           user_id: userId,
           fecha: fechaISO,
           descripcion: consumo.descripcion,
@@ -530,7 +556,7 @@ export default async function handler(req, res) {
             id_cuenta_principal: targetImputacion,
             user_id: userId,
             fecha: fechaISO,
-            id_categoria: consumo.idCategoria,
+            id_categoria: safeCatId,
             tipo_mov: 'EGRESO',
             descripcion: descImputacion,
             importe: consumo.importe,
@@ -554,7 +580,7 @@ export default async function handler(req, res) {
         tcRows.push({
           id_consumo_tarjeta: idConsumo,
           id_tarjeta: consumo.idTarjeta,
-          id_categoria: consumo.idCategoria,
+          id_categoria: safeCatId,
           user_id: userId,
           fecha: fechaISO,
           descripcion: consumo.descripcion,
@@ -569,7 +595,7 @@ export default async function handler(req, res) {
             id_cuenta_principal: targetImputacion,
             user_id: userId,
             fecha: fechaISO,
-            id_categoria: consumo.idCategoria,
+            id_categoria: safeCatId,
             tipo_mov: 'EGRESO',
             descripcion: consumo.descripcion,
             importe: consumo.importe,

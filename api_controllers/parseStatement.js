@@ -705,6 +705,8 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     const viviendaCat = categorias.find(c => c.nombre.toLowerCase().includes('vivienda') || c.nombre.toLowerCase().includes('hogar')) || servCat;
     const transporteCat = categorias.find(c => c.nombre.toLowerCase().includes('transporte') || c.nombre.toLowerCase().includes('auto') || c.nombre.toLowerCase().includes('vehic')) || servCat;
 
+    const taxCat = categorias.find(c => c.nombre.toLowerCase().includes('impuesto') || c.id_categoria.toLowerCase().includes('impuesto')) || servCat || variosCat;
+
     const hogarAcc = (allUserCuentas || []).find(a => a.nombre.toLowerCase().includes('hogar'))?.id_cuenta_principal || null;
     const personalAcc = (allUserCuentas || []).find(a => a.nombre.toLowerCase().includes('personal'))?.id_cuenta_principal || matchedCard.id_cuenta_principal;
     const cuentaMap = {};
@@ -811,7 +813,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       // 0. PRIORIDAD 0: Impuestos y percepciones específicas del resumen (no se imputan a cuentas)
       if (tx.isTax || isTaxConcept(tx.descripcion)) {
         return {
-          id_categoria: null,
+          id_categoria: taxCat?.id_categoria || variosCat?.id_categoria || (categorias[0]?.id_categoria || 'CAT_GENERAL'),
           id_cuenta_imputar: null,
           tipo_consumo: 'SIMPLE',
           sugerencia_ia: '🏛️ Impuesto de resumen (específico de la tarjeta, no se imputa a cuentas)',

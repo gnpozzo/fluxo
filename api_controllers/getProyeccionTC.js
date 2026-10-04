@@ -17,7 +17,10 @@ export default async function handler(req, res) {
       finalArgs = [req.body.cuenta, req.body.mes];
     }
 
-    let [cuenta, mesYYYYMM] = finalArgs;
+    let [cuenta, mesYYYYMM, idTarjeta] = finalArgs;
+    if (!idTarjeta && req.body && typeof req.body === 'object') {
+      idTarjeta = req.body.idTarjeta || req.body.id_tarjeta || null;
+    }
 
     if (!cuenta || !mesYYYYMM) {
       return res.status(400).json({ success: false, error: 'Faltan parámetros idCuenta o mes (YYYY-MM)' });
@@ -52,9 +55,12 @@ export default async function handler(req, res) {
 
     if (!rpcRes.error && Array.isArray(rpcRes.data)) {
       consumos = rpcRes.data;
+      if (idTarjeta) {
+        consumos = consumos.filter(c => c.id_tarjeta === idTarjeta);
+      }
     } else {
       // Fallback: consultar por tarjetas de la cuenta
-      const { data: tarjetas, error: tErr } = await supabase
+      let { data: tarjetas, error: tErr } = await supabase
         .from('tarjetas')
         .select('id_tarjeta')
         .eq('id_cuenta_principal', cuenta)
@@ -62,11 +68,15 @@ export default async function handler(req, res) {
 
       if (tErr) throw tErr;
 
-      const tarjetaIds = (tarjetas || []).map(t => t.id_tarjeta);
+      let tarjetaIds = (tarjetas || []).map(t => t.id_tarjeta);
+      if (idTarjeta) {
+        tarjetaIds = tarjetaIds.filter(id => id === idTarjeta);
+      }
+
       if (tarjetaIds.length > 0) {
         const { data: cData, error: cErr } = await supabase
           .from('consumos_tc')
-          .select('fecha, importe, descripcion, moneda')
+          .select('id_tarjeta, fecha, importe, descripcion, moneda, cuota_total, cuota_actual, tipo_consumo')
           .in('id_tarjeta', tarjetaIds)
           .eq('user_id', userId)
           .gte('fecha', fechaInicio)
@@ -126,16 +136,36 @@ export default async function handler(req, res) {
       };
     }
 
-    // Sumarizar importes por mes excluyendo duplicación de impuestos históricos
+    // Sumarizar importes por mes proyectando cuotas correlativamente
     consumos.forEach(c => {
-      const mesStr = (c.fecha || '').substring(0, 7);
-      if (objMeses[mesStr] !== undefined) {
-        if (!isTaxDesc(c.descripcion)) {
-          const imp = Number(c.importe || 0);
-          objMeses[mesStr].subtotal_consumos += imp;
-          if (isDigitalOrUsd(c)) {
-            objMeses[mesStr].base_digital += imp;
+      if (isTaxDesc(c.descripcion)) return;
+      const cMes = (c.fecha || '').substring(0, 7);
+      const imp = Number(c.importe || 0);
+      const isDig = isDigitalOrUsd(c);
+      const cuotaTot = Number(c.cuota_total || 1);
+      const cuotaAct = Number(c.cuota_actual || 1);
+
+      if (cuotaTot > 1) {
+        const remaining = cuotaTot - cuotaAct + 1;
+        const monthKeys = Object.keys(objMeses).sort();
+        const startIdx = monthKeys.indexOf(cMes);
+        const baseIdx = startIdx >= 0 ? startIdx : 0;
+        for (let i = 0; i < remaining; i++) {
+          const targetM = monthKeys[baseIdx + i];
+          if (targetM && objMeses[targetM] !== undefined) {
+            objMeses[targetM].subtotal_consumos += imp;
+            if (isDig) objMeses[targetM].base_digital += imp;
           }
+        }
+      } else if (c.tipo_consumo === 'RECURRENTE') {
+        Object.keys(objMeses).forEach(k => {
+          objMeses[k].subtotal_consumos += imp;
+          if (isDig) objMeses[k].base_digital += imp;
+        });
+      } else {
+        if (objMeses[cMes] !== undefined) {
+          objMeses[cMes].subtotal_consumos += imp;
+          if (isDig) objMeses[cMes].base_digital += imp;
         }
       }
     });

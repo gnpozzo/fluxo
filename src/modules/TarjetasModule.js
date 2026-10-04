@@ -68,6 +68,7 @@ export class TarjetasModule extends BaseModule {
   }
 
   destruir() {
+    this.#proyeccionesData = [];
     this.#chartInstance?.destroy();
     this.#chartInstance = null;
     this.#evolucionChartInstance?.destroy();
@@ -1557,6 +1558,7 @@ export class TarjetasModule extends BaseModule {
     this.#renderConsumosList(displayConsumos);
     this.#renderImpuestosAccordion(taxConsumos);
     this.#renderGraficos();
+    this.#renderMoneyFlowChart();
     this.#updateScorecardTotal();
 
     // Actualizar metadata de tarjeta seleccionada en el panel derecho
@@ -1898,65 +1900,58 @@ export class TarjetasModule extends BaseModule {
 
     let dataList = [];
 
-    if (this.#selectedCategorias.size > 0) {
-      // Recalcular progresión mensual considerando solo las categorías seleccionadas
-      let poolConsumos = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c) && c.moneda !== 'USD');
-      if (this.#selectedTcId) {
-        poolConsumos = poolConsumos.filter(c => c.id_tarjeta === this.#selectedTcId);
-      }
-      const catConsumos = poolConsumos.filter(c => this.#selectedCategorias.has(c.categoria_nombre || 'General'));
-
-      let months = (this.#proyeccionesData || []).map(p => p.mes);
-      if (!months.length) {
-        for (let i = 0; i < 12; i++) {
-          const d = new Date(currentMes + '-01T12:00:00Z');
-          d.setMonth(d.getMonth() + i);
-          months.push(d.toISOString().substring(0, 7));
-        }
-      }
-
-      dataList = months.map((m, mIdx) => {
-        let monthTotal = 0;
-        catConsumos.forEach(c => {
-          const cMes = (c.fecha?.value || c.fecha || '').substring(0, 7);
-          const cuotaTot = Number(c.cuota_total || 1);
-          const cuotaAct = Number(c.cuota_actual || 1);
-          const imp = Number(c.importe || 0);
-
-          if (cuotaTot > 1) {
-            const remainingInstallments = cuotaTot - cuotaAct + 1;
-            if (mIdx >= 0 && mIdx < remainingInstallments) {
-              monthTotal += imp;
-            }
-          } else {
-            if (mIdx === 0 || cMes === m) {
-              monthTotal += imp;
-            }
-          }
-        });
-
-        return {
-          mes: m,
-          total: monthTotal,
-          consumos: monthTotal,
-          impuestos: 0
-        };
-      });
-    } else {
-      // Build timeline using this.#proyeccionesData
-      dataList = (this.#proyeccionesData || []).map(p => ({
-        mes: p.mes,
-        total: Number(p.total || 0),
-        consumos: Number(p.subtotal_consumos !== undefined ? p.subtotal_consumos : p.total || 0),
-        impuestos: Number(p.impuestos?.total_impuestos || 0)
-      }));
-
-      // If proyecciones are empty, build fallback from current month consumos
-      if (!dataList.length) {
-        const currTotal = (this.#allConsumos || []).reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
-        dataList = [{ mes: currentMes, total: currTotal, consumos: currTotal, impuestos: 0 }];
-      }
+    // 1. Pool de consumos para la proyección mensual (filtrado por tarjeta y/o categorías)
+    let poolConsumos = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c) && c.moneda !== 'USD');
+    if (this.#selectedTcId) {
+      poolConsumos = poolConsumos.filter(c => c.id_tarjeta === this.#selectedTcId);
     }
+    if (this.#selectedCategorias.size > 0) {
+      poolConsumos = poolConsumos.filter(c => this.#selectedCategorias.has(c.categoria_nombre || 'General'));
+    }
+
+    // 2. Construir lista de 12 meses
+    let months = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(currentMes + '-01T12:00:00Z');
+      d.setMonth(d.getMonth() + i);
+      months.push(d.toISOString().substring(0, 7));
+    }
+
+    // 3. Proyectar cuotas, recurrentes y consumos simples mes a mes correlativamente
+    dataList = months.map((m, mIdx) => {
+      let monthTotal = 0;
+      poolConsumos.forEach(c => {
+        const cMes = (c.fecha?.value || c.fecha || '').substring(0, 7);
+        const cuotaTot = Number(c.cuota_total || 1);
+        const cuotaAct = Number(c.cuota_actual || 1);
+        const imp = Number(c.importe || 0);
+
+        if (cuotaTot > 1) {
+          // Cuotas consecutivas: se computan mes a mes a partir de cMes
+          const remainingInstallments = cuotaTot - cuotaAct + 1;
+          const startMonthIndex = months.indexOf(cMes);
+          const baseIdx = startMonthIndex >= 0 ? startMonthIndex : 0;
+          if (mIdx >= baseIdx && mIdx < baseIdx + remainingInstallments) {
+            monthTotal += imp;
+          }
+        } else if (c.tipo_consumo === 'RECURRENTE') {
+          monthTotal += imp;
+        } else {
+          if (cMes === m) {
+            monthTotal += imp;
+          } else if (mIdx === 0 && (!cMes || cMes < currentMes)) {
+            monthTotal += imp;
+          }
+        }
+      });
+
+      return {
+        mes: m,
+        total: monthTotal,
+        consumos: monthTotal,
+        impuestos: 0
+      };
+    });
 
     // Filter by selected period
     let filtered = [];
@@ -1971,10 +1966,12 @@ export class TarjetasModule extends BaseModule {
 
     const subEl = document.getElementById('tc-moneyflow-sub');
     if (subEl) {
+      const activeCard = this.#selectedTcId ? this.#tarjetas.find(t => t.id_tarjeta === this.#selectedTcId) : null;
+      const cardSuffix = activeCard ? ` • ${activeCard.nombre}` : ' • Consolidado';
       const catSuffix = this.#selectedCategorias.size > 0 ? ` (${this.#selectedCategorias.size} cat. seleccionadas)` : '';
-      if (this.#moneyFlowPeriod === '6M') subEl.textContent = 'Evolución y vencimientos próximos 6 meses' + catSuffix;
-      else if (this.#moneyFlowPeriod === '12M') subEl.textContent = 'Proyección completa a 12 meses' + catSuffix;
-      else subEl.textContent = `Vencimientos del año ${currentYear}` + catSuffix;
+      if (this.#moneyFlowPeriod === '6M') subEl.textContent = 'Evolución y vencimientos próximos 6 meses' + cardSuffix + catSuffix;
+      else if (this.#moneyFlowPeriod === '12M') subEl.textContent = 'Proyección completa a 12 meses' + cardSuffix + catSuffix;
+      else subEl.textContent = `Vencimientos del año ${currentYear}` + cardSuffix + catSuffix;
     }
 
     this.#evolucionChartInstance?.destroy();
@@ -2833,12 +2830,14 @@ export class TarjetasModule extends BaseModule {
         </select>
       `;
 
+      const egresoCats = categoriasList.filter(c => (c.tipo_mov === 'EGRESO' || c.tipo === 'EGRESO' || !c.tipo_mov) && c.activa !== false);
+      const defaultEgresoCatId = tx.id_categoria || egresoCats.find(c => c.nombre.toLowerCase().includes('general') || c.nombre.toLowerCase().includes('varios'))?.id_categoria || egresoCats[0]?.id_categoria || '';
+
       const catSelectHtml = `
         <select class="input" style="padding:4px; font-size:0.8rem; margin:0; width:100%" id="tx-cat-${tx.id}">
-          <option value="">(Sin categoría)</option>
-          ${categoriasList
-            .filter(c => (c.tipo_mov === 'EGRESO' || c.tipo === 'EGRESO' || !c.tipo_mov) && c.activa !== false)
-            .map(c => `<option value="${c.id_categoria}" ${c.id_categoria === tx.id_categoria ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
+          ${!defaultEgresoCatId ? '<option value="">(Sin categoría)</option>' : ''}
+          ${egresoCats
+            .map(c => `<option value="${c.id_categoria}" ${c.id_categoria === (tx.id_categoria || defaultEgresoCatId) ? 'selected' : ''}>${App.Utils.escapeHtml(c.nombre)}</option>`)
             .join('')}
         </select>
       `;
