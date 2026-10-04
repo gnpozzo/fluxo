@@ -365,7 +365,8 @@ export class TarjetasModule extends BaseModule {
         
         <!-- Left (60%): Grilla de Consumos (Mismo ancho y estilo que Movimientos) -->
         <div class="finset-card" id="tc-widget-consumos">
-          <div class="finset-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
+          <!-- Header (Title & Summary + Primary Actions) -->
+          <div class="finset-card-header" style="align-items:center; margin-bottom:12px;">
             <div class="dh-drilldown-left" style="min-width:180px;">
               <div class="dh-drilldown-badge badge-all" id="tc-consumos-badge">
                 <span class="dh-badge-dot"></span>
@@ -374,44 +375,44 @@ export class TarjetasModule extends BaseModule {
               <div class="dh-drilldown-summary" id="tc-consumos-summary">—</div>
             </div>
 
-            <div class="finset-card-actions" style="margin-left:auto; gap:10px; align-items:center;">
-              <div class="dh-filter-tabs" id="tc-consumos-tabs">
-                <button class="dh-tab-btn active" data-filter="ALL" id="tc-tab-all">Todos</button>
-                <button class="dh-tab-btn" data-filter="CUOTAS" id="tc-tab-cuotas">En Cuotas</button>
-                <button class="dh-tab-btn" data-filter="COMUN" id="tc-tab-comun">Pago Único</button>
-              </div>
+            <div class="tc-header-actions" style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+              <button type="button" class="btn-icon-pill" id="tc-btn-importar-inline" data-tooltip="Importar resumen" aria-label="Importar resumen">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </button>
 
+              <button type="button" class="btn-icon-pill btn-icon-danger" id="tc-btn-vaciar-inline" data-tooltip="Vaciar consumos" aria-label="Vaciar consumos">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              </button>
+
+              <button type="button" class="btn-icon-pill btn-icon-primary" id="tc-btn-nuevo-inline" data-tooltip="Nuevo consumo" aria-label="Nuevo consumo">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Toolbar (Tabs segmentation + Search + Dropdown filters) -->
+          <div class="tc-toolbar-row">
+            <div class="dh-filter-tabs" id="tc-consumos-tabs" style="margin:0;">
+              <button class="dh-tab-btn active" data-filter="ALL" id="tc-tab-all">Todos</button>
+              <button class="dh-tab-btn" data-filter="CUOTAS" id="tc-tab-cuotas">En Cuotas</button>
+              <button class="dh-tab-btn" data-filter="COMUN" id="tc-tab-comun">Pago Único</button>
+            </div>
+
+            <div class="tc-filter-controls">
               <div class="dh-search-box" style="margin:0;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="tc-consumos-search" placeholder="Buscar..." class="finset-search-input" style="width:120px;">
+                <input type="text" id="tc-consumos-search" placeholder="Buscar..." class="finset-search-input" style="width:110px;">
               </div>
+
+              <select id="tc-cat-filter" class="finset-select-sm" title="Filtrar por categoría">
+                <option value="ALL">Categoría: Todas</option>
+              </select>
 
               <select id="tc-cuenta-filter" class="finset-select-sm" title="Filtrar por cuenta imputada">
                 <option value="">Cuenta: Todas</option>
                 <option value="personal">Cuenta Titular / Propios</option>
               </select>
-
-              <button class="btn btn-secondary btn-sm" id="tc-btn-importar-inline" style="display:inline-flex;align-items:center;gap:6px;height:32px;box-sizing:border-box;" title="Importar resumen bancario (PDF o Excel)">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span>Importar Resumen</span>
-              </button>
-
-              <button class="btn btn-secondary btn-sm" id="tc-btn-vaciar-inline" style="display:inline-flex;align-items:center;gap:6px;height:32px;box-sizing:border-box;color:var(--peligro, #dc3545);" title="Eliminar todos los consumos">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                <span>Vaciar Consumos</span>
-              </button>
-
-              <button class="btn btn-primary btn-sm" id="tc-btn-nuevo-inline" style="display:inline-flex;align-items:center;gap:6px;height:32px;box-sizing:border-box;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span>Nuevo Consumo</span>
-              </button>
             </div>
-          </div>
-
-          <!-- Filtro Dinámico de Categorías (Pills interactivos) -->
-          <div class="tc-cat-filter-container" id="tc-cat-filter-container">
-            <span style="font-size:0.72rem; font-weight:600; color:var(--texto-3); text-transform:uppercase; letter-spacing:0.5px; margin-right:4px;">Categorías:</span>
-            <div id="tc-cat-filter-pills" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"></div>
           </div>
 
           <!-- Lista de consumos interactiva -->
@@ -981,6 +982,16 @@ export class TarjetasModule extends BaseModule {
       document.getElementById('tc-consumos-search')?.addEventListener('input', (e) => {
         this.#consumosSearch = e.target.value || '';
         this.#filterConsumos();
+      });
+
+      // Filter by category
+      document.getElementById('tc-cat-filter')?.addEventListener('change', (e) => {
+        const cat = e.target.value;
+        this.#selectedCategorias.clear();
+        if (cat && cat !== 'ALL') {
+          this.#selectedCategorias.add(cat);
+        }
+        this.#onCategoryFilterChanged();
       });
 
       // Filter by imputed account
@@ -1599,8 +1610,8 @@ export class TarjetasModule extends BaseModule {
 
   #renderCategoryFilter() {
     this.#renderCuentaFilter();
-    const pillsContainer = document.getElementById('tc-cat-filter-pills');
-    if (!pillsContainer) return;
+    const catSelect = document.getElementById('tc-cat-filter');
+    if (!catSelect) return;
 
     let pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
     if (this.#selectedTcId) {
@@ -1614,63 +1625,29 @@ export class TarjetasModule extends BaseModule {
     });
 
     const uniqueCats = Object.keys(catCounts).sort();
-    if (uniqueCats.length <= 1) {
-      pillsContainer.parentElement.style.display = 'none';
-      return;
-    }
-    pillsContainer.parentElement.style.display = 'flex';
+    const currentVal = this.#selectedCategorias.size === 1 ? Array.from(this.#selectedCategorias)[0] : 'ALL';
 
-    const isAllActive = this.#selectedCategorias.size === 0;
-
-    let html = `
-      <button type="button" class="tc-filter-pill ${isAllActive ? 'active' : ''}" data-cat="ALL">
-        <span>Todas</span>
-        <span class="tc-filter-pill-count">(${pool.length})</span>
-      </button>
-    `;
-
+    let optsHtml = `<option value="ALL">Categoría: Todas (${pool.length})</option>`;
     uniqueCats.forEach(cat => {
-      const isSel = this.#selectedCategorias.has(cat);
-      html += `
-        <button type="button" class="tc-filter-pill ${isSel ? 'active' : ''}" data-cat="${App.Utils.escapeHtml(cat)}">
-          <span>${App.Utils.escapeHtml(cat)}</span>
-          <span class="tc-filter-pill-count">(${catCounts[cat]})</span>
-        </button>
-      `;
+      const isSel = currentVal === cat ? 'selected' : '';
+      optsHtml += `<option value="${App.Utils.escapeHtml(cat)}" ${isSel}>${App.Utils.escapeHtml(cat)} (${catCounts[cat]})</option>`;
     });
 
-    pillsContainer.innerHTML = html;
-
-    pillsContainer.querySelectorAll('.tc-filter-pill').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const cat = btn.dataset.cat;
-        if (cat === 'ALL') {
-          this.#selectedCategorias.clear();
-        } else {
-          if (this.#selectedCategorias.has(cat)) {
-            this.#selectedCategorias.delete(cat);
-          } else {
-            this.#selectedCategorias.add(cat);
-          }
-        }
-        this.#onCategoryFilterChanged();
-      });
-    });
+    catSelect.innerHTML = optsHtml;
+    if (uniqueCats.includes(currentVal)) {
+      catSelect.value = currentVal;
+    } else {
+      catSelect.value = 'ALL';
+      this.#selectedCategorias.clear();
+    }
   }
 
   #onCategoryFilterChanged() {
-    // 1. Update active states of pills
-    const pillsContainer = document.getElementById('tc-cat-filter-pills');
-    if (pillsContainer) {
-      const isAll = this.#selectedCategorias.size === 0;
-      pillsContainer.querySelectorAll('.tc-filter-pill').forEach(btn => {
-        const cat = btn.dataset.cat;
-        if (cat === 'ALL') {
-          btn.classList.toggle('active', isAll);
-        } else {
-          btn.classList.toggle('active', this.#selectedCategorias.has(cat));
-        }
-      });
+    // 1. Sync category select value
+    const catSelect = document.getElementById('tc-cat-filter');
+    if (catSelect) {
+      const currentVal = this.#selectedCategorias.size === 1 ? Array.from(this.#selectedCategorias)[0] : 'ALL';
+      catSelect.value = currentVal;
     }
 
     // 2. Recalculate scorecard sumatoria
