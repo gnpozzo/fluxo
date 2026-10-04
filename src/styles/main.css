@@ -7422,19 +7422,73 @@ input:checked + .toggle-slider:before {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   padding-bottom: 12px;
   margin-bottom: 8px;
   border-bottom: 1px solid var(--borde-subtle, rgba(0, 0, 0, 0.04));
-  flex-wrap: wrap;
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tc-toolbar-row::-webkit-scrollbar {
+  display: none;
 }
 
 .tc-filter-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap !important;
   margin-left: auto;
+  flex-shrink: 0;
+}
+
+.tc-toolbar-row .dh-filter-tabs {
+  flex-shrink: 0;
+}
+
+.tc-toolbar-row .dh-tab-btn {
+  padding: 2px 7px;
+  font-size: 0.72rem;
+}
+
+.tc-toolbar-row .dh-search-box {
+  padding: 0 8px;
+  flex-shrink: 1;
+  min-width: 85px;
+}
+
+.tc-toolbar-row .dh-search-box input {
+  width: 70px !important;
+  transition: width 0.2s ease !important;
+}
+
+.tc-toolbar-row .dh-search-box:focus-within input {
+  width: 105px !important;
+}
+
+.tc-toolbar-row #tc-cat-filter {
+  max-width: 135px !important;
+  min-width: 85px;
+  flex-shrink: 1;
+  font-size: 0.72rem !important;
+  padding: 0 20px 0 8px !important;
+}
+
+.tc-toolbar-row #tc-cuenta-filter {
+  max-width: 125px !important;
+  min-width: 80px;
+  flex-shrink: 1;
+  font-size: 0.72rem !important;
+  padding: 0 20px 0 8px !important;
+}
+
+.tc-header-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--borde);
+  margin: 0 2px;
+  display: inline-block;
 }
 
 /* ── Unified Icon Pill Buttons ── */
