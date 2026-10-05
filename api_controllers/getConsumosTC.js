@@ -62,6 +62,70 @@ export default async function handler(req, res) {
           }).eq('id_tarjeta', tc.id_tarjeta).eq('user_id', userId);
         }
       }
+      // Remediation 2: Strip fake cuota_total = 12 / cuota_actual = 1 mistakenly saved on recurring consumptions
+      await supabase
+        .from('consumos_tc')
+        .update({ cuota_actual: null, cuota_total: null })
+        .eq('user_id', userId)
+        .like('recur_group_id', 'REC_TC_%')
+        .not('cuota_total', 'is', null);
+
+      // Remediation 3: Self-heal duplicate October 2026 recurrent records (pre-existing projections coexisting with statement imports)
+      const { data: octConsumos } = await supabase
+        .from('consumos_tc')
+        .select('id_consumo_tarjeta, id_tarjeta, descripcion, importe, recur_group_id, created_at, fecha')
+        .eq('user_id', userId)
+        .gte('fecha', '2026-10-01')
+        .lte('fecha', '2026-10-31')
+        .order('created_at', { ascending: false });
+
+      if (octConsumos && octConsumos.length > 0) {
+        function normRecurDesc(str) {
+          if (!str) return '';
+          return String(str).toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/\b(deb\s*aut|debito\s*automatico|merpago\*|payu\*ar\*|db\.rg|cr\.rg)\b/gi, ' ')
+            .replace(/\b(s\.?a\.?|s\.?r\.?l\.?|coop|cooperativa|sociedad\s*anonima)\b/gi, ' ')
+            .replace(/\b\d{5,}\b/g, ' ')
+            .replace(/[^a-z0-9]/g, ' ')
+            .trim().replace(/\s+/g, ' ');
+        }
+
+        const toDeleteIds = [];
+        const seenConcepts = new Map();
+
+        octConsumos.forEach(row => {
+          const cName = normRecurDesc(row.descripcion);
+          const isRecurConcept = (row.recur_group_id && row.recur_group_id.startsWith('REC_TC_')) ||
+            ['litoral gas', 'epe', 'claro', 'adt', 'max', 'la segunda', 'youtube', 'mutual socios'].some(k => cName.includes(k));
+
+          if (isRecurConcept && cName.length >= 3) {
+            let key = row.id_tarjeta + '_';
+            if (cName.includes('gas')) key += 'gas';
+            else if (cName.includes('epe')) key += 'epe';
+            else if (cName.includes('claro')) key += 'claro';
+            else if (cName.includes('adt')) key += 'adt';
+            else if (cName.includes('max')) key += 'max';
+            else if (cName.includes('youtube')) key += 'youtube';
+            else if (cName.includes('mutual')) key += 'mutual';
+            else if (cName.includes('segunda') && (cName.includes('auto') || cName.includes('8758204') || cName.includes('03'))) key += 'segunda_auto';
+            else if (cName.includes('segunda') && (cName.includes('vivienda') || cName.includes('hogar') || cName.includes('1028363') || cName.includes('06'))) key += 'segunda_vivienda';
+            else if (row.recur_group_id) key += row.recur_group_id;
+            else key += cName.split(' ').slice(0, 2).join('_');
+
+            if (seenConcepts.has(key)) {
+              toDeleteIds.push(row.id_consumo_tarjeta);
+            } else {
+              seenConcepts.set(key, row);
+            }
+          }
+        });
+
+        if (toDeleteIds.length > 0) {
+          await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', toDeleteIds).eq('user_id', userId);
+          await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', toDeleteIds).eq('user_id', userId);
+        }
+      }
     } catch (e) {
       console.warn('[getConsumosTC Remediation]', e.message);
     }

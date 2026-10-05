@@ -370,23 +370,33 @@ export class MovimientosModule extends BaseModule {
       : new Date().toISOString().substring(0, 10);
 
     // Detect series / cuotas / recurrente / split from data if editing
-    let currentTipoConsumo = 'COMUN';
-    let currentCuotaAct = 1;
-    let currentCuotaTot = 12;
+    let currentTipoConsumo = data?.tipo_consumo || 'COMUN';
+    let currentCuotaAct = Number(data?.cuota_actual) || 1;
+    let currentCuotaTot = Number(data?.cuota_total) || 12;
     let cleanDesc = data?.descripcion || '';
-    let currentFrecuencia = 'MENSUAL';
-    let currentPeriodos = 12;
+    let currentFrecuencia = data?.frecuencia || 'MENSUAL';
+    let currentPeriodos = Number(data?.periodos) || Number(data?.series_total) || 12;
 
+    const isRecurGroup = Boolean(data?.recur_group_id?.startsWith('REC_') || data?.tipo_consumo === 'RECURRENTE');
+    const isInstlGroup = Boolean(data?.recur_group_id?.startsWith('INSTL_') || data?.tipo_consumo === 'CUOTAS');
     const matchCuota = cleanDesc.match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || cleanDesc.match(/\((\d+)\/(\d+)\)/);
-    if (matchCuota) {
+
+    if (isRecurGroup) {
+      currentTipoConsumo = 'RECURRENTE';
+      cleanDesc = cleanDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
+      if (data?.series_total) currentPeriodos = data.series_total;
+    } else if (isInstlGroup) {
+      currentTipoConsumo = 'CUOTAS';
+      if (matchCuota) {
+        currentCuotaAct = parseInt(matchCuota[1], 10);
+        currentCuotaTot = parseInt(matchCuota[2], 10);
+      }
+      cleanDesc = cleanDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
+    } else if (matchCuota) {
       currentTipoConsumo = 'CUOTAS';
       currentCuotaAct = parseInt(matchCuota[1], 10);
       currentCuotaTot = parseInt(matchCuota[2], 10);
-      cleanDesc = cleanDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/i, '').replace(/\s*\(\d+\/\d+\)/, '').trim();
-    } else if (data?.recur_group_id?.startsWith('INSTL_')) {
-      currentTipoConsumo = 'CUOTAS';
-    } else if (data?.recur_group_id?.startsWith('REC_')) {
-      currentTipoConsumo = 'RECURRENTE';
+      cleanDesc = cleanDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
     }
 
     const isSplit = Boolean(data?.split_group_id);
@@ -692,7 +702,12 @@ export class MovimientosModule extends BaseModule {
             importe: fd.get('importe') || '',
             fecha: fd.get('fecha') || '',
             descripcion: fd.get('descripcion') || '',
-            id_cuenta_principal: fd.get('id_cuenta_destino') || App.Store?.cuenta
+            id_cuenta_principal: fd.get('id_cuenta_destino') || App.Store?.cuenta,
+            tipo_consumo: fd.get('tipo_consumo') || 'COMUN',
+            frecuencia: fd.get('frecuencia') || 'MENSUAL',
+            periodos: fd.get('periodos') || '12',
+            cuota_actual: fd.get('cuota_actual') || '1',
+            cuota_total: fd.get('cuota_total') || '12'
           };
         }
         const esIng = nuevoTipo === 'INGRESO';
@@ -987,41 +1002,48 @@ export class MovimientosModule extends BaseModule {
     }
 
     const cuentaDestino = datos.id_cuenta_destino || App.Store.cuenta;
-    const cuotasTot = Number(datos.cuota_total || 2);
+    const tipoConsumo = datos.tipo_consumo || 'COMUN';
+    const cuotasTot = tipoConsumo === 'CUOTAS' ? Math.max(1, Number(datos.cuota_total || 2)) : 1;
+    const cuotasAct = tipoConsumo === 'CUOTAS' ? Math.max(1, Number(datos.cuota_actual || 1)) : 1;
+    const periodosVal = tipoConsumo === 'RECURRENTE' ? Math.max(1, Number(datos.periodos || 12)) : 1;
     const rawImporte = Number(datos.importe || 0);
-    const importeCalculado = (datos.tipo_consumo === 'CUOTAS' && datos.cuotas_modo_monto === 'total' && cuotasTot > 1)
+    const importeCalculado = (tipoConsumo === 'CUOTAS' && datos.cuotas_modo_monto === 'total' && cuotasTot > 1)
       ? Math.round((rawImporte / cuotasTot) * 100) / 100
       : rawImporte;
+
+    const cleanDesc = (datos.descripcion || '')
+      .replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '')
+      .replace(/\s*\(\d+\/\d+\)/g, '')
+      .trim();
 
     const payload = {
       idCuenta          : cuentaDestino,
       tipo              : datos.tipo,
-      fecha             : datos.fecha,
+      fecha             : String(datos.fecha || '').substring(0, 10),
       idCategoria       : datos.id_categoria,
-      descripcion       : datos.descripcion,
+      descripcion       : cleanDesc,
       importe           : importeCalculado,
       medioPago         : 'transferencia',
-      tipoConsumo       : datos.tipo_consumo || 'COMUN',
-      frecuencia        : datos.frecuencia || 'MENSUAL',
-      cuotaActual       : Number(datos.cuota_actual || 1),
-      cuotaTotal        : Number(datos.cuota_total || 2),
-      periodos          : Number(datos.periodos || 12),
+      tipoConsumo       : tipoConsumo,
+      frecuencia        : tipoConsumo === 'RECURRENTE' ? (datos.frecuencia || 'MENSUAL') : 'MENSUAL',
+      cuotaActual       : cuotasAct,
+      cuotaTotal        : cuotasTot,
+      periodos          : periodosVal,
       esSplit           : esSplit,
       splitDestinos     : splitDestinos,
-      idTarjetaCuotas   : (datos.cuotas_medio === 'tarjeta' && datos.id_tarjeta_cuotas) ? datos.id_tarjeta_cuotas : null
+      idTarjetaCuotas   : (tipoConsumo === 'CUOTAS' && datos.cuotas_medio === 'tarjeta' && datos.id_tarjeta_cuotas) ? datos.id_tarjeta_cuotas : null
     };
 
     this.#cacheIngresos = {};
-    modal.setLoading(true);
 
     try {
       if (datos.compartir === 'on') {
         const ccPayload = {
           idCuenta: App.Store.cuenta,
           idCategoria: datos.id_categoria,
-          fecha: datos.fecha,
+          fecha: String(datos.fecha || '').substring(0, 10),
           tipo: 'COMUN',
-          descripcion: datos.descripcion,
+          descripcion: cleanDesc,
           importe: importeCalculado,
           idUsuario: datos.compartir_contacto,
           pagador: 'YO',
@@ -1036,7 +1058,6 @@ export class MovimientosModule extends BaseModule {
       }
 
       if (!this.#editData) {
-        // _handleCreate ya cierra el modal, muestra toast, destruye y recarga
         await this._handleCreate(payload, modal);
         if (payload.idCuenta && payload.idCuenta !== App.Store.cuenta) {
           const allCuentas = this.#cuentas.length ? this.#cuentas : (App.Store?.cuentas || []);
@@ -1049,30 +1070,27 @@ export class MovimientosModule extends BaseModule {
         const esSerio = !!this.#editData.recur_group_id || !!this.#editData.split_group_id;
         
         const doUpdate = async (scope) => {
-          modal.setLoading(true);
           const req = {
             data     : payload,
             original : {
               movimientoId : this.#editData.id_movimiento,
               recurGroupId : this.#editData.recur_group_id || null,
               splitGroupId : this.#editData.split_group_id || null,
-              fecha        : this.#editData.fecha?.value || this.#editData.fecha
+              fecha        : String(this.#editData.fecha?.value || this.#editData.fecha || '').substring(0, 10)
             },
             scope: scope
           };
           try {
-            await this._handleUpdate(this.#editData.id_movimiento, req, modal);
+            await this._handleUpdate(this.#editData.id_movimiento, req, modal, scope);
             if (payload.idCuenta && payload.idCuenta !== App.Store.cuenta) {
               App.Store.setCuenta(payload.idCuenta);
             }
           } catch (err) {
-             modal.setLoading(false);
              App.Toast.error(err.message || 'Error al guardar.');
           }
         };
 
         if (esSerio) {
-          modal.setLoading(false);
           const isSplitGroup = !this.#editData.recur_group_id && !!this.#editData.split_group_id;
           const confirmModal = new App.Modal('modal-mov-scope-edit');
           confirmModal.open({
@@ -1100,7 +1118,7 @@ export class MovimientosModule extends BaseModule {
         }
       }
     } catch (err) {
-      modal.setLoading(false);
+      modal?.setLoading(false);
       App.Toast.error(err.message || 'Error al procesar.');
     }
   }
@@ -1122,13 +1140,8 @@ export class MovimientosModule extends BaseModule {
         confirmLabel: 'Eliminar',
         danger      : true,
         onConfirm   : async () => {
-          try {
-            await this._handleDelete(row.id_movimiento);
-          } catch (err) {
-            if (err) App.Toast.error(err.message || 'Error al eliminar.');
-          } finally {
-            confirmModal.close();
-          }
+          confirmModal.close();
+          await this._handleDelete(row.id_movimiento, 'SINGLE', row);
         }
       });
     } else {
@@ -1148,27 +1161,189 @@ export class MovimientosModule extends BaseModule {
 
       const doDelete = async (scope) => {
         confirmModal.close();
-        try {
-          const req = {
-            id          : row.id_movimiento,
-            recurGroupId: row.recur_group_id || null,
-            splitGroupId: row.split_group_id || null,
-            fecha       : row.fecha?.value || row.fecha,
-            scope
-          };
-          await App.API.call('api_deleteMovimiento', req);
-          App.API.invalidatePattern('api_getDashboardData');
-          if (App.Events) App.Events.emit('data:changed');
-          App.Toast.success('Movimiento eliminado.');
-          this.destruir();
-          await this.cargar();
-        } catch (err) {
-          App.Toast.error('Error al eliminar: ' + err.message);
-        }
+        await this._handleDelete(row.id_movimiento, scope, row);
       };
 
       document.getElementById('del-single')?.addEventListener('click', () => doDelete('SINGLE'));
       document.getElementById('del-series')?.addEventListener('click', () => doDelete('SERIES'));
+    }
+  }
+
+  // --- SECCIÓN 5c: OPTIMISTIC CRUD & FAST REFRESH ---
+
+  #recalcularKpisLocales() {
+    if (!this.#currentData || !this.#currentData.movimientos) return;
+    let ingresos = 0, egresos = 0, egresosSaldados = 0, egresosPendientes = 0;
+    this.#currentData.movimientos.forEach(m => {
+      const isPagoTC = m.id_categoria === 'CAT_PAGO_TC' || (typeof m.descripcion === 'string' && m.descripcion.toLowerCase().startsWith('pago resumen:'));
+      const amt = Math.abs(Number(m.importe || 0));
+      if (m.tipo_mov === 'INGRESO') ingresos += amt;
+      if (m.tipo_mov === 'EGRESO') {
+        if (!isPagoTC) {
+          egresos -= amt;
+          if (m.pagado) egresosSaldados += amt;
+          else egresosPendientes += amt;
+        }
+      }
+    });
+    this.#currentData.kpis = {
+      ingresos,
+      egresos,
+      resultado: ingresos + egresos,
+      egresosSaldados,
+      egresosPendientes
+    };
+  }
+
+  async cargarSilencioso() {
+    const { cuenta, mes } = App.Store;
+    if (!cuenta || !mes) return;
+    const { fechaInicio, fechaFin } = this.#calcFechas(mes);
+    const cuentaObj = App.Store.cuentas.find(c => c.id_cuenta_principal === cuenta);
+    const requiereAjuste = cuentaObj?.requiere_ajuste_cc_tc ?? false;
+
+    try {
+      const resp = await App.API.call('api_getDashboardData', cuenta, fechaInicio, fechaFin, requiereAjuste);
+      if (resp && resp.success) {
+        this._render(resp.data);
+      }
+    } catch (e) {
+      console.warn('[MovimientosModule] Revalidación silenciosa falló:', e);
+    }
+  }
+
+  async _handleCreate(formData, modal) {
+    modal?.close();
+
+    const previousData = this.#currentData ? JSON.parse(JSON.stringify(this.#currentData)) : null;
+    const catObj = (this.#categorias || []).find(c => c.id_categoria === formData.idCategoria);
+    const tempId = 'temp_' + Date.now();
+    const activeMes = App.Store.mes;
+    const movFecha = String(formData.fecha || '').substring(0, 10);
+    const inCurrentMonth = activeMes ? movFecha.startsWith(activeMes) : true;
+    const inCurrentAccount = !formData.idCuenta || formData.idCuenta === App.Store.cuenta;
+
+    if (inCurrentMonth && inCurrentAccount && this.#currentData) {
+      const optRow = {
+        id_movimiento: tempId,
+        id_cuenta_principal: formData.idCuenta || App.Store.cuenta,
+        user_id: App.Store?.usuario?.id,
+        fecha: movFecha,
+        id_categoria: formData.idCategoria,
+        categoria_nombre: catObj?.nombre || 'General',
+        tipo_mov: formData.tipo,
+        descripcion: formData.descripcion,
+        importe: formData.importe,
+        medio_pago: formData.medioPago || 'transferencia',
+        recur_group_id: formData.tipoConsumo === 'RECURRENTE' ? 'REC_temp' : (formData.tipoConsumo === 'CUOTAS' ? 'INSTL_temp' : null),
+        split_group_id: formData.esSplit ? 'SPLIT_temp' : null,
+        pagado: false
+      };
+
+      this.#currentData.movimientos = [optRow, ...(this.#currentData.movimientos || [])];
+      this.#recalcularKpisLocales();
+      this._render(this.#currentData);
+    }
+
+    App.Toast.success('Movimiento registrado.');
+
+    try {
+      await App.API.call(this._createEndpoint, formData);
+      App.API.invalidatePattern('getDashboardData');
+      App.Store.invalidateModulo(this.moduleId);
+      if (App.Events) App.Events.emit('data:changed');
+      await this.cargarSilencioso();
+    } catch (err) {
+      App.Toast.error(err.message || 'Error al crear el registro.');
+      if (previousData) this._render(previousData);
+    }
+  }
+
+  async _handleUpdate(id, req, modal, scope = 'SINGLE') {
+    modal?.close();
+
+    const previousData = this.#currentData ? JSON.parse(JSON.stringify(this.#currentData)) : null;
+    const payload = req.data || req;
+    const catObj = (this.#categorias || []).find(c => c.id_categoria === payload.idCategoria);
+    const effectiveScope = req.scope || scope || 'SINGLE';
+
+    if (this.#currentData && this.#currentData.movimientos) {
+      const recurGroupId = req.original?.recurGroupId || this.#editData?.recur_group_id;
+      const splitGroupId = req.original?.splitGroupId || this.#editData?.split_group_id;
+
+      this.#currentData.movimientos.forEach(m => {
+        const matchesSingle = m.id_movimiento === id;
+        const matchesSeries = (effectiveScope === 'SERIES' && recurGroupId && m.recur_group_id === recurGroupId);
+        const matchesGroup  = (effectiveScope === 'GROUP'  && splitGroupId && m.split_group_id === splitGroupId);
+
+        if (matchesSingle || matchesSeries || matchesGroup) {
+          if (payload.descripcion) m.descripcion = payload.descripcion;
+          if (payload.importe !== undefined) m.importe = payload.importe;
+          if (payload.idCategoria) {
+            m.id_categoria = payload.idCategoria;
+            m.categoria_nombre = catObj?.nombre || m.categoria_nombre;
+          }
+          if (payload.fecha) m.fecha = String(payload.fecha).substring(0, 10);
+          if (payload.medioPago) m.medio_pago = payload.medioPago;
+          if (payload.idCuenta) m.id_cuenta_principal = payload.idCuenta;
+        }
+      });
+
+      this.#recalcularKpisLocales();
+      this._render(this.#currentData);
+    }
+
+    App.Toast.success('Registro actualizado.');
+
+    try {
+      await App.API.call(this._updateEndpoint, id, req, effectiveScope);
+      App.API.invalidatePattern('getDashboardData');
+      App.Store.invalidateModulo(this.moduleId);
+      if (App.Events) App.Events.emit('data:changed');
+      await this.cargarSilencioso();
+    } catch (err) {
+      App.Toast.error(err.message || 'Error al actualizar el registro.');
+      if (previousData) this._render(previousData);
+    }
+  }
+
+  async _handleDelete(id, scope = 'SINGLE', row = null) {
+    const previousData = this.#currentData ? JSON.parse(JSON.stringify(this.#currentData)) : null;
+    const targetRow = row || (this.#currentData?.movimientos || []).find(m => m.id_movimiento === id);
+
+    if (this.#currentData && this.#currentData.movimientos && targetRow) {
+      const recurGroupId = targetRow.recur_group_id;
+      const splitGroupId = targetRow.split_group_id;
+
+      this.#currentData.movimientos = this.#currentData.movimientos.filter(m => {
+        if (scope === 'SERIES' && recurGroupId && m.recur_group_id === recurGroupId) return false;
+        if (scope === 'GROUP'  && splitGroupId && m.split_group_id === splitGroupId) return false;
+        if (m.id_movimiento === id) return false;
+        return true;
+      });
+
+      this.#recalcularKpisLocales();
+      this._render(this.#currentData);
+    }
+
+    App.Toast.success('Movimiento eliminado.');
+
+    try {
+      const req = {
+        id          : id,
+        recurGroupId: targetRow?.recur_group_id || null,
+        splitGroupId: targetRow?.split_group_id || null,
+        fecha       : String(targetRow?.fecha?.value || targetRow?.fecha || '').substring(0, 10),
+        scope
+      };
+      await App.API.call(this._deleteEndpoint, req);
+      App.API.invalidatePattern('getDashboardData');
+      App.Store.invalidateModulo(this.moduleId);
+      if (App.Events) App.Events.emit('data:changed');
+      await this.cargarSilencioso();
+    } catch (err) {
+      App.Toast.error('Error al eliminar: ' + err.message);
+      if (previousData) this._render(previousData);
     }
   }
 
@@ -1537,9 +1712,15 @@ export class MovimientosModule extends BaseModule {
     const colorClass = esIngreso ? 'positivo' : 'negativo';
     const medioPago = row.medio_pago || '—';
 
+    const isRecurGroup = Boolean(row.recur_group_id?.startsWith('REC_'));
+    let cleanModalDesc = row.descripcion || '';
+    if (isRecurGroup) {
+      cleanModalDesc = cleanModalDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
+    }
+
     const badges = [];
     if (row.recur_group_id?.startsWith('INSTL_')) badges.push('<span class="badge badge-recur">Cuotas</span>');
-    else if (row.recur_group_id) badges.push('<span class="badge badge-recur">Recurrente</span>');
+    else if (row.recur_group_id || isRecurGroup) badges.push('<span class="badge badge-recur">Recurrente</span>');
     if (row.split_group_id) badges.push('<span class="badge badge-split">Split</span>');
     if (row.id_consumo_tarjeta_origen) badges.push('<span class="badge badge-tc">Tarjeta</span>');
     if (row.id_transfer_ahorro) badges.push('<span class="badge badge-ahorro">Ahorro</span>');
@@ -1549,7 +1730,7 @@ export class MovimientosModule extends BaseModule {
 
     const detailModal = new App.Modal('modal-mov-detail');
     detailModal.open({
-      titulo: row.descripcion,
+      titulo: cleanModalDesc,
       icono: esIngreso ? 'trending_up' : 'trending_down',
       size: 'md',
       body: `
@@ -1581,7 +1762,7 @@ export class MovimientosModule extends BaseModule {
           ${row.descripcion ? `
           <div class="detail-item full-width">
             <span class="detail-label">Descripción</span>
-            <span class="detail-value" style="font-weight:500">${App.Utils.escapeHtml(row.descripcion)}</span>
+            <span class="detail-value" style="font-weight:500">${App.Utils.escapeHtml(cleanModalDesc)}</span>
           </div>` : ''}
         </div>
         ${!isAutoGenerated ? `
@@ -1613,17 +1794,26 @@ export class MovimientosModule extends BaseModule {
 
   #renderDescripcion(row) {
     const badges = [];
+    const isRecurGroup = Boolean(row.recur_group_id?.startsWith('REC_'));
+    const isInstlGroup = Boolean(row.recur_group_id?.startsWith('INSTL_'));
     const cuotaMatch = (row.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (row.descripcion || '').match(/\((\d+)\/(\d+)\)/);
-    if (cuotaMatch) {
-      const act = parseInt(cuotaMatch[1], 10);
-      const tot = parseInt(cuotaMatch[2], 10);
-      if (tot > 1 && act === tot) {
-        badges.push('<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px;">🏁 Última cuota</span>');
-      } else if (tot > 1) {
-        badges.push(`<span class="badge badge-recur" style="font-size:0.68rem; padding:2px 7px; border-radius:6px;">Cuota ${act}/${tot}</span>`);
+
+    let cleanDesc = row.descripcion || '';
+    if (isRecurGroup) {
+      cleanDesc = cleanDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
+      badges.push('<span class="badge badge-recur">Recurrente</span>');
+    } else if (isInstlGroup || cuotaMatch) {
+      if (cuotaMatch) {
+        const act = parseInt(cuotaMatch[1], 10);
+        const tot = parseInt(cuotaMatch[2], 10);
+        if (tot > 1 && act === tot) {
+          badges.push('<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px;">🏁 Última cuota</span>');
+        } else if (tot > 1) {
+          badges.push(`<span class="badge badge-recur" style="font-size:0.68rem; padding:2px 7px; border-radius:6px;">Cuota ${act}/${tot}</span>`);
+        }
+      } else {
+        badges.push('<span class="badge badge-recur">Cuotas</span>');
       }
-    } else if (row.recur_group_id?.startsWith('INSTL_')) {
-      badges.push('<span class="badge badge-recur">Cuotas</span>');
     } else if (row.recur_group_id) {
       badges.push('<span class="badge badge-recur">Recurrente</span>');
     } else if (row.tipo_mov === 'EGRESO') {
@@ -1638,7 +1828,7 @@ export class MovimientosModule extends BaseModule {
     if (row.id_transfer_ahorro)        badges.push('<span class="badge badge-ahorro">Ahorro</span>');
     if (row.id_transfer_inversion)     badges.push('<span class="badge badge-ahorro">Inversión</span>');
 
-    return `${App.Utils.escapeHtml(row.descripcion)} ${badges.join(' ')}`;
+    return `${App.Utils.escapeHtml(cleanDesc)} ${badges.join(' ')}`;
   }
 
   // --- SECCIÓN 8: SKELETONS ---

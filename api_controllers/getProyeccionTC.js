@@ -136,37 +136,18 @@ export default async function handler(req, res) {
       };
     }
 
-    // Sumarizar importes por mes proyectando cuotas correlativamente
+    // Sumarizar importes por mes
+    // Como consumos_tc ya persiste las cuotas futuras y recurrencias con su fecha correspondiente,
+    // cada registro computa en su propio mes (cMes) para evitar multiplicar/inflar los importes.
     consumos.forEach(c => {
       if (isTaxDesc(c.descripcion)) return;
       const cMes = (c.fecha || '').substring(0, 7);
       const imp = Number(c.importe || 0);
       const isDig = isDigitalOrUsd(c);
-      const cuotaTot = Number(c.cuota_total || 1);
-      const cuotaAct = Number(c.cuota_actual || 1);
 
-      if (cuotaTot > 1) {
-        const remaining = cuotaTot - cuotaAct + 1;
-        const monthKeys = Object.keys(objMeses).sort();
-        const startIdx = monthKeys.indexOf(cMes);
-        const baseIdx = startIdx >= 0 ? startIdx : 0;
-        for (let i = 0; i < remaining; i++) {
-          const targetM = monthKeys[baseIdx + i];
-          if (targetM && objMeses[targetM] !== undefined) {
-            objMeses[targetM].subtotal_consumos += imp;
-            if (isDig) objMeses[targetM].base_digital += imp;
-          }
-        }
-      } else if (c.tipo_consumo === 'RECURRENTE') {
-        Object.keys(objMeses).forEach(k => {
-          objMeses[k].subtotal_consumos += imp;
-          if (isDig) objMeses[k].base_digital += imp;
-        });
-      } else {
-        if (objMeses[cMes] !== undefined) {
-          objMeses[cMes].subtotal_consumos += imp;
-          if (isDig) objMeses[cMes].base_digital += imp;
-        }
+      if (objMeses[cMes] !== undefined) {
+        objMeses[cMes].subtotal_consumos += imp;
+        if (isDig) objMeses[cMes].base_digital += imp;
       }
     });
 

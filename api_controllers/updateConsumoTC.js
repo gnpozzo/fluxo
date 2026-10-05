@@ -385,6 +385,7 @@ export default async function handler(req, res) {
         const ruleData = {
           id_cuenta: targetAccountId,
           id_categoria: targetCategoriaId,
+          descripcion_limpia: consumo.descripcion || existingTC?.descripcion,
           descripcion_ejemplo: descRaw,
           updated_at: new Date().toISOString()
         };

@@ -73,11 +73,11 @@ export default async function handler(req, res) {
     let monthStep = 1; // default monthly
     
     if (mov.tipoConsumo === 'CUOTAS') {
-      periodos = mov.cuotaTotal - mov.cuotaActual + 1;
+      periodos = (Number(mov.cuotaTotal) || 2) - (Number(mov.cuotaActual) || 1) + 1;
       esCuotas = true;
       groupIdPrefix = 'INSTL_';
     } else if (mov.tipoConsumo === 'RECURRENTE') {
-      periodos = mov.periodos || 12;
+      periodos = Number(mov.periodos) || 12;
       monthStep = FREQ_MAP[mov.frecuencia] || 1;
     }
 
@@ -88,14 +88,20 @@ export default async function handler(req, res) {
     // Store frequency metadata in the first row for later editing
     const metaFrequency = mov.tipoConsumo === 'RECURRENTE' ? (mov.frecuencia || 'MENSUAL') : null;
 
+    // Sanitize description to remove any residual cuota annotations
+    const baseDesc = (mov.descripcion || '')
+      .replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '')
+      .replace(/\s*\(\d+\/\d+\)/g, '')
+      .trim();
+
     for (let i = 0; i < periodos; i++) {
       const monthsToAdd = esCuotas ? i : (i * monthStep);
       const fechaISO = addMonthsSafe(fechaBase, monthsToAdd).toISOString().split('T')[0];
       
-      let desc = mov.descripcion;
+      let desc = baseDesc;
       if (esCuotas) {
-         const cuotaNro = mov.cuotaActual + i;
-         desc = `${desc} (Cuota ${cuotaNro}/${mov.cuotaTotal})`;
+         const cuotaNro = (Number(mov.cuotaActual) || 1) + i;
+         desc = `${baseDesc} (Cuota ${cuotaNro}/${mov.cuotaTotal})`;
       }
 
       if (mov.esSplit && destinos.length > 0) {

@@ -188,15 +188,17 @@ export default async function handler(req, res) {
       // 3. Procesar consumos del resumen y proyectar cuotas y recurrencias
       const stVto = consumo.statementInfo?.fecha_vencimiento;
       const stCierre = consumo.statementInfo?.fecha_cierre;
+      const learnedRulesToSave = [];
 
       for (const item of consumo.consumos) {
         const idConsumo = crypto.randomUUID();
         const monedaItem = item.moneda || 'ARS';
         // La fecha del consumo de tarjeta se imputa SIEMPRE al vencimiento del resumen (pago diferido)
         const fechaISO = (stVto ? String(stVto).substring(0, 10) : (item.fecha ? String(item.fecha).substring(0, 10) : new Date().toISOString().split('T')[0]));
-        const cuotaTot = Number(item.cuotaTotal || item.cuota_total || 1);
-        const cuotaAct = Number(item.cuotaActual || item.cuota_actual || 1);
-        const tipoConsumo = item.tipoConsumo || (cuotaTot > 1 ? 'CUOTAS' : 'SIMPLE');
+        const tipoConsumo = item.tipoConsumo || 'SIMPLE';
+        const isCuotas = tipoConsumo === 'CUOTAS';
+        const cuotaTot = isCuotas ? Number(item.cuotaTotal || item.cuota_total || 1) : 1;
+        const cuotaAct = isCuotas ? Number(item.cuotaActual || item.cuota_actual || 1) : 1;
         const rawRowAccountId = item.idCuentaImputar || targetAccountId;
         const rowAccountId = (rawRowAccountId && cuentaNombreMap[rawRowAccountId]) ? rawRowAccountId : (cardAccountId || targetAccountId);
         
@@ -273,8 +275,8 @@ export default async function handler(req, res) {
           descripcion: item.descripcion,
           importe: Number(item.importe || 0),
           moneda: monedaItem,
-          cuota_actual: cuotaTot > 1 ? cuotaAct : null,
-          cuota_total: cuotaTot > 1 ? cuotaTot : null,
+          cuota_actual: (isCuotas && cuotaTot > 1) ? cuotaAct : null,
+          cuota_total: (isCuotas && cuotaTot > 1) ? cuotaTot : null,
           recur_group_id: recurGroupId,
           imputado_a: rowAccountId
         });
@@ -405,6 +407,57 @@ export default async function handler(req, res) {
               // Reintegro en la cuenta de tarjeta se generará al pagar el resumen del período correspondiente
             }
           }
+        }
+
+        // Aprender regla de alias/imputación si el usuario definió un nombre canónico o imputación
+        if (item.descripcion && !isTaxItem) {
+          const descRaw = item.raw_descripcion || item.descripcion || '';
+          const cleanWords = descRaw.toLowerCase()
+            .replace(/cuota\s*\d+(\s*\/\s*\d+)?/gi, '')
+            .replace(/\b(deb\s*aut|debito\s*automatico|merpago\*|payu\*ar\*|db\.rg|cr\.rg)\b/gi, ' ')
+            .replace(/\b(s\.?a\.?|s\.?r\.?l\.?)\b/gi, ' ')
+            .replace(/\b\d{5,}\b/g, ' ')
+            .replace(/[^a-z0-9]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length >= 3);
+          const baseKey = cleanWords.slice(0, 4).join('_');
+          if (baseKey && baseKey.length >= 3) {
+            learnedRulesToSave.push({
+              key: 'desc_' + baseKey,
+              rule: {
+                id_cuenta: rowAccountId,
+                id_categoria: catId,
+                descripcion_limpia: item.descripcion,
+                descripcion_ejemplo: descRaw,
+                updated_at: new Date().toISOString()
+              }
+            });
+          }
+        }
+      }
+
+      // Persistir reglas aprendidas en el perfil del usuario
+      if (learnedRulesToSave.length > 0) {
+        try {
+          const { data: perfil } = await supabase
+            .from('perfiles_usuario')
+            .select('preferencias')
+            .eq('id', userId)
+            .maybeSingle();
+
+          const prefs = (perfil && typeof perfil.preferencias === 'object' && perfil.preferencias) ? perfil.preferencias : {};
+          const reglas = prefs.reglas_imputacion || {};
+
+          learnedRulesToSave.forEach(({ key, rule }) => {
+            reglas[key] = { ...(reglas[key] || {}), ...rule };
+          });
+
+          prefs.reglas_imputacion = reglas;
+          await supabase
+            .from('perfiles_usuario')
+            .upsert({ id: userId, preferencias: prefs, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+        } catch (ruleErr) {
+          console.warn('[createConsumoTC] Error saving learned rules:', ruleErr.message);
         }
       }
 

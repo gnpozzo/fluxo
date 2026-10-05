@@ -58,8 +58,26 @@ export default async function handler(req, res) {
       mov.idCuenta = resolved;
     }
 
-    const isOriginalRecurrente = Boolean(original.recurGroupId);
-    const isOriginalSplit = Boolean(original.splitGroupId);
+    let origRecurGroupId = original.recurGroupId;
+    let origSplitGroupId = original.splitGroupId;
+    let origFecha = original.fecha ? String(original.fecha).substring(0, 10) : null;
+
+    if (targetId && (!origRecurGroupId || !origFecha)) {
+      const { data: existingMov } = await supabase
+        .from('movimientos')
+        .select('recur_group_id, split_group_id, fecha, descripcion')
+        .eq('id_movimiento', targetId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (existingMov) {
+        if (!origRecurGroupId) origRecurGroupId = existingMov.recur_group_id;
+        if (!origSplitGroupId) origSplitGroupId = existingMov.split_group_id;
+        if (!origFecha) origFecha = String(existingMov.fecha || '').substring(0, 10);
+      }
+    }
+
+    const isOriginalRecurrente = Boolean(origRecurGroupId);
+    const isOriginalSplit = Boolean(origSplitGroupId);
     const isMovRecurrente = mov.tipoConsumo === 'RECURRENTE' || mov.tipoConsumo === 'CUOTAS';
     const isComplexityChanging = isMovRecurrente !== isOriginalRecurrente || Boolean(mov.esSplit) !== isOriginalSplit;
 
@@ -68,9 +86,25 @@ export default async function handler(req, res) {
       if (scope === 'SINGLE') {
         if (targetId) await supabase.from('movimientos').delete().eq('id_movimiento', targetId).eq('user_id', userId);
       } else if (scope === 'GROUP') {
-        await supabase.from('movimientos').delete().eq('split_group_id', original.splitGroupId).eq('user_id', userId);
+        if (origSplitGroupId) {
+          const { data: groupMovs } = await supabase.from('movimientos').select('id_consumo_tarjeta_origen').eq('split_group_id', origSplitGroupId).eq('user_id', userId);
+          if (groupMovs) {
+            const tcIds = groupMovs.filter(r => r.id_consumo_tarjeta_origen).map(r => r.id_consumo_tarjeta_origen);
+            if (tcIds.length > 0) await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', tcIds).eq('user_id', userId);
+          }
+          await supabase.from('movimientos').delete().eq('split_group_id', origSplitGroupId).eq('user_id', userId);
+        }
       } else if (scope === 'SERIES') {
-        await supabase.from('movimientos').delete().eq('recur_group_id', original.recurGroupId).gte('fecha', original.fecha).eq('user_id', userId);
+        if (origRecurGroupId && origFecha) {
+          const { data: seriesMovs } = await supabase.from('movimientos').select('id_consumo_tarjeta_origen').eq('recur_group_id', origRecurGroupId).gte('fecha', origFecha).eq('user_id', userId);
+          if (seriesMovs) {
+            const tcIds = seriesMovs.filter(r => r.id_consumo_tarjeta_origen).map(r => r.id_consumo_tarjeta_origen);
+            if (tcIds.length > 0) await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', tcIds).eq('user_id', userId);
+          }
+          await supabase.from('movimientos').delete().eq('recur_group_id', origRecurGroupId).gte('fecha', origFecha).eq('user_id', userId);
+        } else if (targetId) {
+          await supabase.from('movimientos').delete().eq('id_movimiento', targetId).eq('user_id', userId);
+        }
       }
 
       if (scope === 'SINGLE' && (isOriginalRecurrente || isOriginalSplit)) {
@@ -80,7 +114,7 @@ export default async function handler(req, res) {
       
       // 2. CREATE (Inline)
       const rows = [];
-      const fechaBase = new Date(mov.fecha + 'T12:00:00Z');
+      const fechaBase = new Date((mov.fecha ? String(mov.fecha).substring(0, 10) : (origFecha || new Date().toISOString().substring(0, 10))) + 'T12:00:00Z');
       let pctRetenido = 100;
       const destinos = [];
       if (mov.esSplit && Array.isArray(mov.splitDestinos)) {
@@ -96,25 +130,39 @@ export default async function handler(req, res) {
       let monthStep = 1;
 
       if (mov.tipoConsumo === 'CUOTAS') {
-        periodos = mov.cuotaTotal - mov.cuotaActual + 1;
+        periodos = Math.max(1, (Number(mov.cuotaTotal) || 2) - (Number(mov.cuotaActual) || 1) + 1);
         esCuotas = true;
         groupIdPrefix = 'INSTL_';
       } else if (mov.tipoConsumo === 'RECURRENTE') {
-        periodos = mov.periodos || 12;
+        periodos = Math.max(1, Number(mov.periodos) || 12);
         monthStep = FREQ_MAP[mov.frecuencia] || 1;
       }
       if (periodos < 1) periodos = 1;
       const isSeries = periodos > 1;
-      const seriesGroupId = isSeries ? groupIdPrefix + crypto.randomUUID() : null;
+
+      // Preserve existing series identifier when updating a series to maintain continuity
+      let seriesGroupId = null;
+      if (isSeries) {
+        if (origRecurGroupId) {
+          seriesGroupId = esCuotas ? origRecurGroupId.replace(/^REC_/, 'INSTL_') : origRecurGroupId.replace(/^INSTL_/, 'REC_');
+        } else {
+          seriesGroupId = groupIdPrefix + crypto.randomUUID();
+        }
+      }
+
+      // Sanitize description to remove any residual cuota annotations
+      const baseDesc = (mov.descripcion || '')
+        .replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '')
+        .replace(/\s*\(\d+\/\d+\)/g, '')
+        .trim();
 
       for (let i = 0; i < periodos; i++) {
         const monthsToAdd = esCuotas ? i : (i * monthStep);
         const fechaISO = addMonthsSafe(fechaBase, monthsToAdd).toISOString().split('T')[0];
-        let desc = mov.descripcion;
+        let desc = baseDesc;
         if (esCuotas) {
-          desc = `${desc} (Cuota ${mov.cuotaActual + i}/${mov.cuotaTotal})`;
-        } else if (mov.cuotaTotal > 1 && !desc.includes('(Cuota')) {
-          desc = `${desc} (Cuota ${mov.cuotaActual || 1}/${mov.cuotaTotal})`;
+          const cuotaNro = (Number(mov.cuotaActual) || 1) + i;
+          desc = `${baseDesc} (Cuota ${cuotaNro}/${mov.cuotaTotal})`;
         }
 
         if (mov.esSplit && destinos.length > 0) {
@@ -178,12 +226,16 @@ export default async function handler(req, res) {
 
     } else {
       // UPDATE SIMPLE (scoped to user_id)
-      let finalDesc = mov.descripcion;
-      if (mov.tipoConsumo === 'CUOTAS' && mov.cuotaTotal > 1 && !finalDesc.includes('(Cuota')) {
-        finalDesc = `${finalDesc} (Cuota ${mov.cuotaActual || 1}/${mov.cuotaTotal})`;
+      const baseDesc = (mov.descripcion || '')
+        .replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '')
+        .replace(/\s*\(\d+\/\d+\)/g, '')
+        .trim();
+      let finalDesc = baseDesc;
+      if (mov.tipoConsumo === 'CUOTAS' && Number(mov.cuotaTotal) > 1) {
+        finalDesc = `${baseDesc} (Cuota ${mov.cuotaActual || 1}/${mov.cuotaTotal})`;
       }
       const updatePayload = {
-        fecha: mov.fecha,
+        fecha: mov.fecha ? String(mov.fecha).substring(0, 10) : undefined,
         id_categoria: mov.idCategoria,
         descripcion: finalDesc,
         importe: mov.importe,

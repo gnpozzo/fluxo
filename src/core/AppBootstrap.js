@@ -112,6 +112,7 @@ export class BaseModule {
 
   async _handleUpdate(id, formData, modal, scope = 'SINGLE') {
     if (!this._updateEndpoint) return;
+    const effectiveScope = formData?.scope || scope || 'SINGLE';
     try {
       modal?.setLoading(true);
 
@@ -127,7 +128,7 @@ export class BaseModule {
         this.preserveViewOnUpdate(id);
       }
 
-      await App.API.call(this._updateEndpoint, id, formData, scope);
+      await App.API.call(this._updateEndpoint, id, formData, effectiveScope);
       modal?.close();
       if (App.Toast) App.Toast.success('Registro actualizado.');
       App.API.invalidateAll();

@@ -184,23 +184,27 @@ export class TarjetasModule extends BaseModule {
     if (valArsEl) valArsEl.textContent = App.Utils.formatearMoneda(saldoTotal);
 
     // 2. USD
-    let totalUsd = 0;
+    const subtotalsUsd = {};
     filteredConsumos.forEach(c => {
-      if (c.moneda === 'USD') totalUsd += Number(c.importe || 0);
-    });
-    this.#tarjetas.forEach(tc => {
-      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
-                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
-      if (isDueInMonth && Number(tc.total_resumen_usd || 0) > 0) {
-        totalUsd = Number(tc.total_resumen_usd);
+      if (c.moneda === 'USD') {
+        subtotalsUsd[c.id_tarjeta] = (subtotalsUsd[c.id_tarjeta] || 0) + Number(c.importe || 0);
       }
     });
+
+    let totalUsd = 0;
+    this.#tarjetas.forEach(tc => {
+      const subUsd = subtotalsUsd[tc.id_tarjeta] || 0;
+      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+      totalUsd += (isDueInMonth && Number(tc.total_resumen_usd || 0) > 0) ? Number(tc.total_resumen_usd) : subUsd;
+    });
+
     const valUsdEl = document.getElementById('tc-kpi-val-usd');
     const subUsdEl = document.getElementById('tc-kpi-sub-usd');
     if (valUsdEl) valUsdEl.textContent = 'US$ ' + totalUsd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (subUsdEl) {
       const cotizOficial = App.Store.cotizaciones?.oficial?.venta || 0;
-      subUsdEl.textContent = cotizOficial ? `Equiv. oficial: $ ${Math.round(totalUsd * cotizOficial).toLocaleString('es-AR')}` : 'Equiv. oficial: —';
+      subUsdEl.textContent = cotizOficial && totalUsd > 0 ? `Equiv. oficial: $ ${Math.round(totalUsd * cotizOficial).toLocaleString('es-AR')}` : 'Equiv. oficial: —';
     }
 
     // 3. Impuestos & Percepciones
@@ -1436,8 +1440,24 @@ export class TarjetasModule extends BaseModule {
       : null;
 
     let total = personales + imputados + impuestos;
-    if (activeCard && activeCard.total_resumen_ars && Number(activeCard.total_resumen_ars) > 0) {
-      total = Number(activeCard.total_resumen_ars);
+    if (activeCard) {
+      const isDueInMonth = (activeCard.fecha_vencimiento_actual && activeCard.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                           (activeCard.fecha_cierre_actual && activeCard.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+      if (isDueInMonth && Number(activeCard.total_resumen_ars || 0) > 0) {
+        total = Number(activeCard.total_resumen_ars);
+      }
+    } else {
+      let consolStatementArs = 0;
+      this.#tarjetas.forEach(tc => {
+        const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                             (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+        if (isDueInMonth && Number(tc.total_resumen_ars || 0) > 0) {
+          consolStatementArs += Number(tc.total_resumen_ars);
+        }
+      });
+      if (consolStatementArs > 0) {
+        total = consolStatementArs;
+      }
     }
 
     const elPers = document.getElementById('tc-subcard-personales');
@@ -1701,17 +1721,38 @@ export class TarjetasModule extends BaseModule {
       if (activeCard) {
         const subArs = pool.filter(c => c.moneda !== 'USD').reduce((acc, c) => acc + Number(c.importe || 0), 0);
         const subUsd = pool.filter(c => c.moneda === 'USD').reduce((acc, c) => acc + Number(c.importe || 0), 0);
-        finalArs = Number(activeCard.total_resumen_ars || 0) > 0 ? Number(activeCard.total_resumen_ars) : subArs;
-        finalUsd = Number(activeCard.total_resumen_usd || 0) > 0 ? Number(activeCard.total_resumen_usd) : subUsd;
+        const isDueInMonth = (activeCard.fecha_vencimiento_actual && activeCard.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                             (activeCard.fecha_cierre_actual && activeCard.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+        finalArs = (isDueInMonth && Number(activeCard.total_resumen_ars || 0) > 0) ? Number(activeCard.total_resumen_ars) : subArs;
+        finalUsd = (isDueInMonth && Number(activeCard.total_resumen_usd || 0) > 0) ? Number(activeCard.total_resumen_usd) : subUsd;
 
         valArsEl.textContent = App.Utils.formatearMoneda(finalArs);
         if (subArsEl) subArsEl.textContent = `Liquidación ${App.Utils.escapeHtml(activeCard.nombre)}`;
       } else {
-        finalArs = this.#baseSaldoTotal;
-        finalUsd = (this.#allConsumos || []).filter(c => c.moneda === 'USD').reduce((acc, c) => acc + Number(c.importe || 0), 0);
-        this.#tarjetas.forEach(tc => {
-          if (Number(tc.total_resumen_usd || 0) > 0) finalUsd += Number(tc.total_resumen_usd);
+        const subtotalsArs = {};
+        const subtotalsUsd = {};
+        (this.#allConsumos || []).forEach(c => {
+          const tid = c.id_tarjeta;
+          if (c.moneda === 'USD') {
+            subtotalsUsd[tid] = (subtotalsUsd[tid] || 0) + Number(c.importe || 0);
+          } else {
+            subtotalsArs[tid] = (subtotalsArs[tid] || 0) + Number(c.importe || 0);
+          }
         });
+
+        let consolArs = 0;
+        let consolUsd = 0;
+        this.#tarjetas.forEach(tc => {
+          const subArs = subtotalsArs[tc.id_tarjeta] || 0;
+          const subUsd = subtotalsUsd[tc.id_tarjeta] || 0;
+          const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === App.Store.mes) ||
+                               (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === App.Store.mes);
+          consolArs += (isDueInMonth && Number(tc.total_resumen_ars || 0) > 0) ? Number(tc.total_resumen_ars) : subArs;
+          consolUsd += (isDueInMonth && Number(tc.total_resumen_usd || 0) > 0) ? Number(tc.total_resumen_usd) : subUsd;
+        });
+
+        finalArs = consolArs;
+        finalUsd = consolUsd;
 
         valArsEl.textContent = App.Utils.formatearMoneda(finalArs);
         if (subArsEl) subArsEl.textContent = 'Liquidación del mes actual';
@@ -1918,28 +1959,34 @@ export class TarjetasModule extends BaseModule {
     }
 
     // 3. Proyectar cuotas, recurrentes y consumos simples mes a mes correlativamente
+    const seenRecurInPool = new Set();
     dataList = months.map((m, mIdx) => {
       let monthTotal = 0;
+      seenRecurInPool.clear();
+
       poolConsumos.forEach(c => {
         const cMes = (c.fecha?.value || c.fecha || '').substring(0, 7);
         const cuotaTot = Number(c.cuota_total || 1);
         const cuotaAct = Number(c.cuota_actual || 1);
         const imp = Number(c.importe || 0);
+        const isCuotas = c.tipo_consumo === 'CUOTAS' && cuotaTot > 1;
+        const isRecur = c.tipo_consumo === 'RECURRENTE' || (c.recur_group_id && c.recur_group_id.startsWith('REC_TC_'));
 
-        if (cuotaTot > 1) {
-          // Cuotas consecutivas: se computan mes a mes a partir de cMes
+        if (isCuotas) {
           const remainingInstallments = cuotaTot - cuotaAct + 1;
           const startMonthIndex = months.indexOf(cMes);
           const baseIdx = startMonthIndex >= 0 ? startMonthIndex : 0;
           if (mIdx >= baseIdx && mIdx < baseIdx + remainingInstallments) {
             monthTotal += imp;
           }
-        } else if (c.tipo_consumo === 'RECURRENTE') {
-          monthTotal += imp;
+        } else if (isRecur) {
+          const recurKey = c.recur_group_id || c.descripcion.toLowerCase().trim();
+          if (!seenRecurInPool.has(recurKey)) {
+            seenRecurInPool.add(recurKey);
+            monthTotal += imp;
+          }
         } else {
           if (cMes === m) {
-            monthTotal += imp;
-          } else if (mIdx === 0 && (!cMes || cMes < currentMes)) {
             monthTotal += imp;
           }
         }
@@ -1952,6 +1999,38 @@ export class TarjetasModule extends BaseModule {
         impuestos: 0
       };
     });
+
+    // Usar proyecciones consolidadas de backend si están disponibles y no hay filtros activos
+    if (this.#proyeccionesData && this.#proyeccionesData.length > 0 && !this.#selectedTcId && this.#selectedCategorias.size === 0) {
+      dataList = this.#proyeccionesData.map(p => ({
+        mes: p.mes,
+        total: Number(p.total || p.subtotal_consumos || 0),
+        consumos: Number(p.subtotal_consumos || 0),
+        impuestos: Number(p.impuestos?.total_impuestos || 0)
+      }));
+    }
+
+    // Para el mes en curso, alinear exactamente con el total oficial del resumen bancario si existe
+    let officialStatementArs = 0;
+    const cardsToCheck = this.#selectedTcId
+      ? this.#tarjetas.filter(t => t.id_tarjeta === this.#selectedTcId)
+      : this.#tarjetas;
+
+    cardsToCheck.forEach(tc => {
+      const isDueInMonth = (tc.fecha_vencimiento_actual && tc.fecha_vencimiento_actual.substring(0, 7) === currentMes) ||
+                           (tc.fecha_cierre_actual && tc.fecha_cierre_actual.substring(0, 7) === currentMes);
+      if (isDueInMonth && Number(tc.total_resumen_ars || 0) > 0) {
+        officialStatementArs += Number(tc.total_resumen_ars);
+      }
+    });
+
+    if (officialStatementArs > 0 && this.#selectedCategorias.size === 0) {
+      const m0 = dataList.find(d => d.mes === currentMes);
+      if (m0) {
+        m0.total = officialStatementArs;
+        m0.consumos = officialStatementArs;
+      }
+    }
 
     // Filter by selected period
     let filtered = [];
@@ -2885,7 +2964,11 @@ export class TarjetasModule extends BaseModule {
 
       let badgeHtml = '';
       if (isDiff) {
-        badgeHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(245, 158, 11, 0.15); color:#F59E0B;" title="Reemplazará un consumo existente que tiene diferencias">Modifica</span>`;
+        if (tx.is_recurrent_diff || tx.tipo_consumo === 'RECURRENTE' || tx.recur_group_id) {
+          badgeHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(99, 102, 241, 0.15); color:#6366f1;" title="Servicio recurrente con importe actualizado este mes">Recurrente Modificado</span>`;
+        } else {
+          badgeHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(245, 158, 11, 0.15); color:#F59E0B;" title="Reemplazará un consumo existente que tiene diferencias">Modifica</span>`;
+        }
       } else if (isMatch) {
         badgeHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:600; background-color:rgba(107, 114, 128, 0.15); color:#9CA3AF;" title="Ya existe en la base de datos (desmarcado para no duplicar)">Ya registrado</span>`;
       } else {
@@ -2894,7 +2977,11 @@ export class TarjetasModule extends BaseModule {
 
       let diffDescHtml = '';
       if (isDiff && tx.dbRecord) {
-        diffDescHtml = `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Reemplaza: "${App.Utils.escapeHtml(tx.dbRecord.descripcion)}" - ${App.Utils.formatearMoneda(tx.dbRecord.importe)})</small>`;
+        if (tx.is_recurrent_diff || tx.tipo_consumo === 'RECURRENTE' || tx.recur_group_id) {
+          diffDescHtml = `<small style="color:var(--primario, #6366f1); display:block; margin-top:2px; font-size:0.75rem;">(Actualiza recurrencia: antes ${App.Utils.formatearMoneda(tx.dbRecord.importe)} ➔ ahora ${importeFmt})</small>`;
+        } else {
+          diffDescHtml = `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Reemplaza: "${App.Utils.escapeHtml(tx.dbRecord.descripcion)}" - ${App.Utils.formatearMoneda(tx.dbRecord.importe)})</small>`;
+        }
       } else if (isMatch) {
         diffDescHtml = `<small style="color:var(--texto-3); display:block; margin-top:2px; font-size:0.75rem;">(Ya existe en la base de datos — desmarcado para no duplicar)</small>`;
       }
@@ -2930,7 +3017,7 @@ export class TarjetasModule extends BaseModule {
               <div id="tx-cuotas-div-${tx.id}" style="display:${isCuotas ? 'flex' : 'none'}; gap:4px; align-items:center; margin-top:2px">
                 <input class="input" type="number" style="padding:4px; font-size:0.8rem; margin:0; width:45px" id="tx-cuota-act-${tx.id}" value="${tx.cuota_actual || 1}" min="1">
                 <span style="font-size:0.75rem">/</span>
-                <input class="input" type="number" style="padding:4px; font-size:0.8rem; margin:0; width:45px" id="tx-cuota-tot-${tx.id}" value="${tx.cuota_total || 12}" min="2">
+                <input class="input" type="number" style="padding:4px; font-size:0.8rem; margin:0; width:45px" id="tx-cuota-tot-${tx.id}" value="${tx.cuota_total || ''}" placeholder="Tot" min="2">
               </div>
             </div>
           </td>
@@ -3074,8 +3161,9 @@ export class TarjetasModule extends BaseModule {
         const cat = document.getElementById(`tx-cat-${txId}`)?.value || null;
         const rowAcc = document.getElementById(`tx-acc-${txId}`)?.value || App.Store.cuenta;
         const type = document.getElementById(`tx-type-${txId}`)?.value || 'SIMPLE';
-        const cuotaAct = Number(document.getElementById(`tx-cuota-act-${txId}`)?.value || 1);
-        const cuotaTot = Number(document.getElementById(`tx-cuota-tot-${txId}`)?.value || 1);
+        const isTypeCuotas = type === 'CUOTAS';
+        const cuotaAct = isTypeCuotas ? Number(document.getElementById(`tx-cuota-act-${txId}`)?.value || 1) : null;
+        const cuotaTot = isTypeCuotas ? Number(document.getElementById(`tx-cuota-tot-${txId}`)?.value || 1) : null;
 
         batchConsumos.push({
           descripcion: desc,
@@ -3087,7 +3175,7 @@ export class TarjetasModule extends BaseModule {
           tipoConsumo: type,
           cuotaActual: cuotaAct,
           cuotaTotal: cuotaTot,
-          recur_group_id: originalTx.recur_group_id || null,
+          recur_group_id: (type === 'RECURRENTE' || type === 'CUOTAS') ? (originalTx.recur_group_id || null) : null,
           isTax: !!originalTx.isTax
         });
       }

@@ -52,10 +52,32 @@ export default async function handler(req, res) {
       .lte('fecha', fechaFin)
       .order('fecha', { ascending: false });
 
-    // Map categorization name
-    if (movimientos) {
+    // Map categorization name & series info
+    if (movimientos && movimientos.length > 0) {
+      const recurIds = [...new Set(movimientos.map(m => m.recur_group_id).filter(Boolean))];
+      let recurCountsMap = {};
+      if (recurIds.length > 0) {
+        const { data: recurRows } = await supabase
+          .from('movimientos')
+          .select('recur_group_id')
+          .in('recur_group_id', recurIds)
+          .eq('user_id', userId);
+        if (recurRows) {
+          recurRows.forEach(r => {
+            recurCountsMap[r.recur_group_id] = (recurCountsMap[r.recur_group_id] || 0) + 1;
+          });
+        }
+      }
+
       movimientos.forEach(m => {
         m.categoria_nombre = m.categorias?.nombre || 'General';
+        if (m.recur_group_id && recurCountsMap[m.recur_group_id]) {
+          m.series_total = recurCountsMap[m.recur_group_id];
+        }
+        // Sanitize any existing contaminated descriptions on recurring items or ingresos
+        if ((m.recur_group_id?.startsWith('REC_') || m.tipo_mov === 'INGRESO') && typeof m.descripcion === 'string') {
+          m.descripcion = m.descripcion.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
+        }
       });
     }
 

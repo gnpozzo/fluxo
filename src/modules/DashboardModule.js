@@ -2036,7 +2036,12 @@ export class DashboardModule extends BaseModule {
       const valClass = esIngreso ? 'positivo' : 'negativo';
       const isPago = isPagoTC(r);
       const catName = isPago ? 'Pago Tarjeta de Crédito' : (r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General'));
-      const desc = r.descripcion || catName;
+      const isRecur = Boolean(r.recur_group_id?.startsWith('REC_'));
+      let rawDesc = r.descripcion || catName;
+      if (isRecur) {
+        rawDesc = rawDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
+      }
+      const desc = rawDesc;
       const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
       const medioFmt = formatMedioPago(r.medio_pago);
       const medio = medioFmt ? `<span class="dh-pill-medio">${App.Utils.escapeHtml(medioFmt)}</span>` : '';
@@ -2047,7 +2052,9 @@ export class DashboardModule extends BaseModule {
       // Cuota badge logic
       let badgeCuota = '';
       const cuotaMatch = (r.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (r.descripcion || '').match(/\((\d+)\/(\d+)\)/);
-      if (cuotaMatch) {
+      if (isRecur) {
+        badgeCuota = '<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Recurrente</span>';
+      } else if (cuotaMatch) {
         const act = parseInt(cuotaMatch[1], 10);
         const tot = parseInt(cuotaMatch[2], 10);
         if (tot > 1 && act === tot) {
@@ -2055,7 +2062,7 @@ export class DashboardModule extends BaseModule {
         } else if (tot > 1) {
           badgeCuota = `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Cuota ${act}/${tot}</span>`;
         }
-      } else if (!esIngreso && !isPago && !r.recur_group_id?.startsWith('REC_') && !isConsolidado) {
+      } else if (!esIngreso && !isPago && !isConsolidado) {
         badgeCuota = `<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-size:0.68rem; font-weight:500; padding:2px 7px; border-radius:6px; margin-left:4px;">1️⃣ Única cuota</span>`;
       }
 

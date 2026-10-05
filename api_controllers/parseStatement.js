@@ -849,7 +849,8 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
           tipo_consumo: isCuotas ? 'CUOTAS' : 'RECURRENTE',
           sugerencia_ia: `✨ Imputación aprendida: ${accName}`,
           isRecur: true,
-          subtype: 'LEARNED'
+          subtype: 'LEARNED',
+          descripcion_limpia: matchedRule.descripcion_limpia || null
         };
       }
 
@@ -961,15 +962,17 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       };
     }
 
-    // 7. Deterministic comparison against dbConsumos
+    // 7. Intelligent Reconciliation Engine (Gemini AI + Deterministic Smart Matcher)
     const cardConsumos = (dbConsumos || []).filter(c => c.id_tarjeta === matchedCard.id_tarjeta);
     const exactMatches = [];
     const similarDiff = [];
     const newConsumptions = [];
     const matchedDbIds = new Set();
+    const matchedRecurGroupIds = new Set();
 
     const stCierre = extractedData.statement_info?.fecha_cierre;
     const stVto = extractedData.statement_info?.fecha_vencimiento;
+    const stMes = (stVto || stCierre || '').substring(0, 7);
 
     // Helper to find past imputed account
     function findImputedAccount(recurGroupId, consumoId) {
@@ -985,64 +988,307 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       return null;
     }
 
-    (extractedData.transactions || []).forEach(tx => {
-      const meta = resolveTransactionMetadata(tx, cardConsumos);
-      tx.id_categoria = meta.id_categoria;
-      tx.tipo_consumo = meta.tipo_consumo;
-      if (meta.sugerencia_ia) tx.sugerencia_ia = meta.sugerencia_ia;
-      if (meta.id_cuenta_imputar) tx.id_cuenta_imputar = meta.id_cuenta_imputar;
-      if (meta.isTax) tx.isTax = true;
+    function formatMoneyArs(val) {
+      return '$ ' + Number(val || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
 
-      const isCuotas = tx.tipo_consumo === 'CUOTAS';
-      const isRecur = meta.isRecur;
+    // A. Catalog of active recurring groups for this card
+    const activeRecurrentGroups = new Map();
+    cardConsumos.forEach(db => {
+      if (db.recur_group_id && db.recur_group_id.startsWith('REC_TC_')) {
+        const gid = db.recur_group_id;
+        if (!activeRecurrentGroups.has(gid)) {
+          activeRecurrentGroups.set(gid, {
+            recur_group_id: gid,
+            descripcion: db.descripcion,
+            importe: Number(db.importe || 0),
+            moneda: db.moneda || 'ARS',
+            id_categoria: db.id_categoria,
+            id_cuenta_imputar: findImputedAccount(gid, db.id_consumo_tarjeta),
+            records: [],
+            targetMonthRecord: null
+          });
+        }
+        const grp = activeRecurrentGroups.get(gid);
+        grp.records.push(db);
+        const dbMes = (db.fecha || '').substring(0, 7);
+        if (stMes && dbMes === stMes) {
+          grp.targetMonthRecord = db;
+          grp.descripcion = db.descripcion;
+          grp.importe = Number(db.importe || 0);
+          grp.id_categoria = db.id_categoria || grp.id_categoria;
+          const impAcc = findImputedAccount(gid, db.id_consumo_tarjeta);
+          if (impAcc) grp.id_cuenta_imputar = impAcc;
+        }
+      }
+    });
+
+    // Helper to clean merchant names from banking prefixes/suffixes/account numbers
+    function cleanMerchantName(str) {
+      if (!str) return '';
+      return String(str).toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\b(deb\s*aut|debito\s*automatico|merpago\*|payu\*ar\*|db\.rg|cr\.rg)\b/gi, ' ')
+        .replace(/\b(s\.?a\.?|s\.?r\.?l\.?|coop|cooperativa|sociedad\s*anonima)\b/gi, ' ')
+        .replace(/\b\d{5,}\b/g, ' ')
+        .replace(/[^a-z0-9]/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+    }
+
+    // Helper for deterministic smart recurring match
+    function findSmartRecurrentMatch(txDesc) {
+      const cTx = cleanMerchantName(txDesc);
+      const tksTx = cTx.split(' ').filter(x => x.length >= 2);
+      if (tksTx.length === 0) return null;
+
+      for (const [gid, grp] of activeRecurrentGroups.entries()) {
+        const cDb = cleanMerchantName(grp.descripcion);
+        const tksDb = cDb.split(' ').filter(x => x.length >= 2);
+        if (tksDb.length === 0) continue;
+
+        const isDbInTx = tksDb.every(t => cTx.includes(t));
+        const isTxInDb = tksTx.every(t => cDb.includes(t));
+        if (isDbInTx || isTxInDb) {
+          return grp;
+        }
+
+        if ((cTx.includes('gas') && cDb.includes('gas')) ||
+            (cTx.includes('epe') && cDb.includes('epe')) ||
+            (cTx.includes('claro') && cDb.includes('claro')) ||
+            (cTx.includes('adt') && cDb.includes('adt')) ||
+            (cTx.includes('max') && cDb.includes('max')) ||
+            (cTx.includes('youtube') && cDb.includes('youtube'))) {
+          return grp;
+        }
+      }
+      return null;
+    }
+
+    // B. AI-Powered Semantic Reconciliation via Gemini (if API key available)
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const aiReconciliationMap = new Map();
+
+    if (geminiKey && extractedData.transactions && extractedData.transactions.length > 0 && activeRecurrentGroups.size > 0) {
+      try {
+        const recurringCatalogList = Array.from(activeRecurrentGroups.values()).map(g => ({
+          recur_group_id: g.recur_group_id,
+          descripcion: g.descripcion,
+          ultimo_importe: g.importe,
+          moneda: g.moneda,
+          categoria_nombre: (categorias.find(c => c.id_categoria === g.id_categoria)?.nombre) || '',
+          id_cuenta_imputar: g.id_cuenta_imputar || null,
+          cuenta_nombre: cuentaMap[g.id_cuenta_imputar] || ''
+        }));
+
+        const txListPrompt = extractedData.transactions.map((tx, idx) => ({
+          idx,
+          descripcion: tx.descripcion,
+          importe: Number(tx.importe || 0),
+          moneda: tx.moneda || 'ARS',
+          cuota_actual: tx.cuota_actual || null,
+          cuota_total: tx.cuota_total || null,
+          isTax: !!tx.isTax
+        }));
+
+        const promptSystem = `Eres el motor de conciliación bancaria inteligente de Fluxo.
+Compara las transacciones del extracto bancario ("transacciones_extracto") con el catálogo de servicios recurrentes activos ("servicios_recurrentes_bd") y las cuentas del usuario.
+
+REGLAS DE CONCILIACIÓN:
+1. DETECCIÓN SEMÁNTICA DE SERVICIOS RECURRENTES:
+   - Los extractos modifican las descripciones con códigos de débito automático, números de cliente o prefijos bancarios (ej. "Litoral gas sa 00178700014 " -> "Litoral gas sa", "Claro deb aut 000021508728225 " -> "Claro", "Epe santa fe 000285401700239 " -> "Epe", "Adtsec 000934739000 10/26 " -> "ADT", "Merpago*max " -> "Max", "Google *youtubep p1on " -> "YouTube Premium", "Mutual socios am..." -> "Mutual socios am").
+   - VARIACIÓN DE TARIFA/IMPORTE: Un servicio recurrente (gas, luz, telefonía, seguros, etc.) cambia de precio habitualmente. Si el concepto coincide pero el importe es diferente, ¡ES EL MISMO SERVICIO RECURRENTE CON PRECIO ACTUALIZADO!
+   - Asigna "matched_recur_group_id" con el ID del servicio correspondiente.
+   - Si el importe difiere del registrado en BD, genera "sugerencia_ia":
+     "✨ Consumo recurrente detectado: importe anterior $ X ➔ nuevo $ Y (+Z%). Al confirmar se actualizarán este período y las proyecciones futuras."
+   - Si el importe es igual:
+     "✨ Consumo recurrente habitual detectado."
+
+2. SEGUROS "LA SEGUNDA":
+   - Póliza de Hogar (o ciclo 6 cuotas /06, o póliza 1028363): Vivienda -> cuenta Hogar.
+   - Póliza de Auto (o ciclo 3 cuotas /03, o póliza 8758204): Transporte -> cuenta Personal.
+
+3. IMPUESTOS Y PERCEPCIONES:
+   - Impuesto de sellos, IVA RG, DB.RG, Percepciones IIBB: "isTax": true, tipo_consumo: "SIMPLE".
+
+Responde ÚNICAMENTE con un JSON con el array "matches":
+[
+  {
+    "idx": número de índice,
+    "matched_recur_group_id": "REC_TC_..." o null,
+    "tipo_consumo": "RECURRENTE" | "CUOTAS" | "SIMPLE",
+    "id_categoria": "ID_CATEGORIA" o null,
+    "id_cuenta_imputar": "ID_CUENTA" o null,
+    "sugerencia_ia": "Texto explicativo"
+  }
+]`;
+
+        const userPrompt = JSON.stringify({
+          servicios_recurrentes_bd: recurringCatalogList,
+          transacciones_extracto: txListPrompt,
+          cuentas: allUserCuentas || [],
+          categorias: (categorias || []).map(c => ({ id: c.id_categoria, nombre: c.nombre }))
+        });
+
+        const modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+        const aiRespText = await callGemini(geminiKey, modelName, promptSystem, [{ role: 'user', parts: [{ text: userPrompt }] }], 'application/json', 15000);
+        const parsedAi = JSON.parse(aiRespText);
+        if (Array.isArray(parsedAi?.matches)) {
+          parsedAi.matches.forEach(m => {
+            if (m && typeof m.idx === 'number') {
+              aiReconciliationMap.set(m.idx, m);
+            }
+          });
+        }
+      } catch (aiErr) {
+        console.warn('[parseStatement] AI reconciliation fallback to smart heuristics:', aiErr.message);
+      }
+    }
+
+    // C. Reconcile transactions against database & classifications
+    (extractedData.transactions || []).forEach((tx, txIdx) => {
+      const meta = resolveTransactionMetadata(tx, cardConsumos);
+      const aiMatch = aiReconciliationMap.get(txIdx);
+
+      // Precedence: AI suggestion / classification, then heuristic metadata
+      if (aiMatch) {
+        if (aiMatch.id_categoria) tx.id_categoria = aiMatch.id_categoria;
+        if (aiMatch.id_cuenta_imputar) tx.id_cuenta_imputar = aiMatch.id_cuenta_imputar;
+        if (aiMatch.tipo_consumo) tx.tipo_consumo = aiMatch.tipo_consumo;
+        if (aiMatch.sugerencia_ia) tx.sugerencia_ia = aiMatch.sugerencia_ia;
+      } else {
+        tx.id_categoria = meta.id_categoria;
+        tx.tipo_consumo = meta.tipo_consumo;
+        if (meta.sugerencia_ia) tx.sugerencia_ia = meta.sugerencia_ia;
+        if (meta.id_cuenta_imputar) tx.id_cuenta_imputar = meta.id_cuenta_imputar;
+      }
+      if (meta.isTax) tx.isTax = true;
+      if (meta.descripcion_limpia && !tx.raw_descripcion) {
+        tx.raw_descripcion = tx.descripcion;
+        tx.descripcion = meta.descripcion_limpia;
+      }
+
+      const isCuotas = tx.tipo_consumo === 'CUOTAS' || (tx.cuota_total && Number(tx.cuota_total) > 1);
       const txSig = getInsuranceSignature(tx.descripcion);
       const normTx = (tx.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+      // 1. Try matching with active recurring group (via AI or smart matcher)
+      let matchedRecGroup = null;
+      if (aiMatch?.matched_recur_group_id && activeRecurrentGroups.has(aiMatch.matched_recur_group_id)) {
+        matchedRecGroup = activeRecurrentGroups.get(aiMatch.matched_recur_group_id);
+      } else if (!isCuotas && !tx.isTax) {
+        matchedRecGroup = findSmartRecurrentMatch(tx.descripcion);
+      }
+
+      if (matchedRecGroup) {
+        matchedRecurGroupIds.add(matchedRecGroup.recur_group_id);
+        tx.recur_group_id = matchedRecGroup.recur_group_id;
+        tx.tipo_consumo = 'RECURRENTE';
+        if (!tx.id_categoria) tx.id_categoria = matchedRecGroup.id_categoria;
+        if (!tx.id_cuenta_imputar) tx.id_cuenta_imputar = matchedRecGroup.id_cuenta_imputar;
+
+        // Adopt user's defined clean canonical name!
+        tx.raw_descripcion = tx.descripcion;
+        tx.descripcion = matchedRecGroup.descripcion;
+
+        // Mark all records of this group as matched in DB
+        matchedRecGroup.records.forEach(r => matchedDbIds.add(r.id_consumo_tarjeta));
+
+        const baseRecord = matchedRecGroup.targetMonthRecord || matchedRecGroup.records[0];
+        const sameImp = Math.abs(Number(matchedRecGroup.importe) - Number(tx.importe)) < 0.05;
+
+        if (sameImp) {
+          tx.sugerencia_ia = tx.sugerencia_ia || '✨ Consumo recurrente habitual detectado';
+          exactMatches.push({ ...tx, dbRecord: baseRecord });
+        } else {
+          const diffPct = matchedRecGroup.importe > 0
+            ? (((Number(tx.importe) - Number(matchedRecGroup.importe)) / Number(matchedRecGroup.importe)) * 100)
+            : 0;
+          const pctStr = diffPct !== 0 ? ` (${diffPct > 0 ? '+' : ''}${diffPct.toFixed(1)}%)` : '';
+          tx.sugerencia_ia = aiMatch?.sugerencia_ia || `✨ Consumo recurrente '${matchedRecGroup.descripcion}' detectado: importe anterior ${formatMoneyArs(matchedRecGroup.importe)} ➔ nuevo ${formatMoneyArs(tx.importe)}${pctStr}. Al confirmar se actualizarán este mes y las proyecciones futuras.`;
+          tx.is_recurrent_diff = true;
+          similarDiff.push({
+            db_record: baseRecord,
+            statement_record: tx
+          });
+        }
+        return;
+      }
+
+      // 1.5. Cuotas Disambiguation / Progression Matching (e.g. "Muebles Living" vs "Mercado Pago 7 de 9")
+      if (isCuotas) {
+        const txCuotaTot = Number(tx.cuota_total || 1);
+        const txCuotaAct = Number(tx.cuota_actual || 1);
+
+        const installmentMatch = cardConsumos.find(db => {
+          if (matchedDbIds.has(db.id_consumo_tarjeta)) return false;
+          if (!db.cuota_total || Number(db.cuota_total) <= 1) return false;
+          if (Number(db.cuota_total) !== txCuotaTot) return false;
+
+          const dbCuotaAct = Number(db.cuota_actual || 1);
+          const isConsecutive = (dbCuotaAct === txCuotaAct) || (dbCuotaAct === txCuotaAct - 1);
+          const sameImp = Math.abs(Number(db.importe) - Number(tx.importe)) < 5.0;
+
+          const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const isGenericProcessor = normTx.includes('merpago') || normTx.includes('mercadopago') || normTx.includes('payu');
+          const descMatch = normDb.length >= 4 && normTx.length >= 4 && (normDb.includes(normTx) || normTx.includes(normDb));
+
+          return sameImp && (descMatch || (isConsecutive && isGenericProcessor));
+        });
+
+        if (installmentMatch) {
+          matchedDbIds.add(installmentMatch.id_consumo_tarjeta);
+          if (installmentMatch.recur_group_id) {
+            tx.recur_group_id = installmentMatch.recur_group_id;
+            matchedRecurGroupIds.add(installmentMatch.recur_group_id);
+          }
+          tx.raw_descripcion = tx.descripcion;
+          tx.descripcion = installmentMatch.descripcion;
+          tx.id_categoria = installmentMatch.id_categoria || tx.id_categoria;
+          tx.id_cuenta_imputar = findImputedAccount(installmentMatch.recur_group_id, installmentMatch.id_consumo_tarjeta) || tx.id_cuenta_imputar;
+          tx.sugerencia_ia = `✨ Compra en cuotas identificada: "${installmentMatch.descripcion}" (${txCuotaAct}/${txCuotaTot}).`;
+
+          exactMatches.push({ ...tx, dbRecord: installmentMatch });
+          return;
+        }
+      }
+
+      // 2. Non-recurring or installments matching against cardConsumos
       const match = cardConsumos.find(db => {
         if (matchedDbIds.has(db.id_consumo_tarjeta)) return false;
         
         const dbSig = getInsuranceSignature(db.descripcion);
-
-        // A. Coincidencia para seguros/servicios recurrentes con cuotas o renovaciones de póliza
         if (txSig && dbSig && txSig.provider === dbSig.provider) {
           const samePolicy = txSig.policyId && dbSig.policyId && txSig.policyId === dbSig.policyId;
           const sameCleanBase = txSig.cleanBase.length >= 6 && txSig.cleanBase === dbSig.cleanBase;
           const sameSubtype = (meta.subtype && db.id_categoria === meta.id_categoria) || (txSig.cuotaTot && dbSig.cuotaTot && txSig.cuotaTot === dbSig.cuotaTot);
-
           if (samePolicy || sameCleanBase || sameSubtype) {
-            const dbMes = (db.fecha || '').substring(0, 7);
-            const txMes = (tx.fecha || stVto || stCierre || '').substring(0, 7);
-            if (dbMes === txMes || (db.recur_group_id && db.recur_group_id.startsWith('REC_TC_'))) {
-              return true;
-            }
+            return true;
           }
         }
 
-        // B. Coincidencia estándar por importe, fecha o recurrencia
         const sameImp = Math.abs(Number(db.importe) - Number(tx.importe)) < 0.05;
         const sameDate = db.fecha === tx.fecha;
         const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const sameDesc = normDb.length >= 4 && normTx.length >= 4 && (normDb === normTx || normDb.startsWith(normTx) || normTx.startsWith(normDb));
         
-        // Exact match
-        if (sameImp && (sameDate || isRecur) && sameDesc) return true;
-
-        // Recurrent service match with price adjustment
-        if (isRecur && sameDesc) {
-          const dbMes = (db.fecha || '').substring(0, 7);
-          const txMes = (tx.fecha || stVto || '').substring(0, 7);
-          if (dbMes === txMes || (db.recur_group_id && db.recur_group_id.startsWith('REC_TC_'))) {
-            return true;
-          }
-        }
+        if (sameImp && (sameDate || meta.isRecur) && sameDesc) return true;
+        if (meta.isRecur && sameDesc) return true;
         return false;
       });
 
       if (match) {
         matchedDbIds.add(match.id_consumo_tarjeta);
-        if (match.recur_group_id) tx.recur_group_id = match.recur_group_id;
+        if (match.recur_group_id) {
+          tx.recur_group_id = match.recur_group_id;
+          matchedRecurGroupIds.add(match.recur_group_id);
+        }
         if (!tx.id_cuenta_imputar) {
           tx.id_cuenta_imputar = findImputedAccount(match.recur_group_id, match.id_consumo_tarjeta);
+        }
+        if (match.descripcion && match.descripcion !== tx.descripcion) {
+          tx.raw_descripcion = tx.descripcion;
+          tx.descripcion = match.descripcion;
         }
 
         const dbCuotaAct = match.cuota_actual || 1;
@@ -1060,21 +1306,16 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
           exactMatches.push({ ...tx, dbRecord: match });
         }
       } else {
-        // Buscar grupo recurrente previo o cuotas para preservar grupo e imputación de cuenta
-        if (isRecur && !tx.recur_group_id) {
+        // Look up previous recur_group_id or installments group to preserve group & account imputation
+        if (meta.isRecur && !tx.recur_group_id) {
           const pastRec = cardConsumos.find(db => {
             if (!db.recur_group_id) return false;
-            const dbSig = getInsuranceSignature(db.descripcion);
-            if (txSig && dbSig && txSig.provider === dbSig.provider) {
-              if (txSig.policyId && dbSig.policyId && txSig.policyId === dbSig.policyId) return true;
-              if (txSig.cuotaTot && dbSig.cuotaTot && txSig.cuotaTot === dbSig.cuotaTot) return true;
-              if (meta.subtype && db.id_categoria === meta.id_categoria) return true;
-            }
             const normDb = (db.descripcion || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             return normDb.length >= 4 && normTx.length >= 4 && (normDb.includes(normTx) || normTx.includes(normDb));
           });
           if (pastRec) {
             tx.recur_group_id = pastRec.recur_group_id;
+            matchedRecurGroupIds.add(pastRec.recur_group_id);
             if (!tx.id_cuenta_imputar) tx.id_cuenta_imputar = findImputedAccount(pastRec.recur_group_id, pastRec.id_consumo_tarjeta);
             if (!tx.id_categoria) tx.id_categoria = pastRec.id_categoria;
           }
@@ -1093,31 +1334,33 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       }
     });
 
-    // 8. Identificar consumos recurrentes ausentes y consumos no correspondientes en la BD
+    // 8. Identificar consumos recurrentes REALMENTE ausentes y consumos simples huérfanos
     const recurrentesAusentes = [];
     const unmatchedDbConsumptions = [];
 
-    const stMes = (stVto || stCierre || '').substring(0, 7);
+    // Recurrentes ausentes: Solo grupos activos que NO tuvieron match en este extracto (exactamente 1 fila por servicio)
+    for (const [groupId, grp] of activeRecurrentGroups.entries()) {
+      if (matchedRecurGroupIds.has(groupId)) {
+        continue; // Coincidió en este extracto, no está ausente
+      }
+      recurrentesAusentes.push({
+        id_consumo_tarjeta: grp.targetMonthRecord?.id_consumo_tarjeta || grp.records[0]?.id_consumo_tarjeta,
+        recur_group_id: groupId,
+        descripcion: grp.descripcion,
+        importe: grp.importe,
+        moneda: grp.moneda || 'ARS',
+        fecha: grp.targetMonthRecord?.fecha || grp.records[0]?.fecha,
+        sugerencia_ia: 'No figuró en el resumen de este mes. ¿Deseas dar de baja la recurrencia?'
+      });
+    }
 
+    // Consumos simples huérfanos del mes (no recurrentes y cuotas = 1)
     cardConsumos.forEach(db => {
       if (matchedDbIds.has(db.id_consumo_tarjeta)) return;
+      if (db.recur_group_id) return; // Ya evaluado en recurrentes
 
-      const isRecurrenteGroup = db.recur_group_id && db.recur_group_id.startsWith('REC_TC_');
       const dbMes = (db.fecha || '').substring(0, 7);
-
-      if (isRecurrenteGroup) {
-        // Si no vino en este extracto, sugerir al usuario la posibilidad de darlo de baja
-        recurrentesAusentes.push({
-          id_consumo_tarjeta: db.id_consumo_tarjeta,
-          recur_group_id: db.recur_group_id,
-          descripcion: db.descripcion,
-          importe: db.importe,
-          moneda: db.moneda || 'ARS',
-          fecha: db.fecha,
-          sugerencia_ia: 'No figuró en el resumen de este mes. ¿Deseas dar de baja la recurrencia?'
-        });
-      } else if (stMes && dbMes === stMes && (!db.cuota_total || db.cuota_total <= 1)) {
-        // Consumo simple que estaba registrado para este mes pero no vino en el resumen bancario
+      if (stMes && dbMes === stMes && (!db.cuota_total || db.cuota_total <= 1)) {
         unmatchedDbConsumptions.push({
           id_consumo_tarjeta: db.id_consumo_tarjeta,
           descripcion: db.descripcion,
