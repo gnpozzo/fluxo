@@ -9,8 +9,9 @@ export function nextReminderDate(reminder) {
   const last=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,0)).getUTCDate();
   if(reminder.frecuencia==='MENSUAL') date.setUTCDate(Math.min(Math.max(Number(reminder.dia_mes)||1,1),last));
   else if(reminder.frecuencia==='DIAS_HABILES') {
-    let count=0; const target=Number(reminder.dia_habil)||5;
-    for(let day=1;day<=last;day++){date.setUTCDate(day);if(![0,6].includes(date.getUTCDay()))count++;if(count===target)break;}
+    let count=0,lastWorking=1; const target=Number(reminder.dia_habil)||5;
+    for(let day=1;day<=last;day++){date.setUTCDate(day);if(![0,6].includes(date.getUTCDay())){count++;lastWorking=day;}if(count===target)break;}
+    if(count<target)date.setUTCDate(lastWorking);
   } else throw new Error('Frecuencia inválida.');
   return date.toISOString().slice(0,10);
 }

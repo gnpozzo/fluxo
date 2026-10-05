@@ -39,5 +39,6 @@ test('financial validation rejects invalid values before any delete or write',()
 test('monthly reminders clamp day 31 and working weekdays do not overflow',()=>{
   assert.equal(nextReminderDate({fecha_proxima:'2026-01-31',frecuencia:'MENSUAL',dia_mes:31}),'2026-02-28');
   assert.equal(nextReminderDate({fecha_proxima:'2026-01-31',frecuencia:'DIAS_HABILES',dia_habil:5}),'2026-02-06');
+  assert.equal(nextReminderDate({fecha_proxima:'2026-01-31',frecuencia:'DIAS_HABILES',dia_habil:23}),'2026-02-27');
   assert.equal(nextReminderDate({frecuencia:'UNICA'}),null);
 });
