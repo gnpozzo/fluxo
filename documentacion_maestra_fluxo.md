@@ -33,7 +33,7 @@ flowchart TD
 
 El router es una única función Node.js, con 52 controladores enrutados y un controlador de debug no publicado. `createMovimientosBatch` agrega un lote atómico de hasta 100 movimientos para la importación desde el asistente. No son microservicios Edge independientes.
 
-Las lecturas usan cliente anon+JWT; la clave administrativa no sustituye la identidad humana. Las escrituras usan `pg`, TLS con CA pública de Supabase y login `fluxo_runtime`. Cada operación establece claims del usuario y `SET LOCAL ROLE authenticated` dentro de la transacción. El adaptador permite tablas/identificadores/operadores definidos y parametriza valores.
+Las lecturas usan cliente anon+JWT; la clave administrativa no sustituye la identidad humana. Las escrituras usan `pg`, TLS con CA pública de Supabase y login `fluxo_app`, miembro del rol limitado `fluxo_runtime`. Cada operación establece claims del usuario y `SET LOCAL ROLE authenticated` dentro de la transacción. El adaptador permite tablas/identificadores/operadores definidos y parametriza valores.
 
 La clave administrativa queda reservada a sesiones del bot y recordatorios. El bot agrega filtros de propietario a sus consultas de negocio, y sus altas financieras normales usan el mismo wrapper transaccional. Algunas acciones del asistente conversacional todavía son escrituras independientes; ver límites operativos.
 
@@ -90,7 +90,7 @@ Archivo: `supabase/migrations/20261005192629_fluxo_isolation_transactions_202610
 
 No se revalidaron/repararon masivamente referencias históricas. Una limpieza de registros previos debe partir de un reporte y criterios explícitos, sin heurísticas automáticas al abrir pantallas.
 
-La conexión runtime fue creada y verificada con TLS. Su contraseña está en `.env.db`, ignorado por Git. Los tokens administrativos no son parte de la migración ni del código. La migración presupone el esquema anterior: falta un baseline completo para instalación vacía.
+La conexión runtime fue creada y verificada con TLS. `fluxo_runtime` es un rol de permisos sin login; `fluxo_app` es el login limitado que hereda esos permisos y puede establecer el rol authenticated. Se reemplazó el login inicial para evitar caché de credenciales del pooler después de rotarlo. Su contraseña está en `.env.db`, ignorado por Git. Los tokens administrativos no son parte de la migración ni del código. La migración presupone el esquema anterior: falta un baseline completo para instalación vacía.
 
 ## Pruebas y resultados
 

@@ -78,7 +78,7 @@ Crea una identidad CLI temporal y fixtures dentro de una transacción que revier
 | Variable | Uso |
 | --- | --- |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Auth y configuración pública del cliente |
-| `DATABASE_URL` | Pooler y login restringido `fluxo_runtime`; obligatorio para escrituras |
+| `DATABASE_URL` | Pooler y login restringido `fluxo_app`; obligatorio para escrituras |
 | `SUPABASE_SERVICE_ROLE_KEY` | Sesiones del bot y recordatorios; exclusivamente servidor |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | IA; modelo opcional |
 | `FMP_API_KEY` | Búsqueda de activos cuando corresponde |
