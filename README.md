@@ -5,13 +5,37 @@ Fluxo es una plataforma integral de gestión financiera personal y familiar, des
 ---
 
 ## 📌 Índice
-1. [Cómo Continuar el Proyecto desde Otra PC](#-cómo-continuar-el-proyecto-desde-otra-pc)
-2. [Cómo Pasa el Contexto a Antigravity (IA) en la Nueva PC](#-cómo-pasa-el-contexto-a-antigravity-ia-en-la-nueva-pc)
-3. [Arquitectura del Sistema](#-arquitectura-del-sistema)
-4. [Estructura de Directorios](#-estructura-de-directorios)
-5. [Variables de Entorno Requeridas (.env)](#-variables-de-entorno-requeridas-env)
-6. [Reglas de Negocio y Criterios Contables Fundamentales](#-reglas-de-negocio-y-criterios-contables-fundamentales)
-7. [Historial Completo de Versiones y Changelog Detallado](#-historial-completo-de-versiones-y-changelog-detallado)
+0. [📖 Documento Maestro del Sistema (Arquitectura, Keys y Módulos)](DOCUMENTACION_SISTEMA.md)
+1. [Cómo Realizar el Push y Desplegar Cambios en la App](#-cómo-realizar-el-push-y-desplegar-cambios-en-la-app)
+2. [Cómo Continuar el Proyecto desde Otra PC](#-cómo-continuar-el-proyecto-desde-otra-pc)
+3. [Cómo Pasa el Contexto a Antigravity (IA) en la Nueva PC](#-cómo-pasa-el-contexto-a-antigravity-ia-en-la-nueva-pc)
+4. [Arquitectura del Sistema](#-arquitectura-del-sistema)
+5. [Estructura de Directorios](#-estructura-de-directorios)
+6. [Variables de Entorno Requeridas (.env) y Keys](#-variables-de-entorno-requeridas-env)
+7. [Reglas de Negocio y Criterios Contables Fundamentales](#-reglas-de-negocio-y-criterios-contables-fundamentales)
+8. [Historial Completo de Versiones y Changelog Detallado](#-historial-completo-de-versiones-y-changelog-detallado)
+
+---
+
+## 🚀 Cómo Realizar el Push y Desplegar Cambios en la App
+
+Cada vez que se realiza un cambio en el código, el despliegue a producción en **Vercel** es 100% automático al empujar a la rama `main` de GitHub:
+
+```bash
+# 1. Verificar que compila sin errores
+npm run build
+
+# 2. Agregar todos los archivos modificados
+git add -A
+
+# 3. Commitear con mensaje claro
+git commit -m "fix(modulo): descripcion de la mejora"
+
+# 4. Pushear a GitHub (dispara el deploy automatico en Vercel)
+git push origin main
+```
+> [!TIP]
+> Tras ejecutar `git push origin main`, Vercel detecta el commit y finaliza el despliegue en **30 a 50 segundos**. Para verlo reflejado en tu navegador, haz un **Hard Refresh** (**Ctrl + F5** en Windows o **Cmd + Shift + R** en Mac). Para la guía exhaustiva y detalle de módulos, consulta [DOCUMENTACION_SISTEMA.md](DOCUMENTACION_SISTEMA.md).
 
 ---
 
