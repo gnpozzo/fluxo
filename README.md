@@ -104,3 +104,7 @@ Vercel compila `dist`, redirige `/api/*` al router y ejecuta el cron a las **09:
 Los resúmenes aún usan totales actuales de la tarjeta; los históricos usan los consumos del período. Los días hábiles excluyen fines de semana, sin calendario de feriados. Las valuaciones sin precio/moneda/tasa confiable se muestran como no disponibles. Los timeouts de Telegram dejan entregas pendientes para conciliación; no se repiten ciegamente.
 
 Las pruebas no equivalen a un pentest, una certificación bancaria ni una restauración de backups verificada. Consultar la documentación maestra antes de extender reglas contables o adoptar Fluxo para operación regulada.
+
+## Revisión de experiencia de uso
+
+Consultar [Análisis UX/UI](analisis_ux_ui_fluxo.md) para el inventario de controles, la propuesta de simplificación y criterios para preservar funcionalidades. El rediseño está propuesto; la corrección del reinicio de totales de tarjetas ya se aplicó en producción.

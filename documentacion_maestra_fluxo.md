@@ -10,7 +10,7 @@ Se inspeccionaron código, documentación, configuración local, esquema efectiv
 
 **Supabase:** proyecto `ltmpajstmrcmxezpfusn`, región sa-east-1; migración registrada **20261005192629**, `fluxo_isolation_transactions_20261005`, aplicada. Los registros financieros existentes no se eliminaron ni se ajustaron por heurísticas. Las fixtures de verificación se revirtieron.
 
-**GitHub/Vercel:** rama de implementación `codex/estabilizacion-fluxo`; integración con `gnpozzo/fluxo` y producción desde main en https://fluxo-delta.vercel.app. DATABASE_URL, CRON_SECRET y SUPABASE_URL configurados como Secret para producción y previews mediante sesión autenticada existente. Cada publicación debe confirmar READY y SHA. TELEGRAM_USER_LINKS configurado en producción para vincular al usuario de Telegram con la cuenta existente de Supabase. Compatibilidad con TELEGRAM_WEBHOOK_SECRET aplicada en ambas validaciones del webhook; falta confirmar recepción real desde Telegram.
+**GitHub/Vercel:** rama de implementación `codex/estabilizacion-fluxo`; integración con `gnpozzo/fluxo` y producción desde main en https://fluxo-delta.vercel.app. DATABASE_URL, CRON_SECRET y SUPABASE_URL configurados como Secret para producción y previews mediante sesión autenticada existente. Cada publicación debe confirmar READY y SHA. TELEGRAM_USER_LINKS configurado en producción para vincular al usuario de Telegram con la cuenta existente de Supabase. Compatibilidad con TELEGRAM_WEBHOOK_SECRET aplicada en ambas validaciones del webhook; recepción de /start y conversación con Gemini confirmadas por las capturas del usuario.
 
 **Evidencia:** 16 pruebas Node, 19 comprobaciones PostgreSQL y 10 aserciones HTTP autenticadas en producción, con limpieza de identidad QA y registros. Sintaxis de archivos activos, build y auditoría de dependencias. Navegador sobre assets productivos con API simulada: login, carga diferida, siete módulos, configuración, CSP, tema y navegación móvil. No se probó OAuth real, envío de mensajes ni una sesión productiva autenticada de extremo a extremo.
 
@@ -494,3 +494,9 @@ Criterios de plataforma consultados el 5 de octubre de 2026:
 - [Vite variables](https://vite.dev/guide/env-and-mode): variables públicas de build y secretos.
 
 Mantener fecha/commit y hallazgos resueltos con pruebas; versionar decisiones contables y separar observado/propuesto. No copiar credenciales ni información financiera privada a este documento.
+
+## Revisión UX/UI y cierre del reinicio — 5 de octubre de 2026
+
+Se completó el reinicio administrativo restableciendo total_resumen_ars y total_resumen_usd en las tres tarjetas, con respaldo local y verificación transaccional de que movimientos/consumos seguían vacíos. La interfaz confirmó plásticos, indicadores y proyección en cero. No se modificaron límites ni fechas.
+
+El [análisis UX/UI](analisis_ux_ui_fluxo.md) evalúa navegación, acciones, filtros, formularios, estados, accesibilidad y cada sección. Incluye una matriz para mantener funciones y simplificar su presentación. Las propuestas de rediseño todavía no se implementaron.
