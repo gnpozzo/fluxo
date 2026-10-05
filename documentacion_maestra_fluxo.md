@@ -12,7 +12,7 @@ Se inspeccionaron código, documentación, configuración local, esquema efectiv
 
 **GitHub/Vercel:** rama de implementación `codex/estabilizacion-fluxo`; integración con `gnpozzo/fluxo` y producción desde main en https://fluxo-delta.vercel.app. DATABASE_URL, CRON_SECRET y SUPABASE_URL configurados como Secret para producción y previews mediante sesión autenticada existente. Cada publicación debe confirmar READY y SHA. El bot permanece sin operaciones hasta configurar TELEGRAM_USER_LINKS con el ID numérico del usuario.
 
-**Evidencia:** 16 pruebas Node, 19 comprobaciones PostgreSQL, sintaxis de archivos activos, build y auditoría de dependencias. Navegador sobre assets productivos con API simulada: login, carga diferida, siete módulos, configuración, CSP, tema y navegación móvil. No se probó OAuth real, envío de mensajes ni una sesión productiva autenticada de extremo a extremo.
+**Evidencia:** 16 pruebas Node, 19 comprobaciones PostgreSQL y 10 aserciones HTTP autenticadas en producción, con limpieza de identidad QA y registros. Sintaxis de archivos activos, build y auditoría de dependencias. Navegador sobre assets productivos con API simulada: login, carga diferida, siete módulos, configuración, CSP, tema y navegación móvil. No se probó OAuth real, envío de mensajes ni una sesión productiva autenticada de extremo a extremo.
 
 ## Arquitectura y responsabilidades
 
@@ -98,10 +98,11 @@ La conexión runtime fue creada y verificada con TLS. `fluxo_runtime` es un rol 
 | --- | --- |
 | `npm test` | 16 casos: retry, deduplicación, refresh, sesión/caché, fechas, reparto, inversión, validación, cron y transacciones |
 | `npm run test:integration` | 19 aserciones reales: idempotencia, cuotas, rollback por referencias/sobreventa, ahorro USD, borrado, TC ARS/USD, edición inexistente y pagos parciales/reintegros USD |
+| HTTP productivo | 10 aserciones contra fluxo-delta.vercel.app sobre 65ab3f7; identidad efímera, login, alta, replay, conflicto, consulta, validación y borrado; limpieza final confirmada |
 | RLS A/B/anon | Script SQL sintético con rollback: aislamiento, referencias cruzadas y permisos RPC comprobados |
 | Runtime | Conexión TLS y rol; sin claims no ve cuentas; acceso privado según grants |
 | `npm run test:browser` | Assets compilados y CSP real con API simulada; login, siete módulos, menú móvil y tema; no reemplaza prueba de sesión real |
-| `npm run check` / build | Sintaxis de 96 archivos activos y compilación sin advertencia del bundle principal grande |
+| `npm run check` / build | Sintaxis de 97 archivos activos y compilación sin advertencia del bundle principal grande |
 | `npm audit` | 0 alertas reportadas; no implica ausencia de vulnerabilidades desconocidas |
 
 `tests/` contiene regresiones; `scripts/verify-supabase.js` revierte su transacción externa en finally. No usar el token administrativo en CI. Capturas y snapshots locales están en `.audit.local/` y no se versionan.
@@ -114,7 +115,7 @@ El webhook se registra con el secreto de Telegram en `secret_token`, no mediante
 
 Publicación: verificar CI/build, cargar variables, desplegar el commit revisado, esperar READY y comprobar SHA, configuración/Auth y flujo financiero. Un despliegue sin DATABASE_URL rechaza mutaciones con 503; no debe promoverse como operativo.
 
-Supabase ya está migrado. Para rollback, revisar compatibilidad antes de volver a código anterior: ese código puede volver a usar service role y eludir protecciones. Los scripts de bootstrap retirados no son un mecanismo de rollback.
+Supabase ya está migrado. El despliegue productivo 65ab3f7 fue observado READY, con pruebas HTTP aprobadas; las actualizaciones posteriores de documentación deben verificar nuevamente SHA/READY. Los workflows de GitHub estaban queued al cerrar la verificación, sin un resultado CI remoto que pueda atribuirse como aprobado. Para rollback, revisar compatibilidad antes de volver a código anterior: ese código puede volver a usar service role y eludir protecciones. Los scripts de bootstrap retirados no son un mecanismo de rollback.
 
 ## Límites y trabajo que necesita decisiones o evidencia adicional
 

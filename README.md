@@ -12,9 +12,10 @@ Versión **6.2.0**, revisión del 5 de octubre de 2026 sobre `62007ea`.
 - Caché y contexto de IA por usuario, HTML sanitizado y módulos cargados bajo demanda.
 - Migración **20261005192629** aplicada al proyecto Supabase de Fluxo.
 - 16 pruebas automatizadas y 19 verificaciones PostgreSQL aprobadas. Fixtures descartadas por rollback.
+- 10 comprobaciones HTTP en producción aprobadas: autenticación, alta, replay, conflicto, consulta y borrado. Cuenta QA y registros eliminados.
 - Navegador: login, siete módulos, CSP, menú móvil y tema comprobados con API simulada.
 - Build correcto; JavaScript principal **149 kB**, antes 585 kB. Vendors y módulos se descargan por separado.
-- `npm audit`: **0 vulnerabilidades reportadas**. CI ejecuta sintaxis, pruebas, build y audit.
+- `npm audit`: **0 vulnerabilidades reportadas**. CI configurado para sintaxis, pruebas, build y audit; los runs de GitHub estaban en cola al verificar la entrega. Esos checks locales y el build Vercel aprobaron.
 
 La conexión restringida, CRON_SECRET y SUPABASE_URL están configurados como secretos en Vercel para producción y previews. GitHub está integrado: main publica en https://fluxo-delta.vercel.app. Verificar READY y el commit desplegado después de cada push. El bot requiere completar el vínculo numérico con su usuario.
 
