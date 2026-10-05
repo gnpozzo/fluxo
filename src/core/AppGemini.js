@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 'use strict';
 /* ============================================================
    AppGemini.js — v6.1.0
@@ -10,7 +11,7 @@
 export class GeminiChatController {
   #chatHistory = [];
   #initialized = false;
-  #riskProfile = localStorage.getItem('fluxo_risk_profile') || 'MODERADO';
+  #riskProfile = localStorage.getItem('fluxo_risk_profile:' + (App.Auth?.user?.id || 'anonymous')) || 'MODERADO';
   #visibleCount = 8;
   #attachedFile = null;
   #searchQuery = '';
@@ -19,13 +20,20 @@ export class GeminiChatController {
     App.log('FluxoAI', 'constructor', 'Inicializando FluxoAI Controller');
   }
 
+  onUserChange() {
+    this.#chatHistory=[];
+    this.#riskProfile=localStorage.getItem('fluxo_risk_profile:'+(App.Auth?.user?.id||'anonymous')) || 'MODERADO';
+    document.getElementById('gemini-chat-history')?.replaceChildren();
+    if(App.Auth?.user) this.#loadPersistedHistory();
+  }
+
   get riskProfile() {
     return this.#riskProfile;
   }
 
   setRiskProfile(profile) {
     this.#riskProfile = profile;
-    localStorage.setItem('fluxo_risk_profile', profile);
+    localStorage.setItem('fluxo_risk_profile:' + (App.Auth?.user?.id || 'anonymous'), profile);
     this.#updateProfileUI();
   }
 
@@ -71,7 +79,7 @@ export class GeminiChatController {
 
   #loadPersistedHistory() {
     try {
-      const saved = localStorage.getItem('fluxo_advisor_history');
+      const saved = localStorage.getItem('fluxo_advisor_history:' + (App.Auth?.user?.id || 'anonymous'));
       if (saved) {
         this.#chatHistory = JSON.parse(saved);
         if (this.#chatHistory.length > 0) {
@@ -85,14 +93,14 @@ export class GeminiChatController {
 
   #saveHistory() {
     try {
-      localStorage.setItem('fluxo_advisor_history', JSON.stringify(this.#chatHistory));
+      localStorage.setItem('fluxo_advisor_history:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(this.#chatHistory));
     } catch (_) {}
   }
 
   resetChat() {
     this.#chatHistory = [];
     this.#visibleCount = 8;
-    localStorage.removeItem('fluxo_advisor_history');
+    localStorage.removeItem('fluxo_advisor_history:' + (App.Auth?.user?.id || 'anonymous'));
     const chatHistoryEl = document.getElementById('gemini-chat-history');
     const welcomeMsg = document.getElementById('gemini-welcome-msg');
     if (chatHistoryEl) {
@@ -412,7 +420,7 @@ export class GeminiChatController {
         const fecha = metaData.fechaLimite || null;
 
         const objMeta = { titulo, montoObjetivo: monto, fechaLimite: fecha };
-        localStorage.setItem('fluxo_meta_ahorro', JSON.stringify(objMeta));
+        localStorage.setItem('fluxo_meta_ahorro:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(objMeta));
         if (window.App?.Events) {
           window.App.Events.emit('meta:updated', objMeta);
         }
@@ -445,7 +453,7 @@ export class GeminiChatController {
         const topeMonto = topeData.topeMonto ? Number(topeData.topeMonto) : null;
 
         const objTope = { topePorcentaje: topePct, topeMonto };
-        localStorage.setItem('fluxo_tope_tc', JSON.stringify(objTope));
+        localStorage.setItem('fluxo_tope_tc:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(objTope));
         if (window.App?.Events) {
           window.App.Events.emit('tope_tc:updated', objTope);
         }
@@ -482,7 +490,7 @@ export class GeminiChatController {
         // Persistir en metas de gastos en localStorage
         let metasGastos = [];
         try {
-          const stored = localStorage.getItem('fluxo_metas_gastos');
+          const stored = localStorage.getItem('fluxo_metas_gastos:' + (App.Auth?.user?.id || 'anonymous'));
           if (stored) metasGastos = JSON.parse(stored);
         } catch (_) {}
         metasGastos = metasGastos.filter(m => m.categoria !== categoria);
@@ -495,7 +503,7 @@ export class GeminiChatController {
           descripcion: desc,
           creadoEl: new Date().toISOString()
         });
-        localStorage.setItem('fluxo_metas_gastos', JSON.stringify(metasGastos));
+        localStorage.setItem('fluxo_metas_gastos:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(metasGastos));
 
         // Registrar recordatorio en la base de datos para evaluación mensual
         try {
@@ -671,9 +679,9 @@ export class GeminiChatController {
       let metaStorage = null;
       let topeStorage = null;
       try {
-        const sM = localStorage.getItem('fluxo_meta_ahorro');
+        const sM = localStorage.getItem('fluxo_meta_ahorro:' + (App.Auth?.user?.id || 'anonymous'));
         if (sM) metaStorage = JSON.parse(sM);
-        const sT = localStorage.getItem('fluxo_tope_tc');
+        const sT = localStorage.getItem('fluxo_tope_tc:' + (App.Auth?.user?.id || 'anonymous'));
         if (sT) topeStorage = JSON.parse(sT);
       } catch (_) {}
 
@@ -759,7 +767,7 @@ export class GeminiChatController {
     }
 
     if (sender === 'gemini') {
-      msgEl.innerHTML = fileSnippet + this.#formatMarkdown(text, highlightQuery);
+      msgEl.innerHTML = DOMPurify.sanitize(fileSnippet + this.#formatMarkdown(text, highlightQuery));
 
       // Vincular eventos a los botones de opción interactiva
       msgEl.querySelectorAll('.gemini-option-choice-btn').forEach(btn => {
@@ -798,21 +806,9 @@ export class GeminiChatController {
           btn.innerHTML = `<span>⏳ Incorporando ${movs.length} movimientos...</span>`;
 
           try {
-            let countOk = 0;
-            for (const m of movs) {
-              const res = await App.API.call('createMovimiento', {
-                idCuentaPrincipal: cuentaId,
-                fecha: m.fecha || App.Utils.toInputDate(new Date()),
-                descripcion: m.descripcion || 'Gasto importado FluxoAI',
-                importe: Number(m.importe || 0),
-                tipoMov: m.tipo_mov || 'EGRESO',
-                tipoEgreso: m.tipo_egreso || 'VARIABLE',
-                idCategoria: m.id_categoria || 'CAT_OTROS',
-                medioPago: m.medio_pago || 'Transferencia',
-                moneda: m.moneda || 'ARS'
-              });
-              if (res && res.success) countOk++;
-            }
+            btn.dataset.operationKey ||= crypto.randomUUID();
+            const result=await App.API.fetch('/api/createMovimientosBatch',{idempotencyKey:btn.dataset.operationKey,body:{movimientos:movs.map(m=>({idCuenta:cuentaId,fecha:m.fecha||App.Utils.toInputDate(new Date()),descripcion:m.descripcion||'Gasto importado FluxoAI',importe:Number(m.importe),tipo:m.tipo_mov||'EGRESO',tipoConsumo:'COMUN',idCategoria:m.id_categoria||'CAT_OTROS',medioPago:m.medio_pago||'Transferencia',moneda:m.moneda||'ARS'}))}});
+            const countOk=result.data.count;
 
             btn.style.background = 'var(--verde)';
             btn.style.borderColor = 'var(--verde)';
@@ -837,7 +833,7 @@ export class GeminiChatController {
         const re = new RegExp(`(${highlightQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
         contentHtml = contentHtml.replace(re, '<mark style="background:#FFE066; color:#111; padding:0 3px; border-radius:3px; font-weight:700;">$1</mark>');
       }
-      msgEl.innerHTML = contentHtml;
+      msgEl.innerHTML = DOMPurify.sanitize(contentHtml);
     }
 
     chatHistory.appendChild(msgEl);

@@ -82,12 +82,12 @@ export default async function handler(req, res) {
         }
       });
 
-      const ordenDolar = ['blue', 'bolsa', 'contadoconli', 'oficial'];
+      const ordenDolar = ['blue', 'bolsa', 'contadoconliqui', 'oficial'];
       ordenDolar.forEach(k => {
         const d = dolaresMap[k];
         if (d && d.venta > 0) {
           dolaresTicker.push({
-            symbol: k === 'bolsa' ? 'USD MEP' : k === 'contadoconli' ? 'USD CCL' : `USD ${d.nombre}`,
+            symbol: k === 'bolsa' ? 'USD MEP' : k === 'contadoconliqui' ? 'USD CCL' : `USD ${d.nombre}`,
             name: `Dólar ${d.nombre}`,
             price: `$ ${d.venta.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
             raw_price: d.venta,
@@ -163,7 +163,7 @@ export default async function handler(req, res) {
       tickerItems.push({
         symbol: y.symbol,
         name: y.name,
-        price: y.price > 1000 
+        price: y.price > 1000
           ? y.price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           : `$ ${y.price.toFixed(2)}`,
         raw_price: y.price,
@@ -208,7 +208,7 @@ export default async function handler(req, res) {
       mundo: validYahoo,
       soberanos: bonds.map(b => ({
         symbol: b.symbol,
-        price_usd: b.symbol.endsWith('D') ? b.c : (b.c ? b.c / (dolaresMap.bolsa?.venta || 1320) : 0),
+        price_usd: b.symbol.endsWith('D') ? b.c : (b.c && dolaresMap.bolsa?.venta ? b.c / dolaresMap.bolsa.venta : null),
         bid: b.px_bid || 0,
         ask: b.px_ask || 0,
         pct_change: b.pct_change || 0,
@@ -234,6 +234,6 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('[getMarketData -> ERROR]', err.message);
     if (cachedMarketData) return res.status(200).json(cachedMarketData);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

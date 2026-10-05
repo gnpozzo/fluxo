@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 'use strict';
 /* ============================================================
    component-modal.html — v5.0.0
@@ -11,6 +12,7 @@
 export class Modal {
 
   #id;
+  #previousFocus=null;
   #el       = null;
   #overlay  = null;
   #onConfirm = null;
@@ -50,6 +52,7 @@ export class Modal {
     onConfirm    = null,
     onCancel     = null
   } = {}) {
+    this.#previousFocus=document.activeElement;
     this.#onConfirm = onConfirm;
     this.#onCancel  = onCancel;
 
@@ -58,8 +61,8 @@ export class Modal {
       titleHtml = `<span style="margin-right:8px; display:inline-flex; align-items:center; color:var(--primary);">${App.Icons.get(icono)}</span>` + titulo;
     }
     
-    this.#el.querySelector('.modal-title').innerHTML = titleHtml;
-    this.#el.querySelector('.modal-body').innerHTML  = body;
+    this.#el.querySelector('.modal-title').innerHTML = DOMPurify.sanitize(titleHtml);
+    this.#el.querySelector('.modal-body').innerHTML  = DOMPurify.sanitize(body);
 
     const btnConfirm = this.#el.querySelector('.modal-confirm');
     if (btnConfirm) {
@@ -104,6 +107,7 @@ export class Modal {
       document.body.classList.remove('modal-active');
     }
     this.setLoading(false);
+    if(this.#previousFocus?.isConnected) this.#previousFocus.focus();
     this.#onConfirm = null;
     this.#onCancel  = null;
     App.log('Modal', 'close', `"${this.#id}" cerrado`);
@@ -117,12 +121,11 @@ export class Modal {
   setLoading(loading) {
     const btn = this.#el.querySelector('.modal-confirm');
     if (!btn) return;
-    btn.disabled = loading;
-    btn.innerHTML = loading
-      ? `<span class="spinner spinner-sm"></span> Procesando...`
-      : btn.dataset.originalLabel || btn.textContent;
-    if (!loading) btn.dataset.originalLabel = '';
-    else btn.dataset.originalLabel = btn.textContent;
+    if(loading && !btn.disabled) btn.dataset.originalLabel=btn.textContent;
+    btn.disabled=loading;
+    if(loading) btn.innerHTML='<span class="spinner spinner-sm"></span> Procesando...';
+    else if(btn.dataset.originalLabel) {btn.textContent=btn.dataset.originalLabel;delete btn.dataset.originalLabel;}
+
   }
 
   /**
@@ -197,6 +200,13 @@ export class Modal {
       isMouseDownOnOverlay = false;
     });
 
+    this.#overlay.addEventListener('keydown',e=>{
+      if(e.key!=='Tab' || !this.#overlay.classList.contains('modal-open')) return;
+      const controls=[...this.#el.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]')].filter(el=>el.getClientRects().length);
+      const first=controls[0],last=controls.at(-1);
+      if(e.shiftKey && document.activeElement===first){e.preventDefault();last?.focus();}
+      else if(!e.shiftKey && document.activeElement===last){e.preventDefault();first?.focus();}
+    });
     // ESC cierra
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.#overlay.classList.contains('modal-open')) {

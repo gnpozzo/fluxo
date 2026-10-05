@@ -15,7 +15,7 @@ export class AppStore {
     usuario       : null,
     preferencias  : {},
     globalCurrency: 'ARS',
-    exchangeRate  : 1,
+    exchangeRate  : null,
     dolarOficial  : 1535,
     version       : '6.0.0'
   };

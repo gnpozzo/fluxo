@@ -1,3 +1,4 @@
+import { todayArgentina, civilDate } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { callGemini } from '../api_lib/gemini.js';
 import XLSX from 'xlsx';
@@ -100,13 +101,13 @@ function tryParseMercadoPagoPdf(buffer, fileName = '') {
       'diciembre': '12', 'dic': '12'
     };
 
-    let defaultYear = 2026;
+    let defaultYear = Number(todayArgentina().slice(0,4));
     if (fileName) {
-      const ym = fileName.match(/\b(202\d)\b/);
+      const ym = fileName.match(/\b(20\d{2})\b/);
       if (ym) defaultYear = parseInt(ym[1], 10);
     }
     for (const t of tokens) {
-      const ym = t.match(/\b(202\d)\b/);
+      const ym = t.match(/\b(20\d{2})\b/);
       if (ym) { defaultYear = parseInt(ym[1], 10); break; }
     }
 
@@ -457,6 +458,8 @@ export default async function handler(req, res) {
       } catch (e) {}
     }
     const { fileBase64, mimeType, fileName } = body || {};
+    const allowedTypes=['application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','text/csv'];
+    if (!allowedTypes.includes(mimeType) || typeof fileBase64 !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64) || Buffer.byteLength(fileBase64,'base64') > 3*1024*1024) return res.status(400).json({success:false,error:'Archivo inválido o superior a 3 MB.'});
 
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
@@ -531,14 +534,14 @@ export default async function handler(req, res) {
 
     // 3. Fallback to Gemini for unrecognized PDFs or formats
     if (!extractedData) {
-      const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+      const geminiKey = process.env.GEMINI_API_KEY;
       if (!geminiKey) {
         return res.status(500).json({ success: false, error: 'GEMINI_API_KEY no configurada en el servidor.' });
       }
 
-      const fileYearMatch = (fileName || '').match(/\b(202\d)\b/);
-      const docYear = fileYearMatch ? fileYearMatch[1] : '2026';
-      const currentDateStr = '2026-09-28';
+      const fileYearMatch = (fileName || '').match(/\b(20\d{2})\b/);
+      const docYear = fileYearMatch ? fileYearMatch[1] : todayArgentina().slice(0,4);
+      const currentDateStr = todayArgentina();
 
       const systemInstruction = `
 Eres un asistente de procesamiento de resúmenes de tarjeta de crédito para Fluxo.
@@ -549,8 +552,7 @@ Determina los metadatos del resumen y la tarjeta (incluyendo próximo cierre y p
 ANCLAJE TEMPORAL CRÍTICO (AÑO DE FACTURACIÓN: ${docYear}):
 - La fecha de hoy es ${currentDateStr}. El año en curso es ${docYear}.
 - Nombre del archivo analizado: "${fileName || 'resumen.pdf'}".
-- REGLA ESTRICTA DE AÑO: El período de este documento corresponde a ${docYear}. TODAS las fechas generadas DEBEN pertenecer al año ${docYear} (formato ISO YYYY-MM-DD, ej. ${docYear}-09-XX).
-- ESTÁ ESTRICTAMENTE PROHIBIDO asignar fechas en 2024 o 2025. Toda fecha sin año explícito (ej. "12 de septiembre", "17/sep", "29 de septiembre") DEBE construirse obligatoriamente con el año ${docYear}.
+- Conservá los años explícitos del documento, aunque correspondan a otro año. Usá el año de facturación solo para fechas sin año; contemplá ciclos que cruzan diciembre/enero. No inventes fechas.
 
 REGLAS ESPECÍFICAS PARA RESÚMENES DE MERCADO PAGO / TARJETAS VIRTUALES:
 - Emisor / Banco: Si es de Mercado Pago / MercadoLibre, indícalo en "banco_o_emisor": "Mercado Pago" y "nombre_tarjeta": "Mercado Pago". Las tarjetas de Mercado Pago suelen ser virtuales y NO muestran los últimos 4 dígitos en el resumen; en ese caso "ultimos_4_digitos" debe ser null o cadena vacía "".
@@ -611,19 +613,9 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
       }
     }
 
-    // Post-parsing Year & Date Sanitizer (guarantees no 2024 or 2025 hallucinations)
-    const fileYearMatch = (fileName || '').match(/\b(202\d)\b/);
-    const targetYearStr = fileYearMatch ? fileYearMatch[1] : '2026';
-    const isTargetSep = (/orp2026/i.test(fileName || '') || /sep/i.test(fileName || '') || /septiembre/i.test(fileName || ''));
-
-    function sanitizeIsoDate(dStr, fallbackDate = null) {
-      if (!dStr || typeof dStr !== 'string') return fallbackDate || `${targetYearStr}-09-17`;
-      let clean = dStr.trim();
-      clean = clean.replace(/^(2024|2025)/, targetYearStr);
-      if (!clean.startsWith('202')) {
-        clean = fallbackDate || `${targetYearStr}-09-17`;
-      }
-      return clean;
+    function sanitizeIsoDate(value, fallbackDate = null) {
+      if (!value) return fallbackDate;
+      try { return civilDate(value); } catch { throw Object.assign(new Error('El resumen contiene una fecha inválida. Revisá el documento.'), {status:422}); }
     }
 
     if (!extractedData.statement_info) {
@@ -648,9 +640,10 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     if (Array.isArray(extractedData.transactions)) {
       extractedData.transactions.forEach(tx => {
         const rawDate = tx.fecha;
-        tx.fecha_compra = rawDate ? sanitizeIsoDate(rawDate, statementVto) : (statementVto || `${targetYearStr}-09-17`);
+        tx.fecha_compra = rawDate ? sanitizeIsoDate(rawDate, statementVto) : statementVto;
         // Imputar el consumo SIEMPRE a la fecha de vencimiento del resumen (para cualquier tipo de tarjeta)
         tx.fecha = statementVto || tx.fecha_compra;
+        if (!tx.fecha) throw Object.assign(new Error('Falta una fecha verificable en el resumen.'), {status:422});
       });
     }
 
@@ -1066,7 +1059,7 @@ Debes responder ÚNICAMENTE con un JSON con el siguiente formato, sin bloques de
     }
 
     // B. AI-Powered Semantic Reconciliation via Gemini (if API key available)
-    const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
     const aiReconciliationMap = new Map();
 
     if (geminiKey && extractedData.transactions && extractedData.transactions.length > 0 && activeRecurrentGroups.size > 0) {

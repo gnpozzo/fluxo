@@ -88,7 +88,7 @@ export class InversionesModule extends BaseModule {
     // Scorecard 1: Valor actual
     const valValorEl = document.getElementById('inv-kpi-val-valor');
     const subValorEl = document.getElementById('inv-kpi-sub-valor');
-    if (valValorEl) valValorEl.textContent = App.Utils.formatearMoneda(kpis.valorActual);
+    if (valValorEl) valValorEl.textContent = kpis.valorActual===null?'Sin cotización':App.Utils.formatearMoneda(kpis.valorActual);
     if (subValorEl) subValorEl.textContent = `Costo invertido: ${App.Utils.formatearMoneda(kpis.costoTotal)}`;
 
     // Scorecard 2: Costo Total
@@ -103,15 +103,15 @@ export class InversionesModule extends BaseModule {
     const rend = Number(kpis.rendimientoPorc || 0);
 
     if (valResultEl) {
-      valResultEl.textContent = App.Utils.formatearMoneda(ganancia);
+      valResultEl.textContent = kpis.gananciaTotal===null?'Sin cotización':App.Utils.formatearMoneda(ganancia);
       valResultEl.style.color = ganancia > 0 ? 'var(--verde)' : (ganancia < 0 ? 'var(--rojo)' : 'var(--texto)');
     }
     if (pillResultEl) {
       pillResultEl.className = 'finset-trend-pill ' + (ganancia >= 0 ? 'trend-up' : 'trend-down');
-      pillResultEl.innerHTML = `<span>${ganancia >= 0 ? '+' : ''}${rend.toFixed(2)}%</span>`;
+      pillResultEl.innerHTML = kpis.gananciaTotal===null?'Sin cotización':`<span>${ganancia >= 0 ? '+' : ''}${rend.toFixed(2)}%</span>`;
     }
     if (subResultEl) {
-      subResultEl.textContent = ganancia >= 0 ? 'Rendimiento positivo acumulado' : 'Rendimiento negativo acumulado';
+      subResultEl.textContent = kpis.gananciaTotal===null?'Valuación pendiente de cotizaciones verificables':(ganancia >= 0 ? 'Rendimiento positivo acumulado' : 'Rendimiento negativo acumulado');
     }
 
     // Side Panel: Rendimiento Global % & FX
@@ -852,72 +852,7 @@ export class InversionesModule extends BaseModule {
   }
 
   #calcularTenenciasActivas() {
-    const portfolio = this.#portfolioData?.portfolio || [];
-    const cotizDolar = this.#cotizDolar?.bolsa?.venta || this.#cotizDolar?.blue?.venta || 1540;
-
-    const tenencias = {};
-    portfolio.forEach(mov => {
-      const ticker = (mov.ticker || '').toUpperCase().trim();
-      if (!ticker) return;
-
-      if (!tenencias[ticker]) {
-        tenencias[ticker] = {
-          ticker,
-          tipoInstrumento: this.#clasificarInstrumento(ticker),
-          cantidad: 0,
-          costoTotalArs: 0,
-          cantCompra: 0,
-          moneda: mov.moneda || 'ARS',
-          precioActual: Number(mov.precio_actual || mov.precio || 0)
-        };
-      }
-
-      const cant = Number(mov.cantidad || 0);
-      const precio = Number(mov.precio || 0);
-      let impArs = cant * precio;
-      if (mov.moneda === 'USD') impArs *= cotizDolar;
-
-      if (mov.tipo_op === 'COMPRA') {
-        tenencias[ticker].cantidad += cant;
-        tenencias[ticker].costoTotalArs += impArs;
-        tenencias[ticker].cantCompra += cant;
-      } else if (mov.tipo_op === 'VENTA') {
-        tenencias[ticker].cantidad -= cant;
-      }
-
-      if (mov.precio_actual && Number(mov.precio_actual) > 0) {
-        tenencias[ticker].precioActual = Number(mov.precio_actual);
-      }
-    });
-
-    const activos = [];
-    Object.values(tenencias).forEach(t => {
-      if (t.cantidad <= 0.0001) return;
-
-      const precioPromArs = t.cantCompra > 0 ? t.costoTotalArs / t.cantCompra : 0;
-      const costoActualArs = precioPromArs * t.cantidad;
-
-      let valorActualArs = t.cantidad * t.precioActual;
-      if (t.moneda === 'USD') valorActualArs *= cotizDolar;
-
-      const gananciaArs = valorActualArs - costoActualArs;
-      const rendPct = costoActualArs > 0 ? (gananciaArs / costoActualArs) * 100 : 0;
-
-      activos.push({
-        ticker: t.ticker,
-        tipoInstrumento: t.tipoInstrumento,
-        cantidad: t.cantidad,
-        moneda: t.moneda,
-        precioProm: t.moneda === 'USD' ? (precioPromArs / cotizDolar) : precioPromArs,
-        precioActual: t.precioActual,
-        costoTotalArs: costoActualArs,
-        valorActualArs: valorActualArs,
-        gananciaArs: gananciaArs,
-        rendPct: rendPct
-      });
-    });
-
-    return activos.sort((a, b) => b.valorActualArs - a.valorActualArs);
+    return (this.#portfolioData?.tenencias || []).map(t=>({...t,tipoInstrumento:this.#clasificarInstrumento(t.ticker),precioProm:t.precioProm})).sort((a,b)=>(b.valorActualArs||0)-(a.valorActualArs||0));
   }
 
   #renderDonutChart() {
@@ -1087,7 +1022,7 @@ export class InversionesModule extends BaseModule {
               </div>
             </div>
             <div class="fsc-right-block" style="text-align:right;">
-              <div class="fsc-value" style="font-size:0.95rem; font-weight:700; color:var(--texto);">${App.Utils.formatearMoneda(a.valorActualArs)}</div>
+              <div class="fsc-value" style="font-size:0.95rem; font-weight:700; color:var(--texto);">${a.valorActualArs===null?'Sin cotización':App.Utils.formatearMoneda(a.valorActualArs)}</div>
               <div style="font-size:0.72rem; font-weight:700; color:${plColor};">
                 ${plSign}${App.Utils.formatearMoneda(a.gananciaArs)} (${plSign}${a.rendPct.toFixed(1)}%)
               </div>
@@ -1235,7 +1170,7 @@ export class InversionesModule extends BaseModule {
             </div>
           </div>
 
-          <div class="dh-drill-actions" style="display:flex; align-items:center; gap:4px; margin-left:8px;" onclick="event.stopPropagation();">
+          <div class="dh-drill-actions" style="display:flex; align-items:center; gap:4px; margin-left:8px;">
             <button class="btn-icon-sm inv-btn-delete" data-id="${r.id_operacion}" title="Eliminar" style="color:var(--rojo);">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
@@ -1280,9 +1215,9 @@ export class InversionesModule extends BaseModule {
 
   #buildFormHtml(tipo, data) {
     const isCompra = tipo === 'COMPRA';
-    const tasas = this.#cotizDolar || { blue: { venta: App.Store.dolarBolsa || 1400 } };
+    const tasas = this.#cotizDolar || {};
     const usdInfo = tasas
-      ? `<small style="color:var(--texto-3)">USD Blue: $${App.Utils.formatearMoneda(tasas.blue?.venta || 1400, false)}</small>`
+      ? `<small style="color:var(--texto-3)">USD Blue: $${App.Utils.formatearMoneda(tasas.blue?.venta ?? null, false)}</small>`
       : '';
 
     return `
@@ -1321,8 +1256,13 @@ export class InversionesModule extends BaseModule {
           <label>Moneda <span class="required-mark">*</span></label>
           <select class="input" name="moneda">
             <option value="ARS" ${data?.moneda === 'ARS' ? 'selected':''}>ARS</option>
-            <option value="USD" ${data?.moneda === 'USD' ? 'selected':'selected'}>USD</option>
+            <option value="USD" ${data?.moneda !== 'ARS' ? 'selected':''}>USD</option>
           </select>
+        </div>
+
+        <div class="form-group">
+          <label>Tipo de cambio de la operación (ARS por USD)</label>
+          <input class="input" type="number" name="tipoCambio" min="0.01" step="0.01" placeholder="Solo para operaciones en USD">
         </div>
 
         <div class="form-group">
@@ -1424,6 +1364,7 @@ export class InversionesModule extends BaseModule {
       fecha    : d.fecha,
       ticker   : d.ticker.toUpperCase().trim(),
       moneda   : d.moneda,
+      ...(d.moneda==='USD' && d.tipoCambio ? {tipoCambio:Number(d.tipoCambio)} : {}),
       cantidad : Number(d.cantidad),
       precio   : Number(d.precio)
     };

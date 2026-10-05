@@ -1,3 +1,6 @@
+import { addMonthsSafe, allocateMoney } from '../shared/finance.js';
+import createConsumoTC from './createConsumoTC.js';
+import { inputError } from '../api_lib/validation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
@@ -11,12 +14,7 @@ const FREQ_MAP = {
   ANUAL: 12
 };
 
-function addMonthsSafe(date, months) {
-  const d = new Date(date);
-  const targetMonth = d.getMonth() + months;
-  d.setMonth(targetMonth);
-  return d;
-}
+
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -44,6 +42,11 @@ export default async function handler(req, res) {
       return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada no pertenece al usuario autenticado.' });
     }
     mov.idCuenta = resolvedCuenta;
+
+    if (mov.tipoConsumo === 'CUOTAS' && mov.idTarjetaCuotas) {
+      if (mov.esSplit || mov.tipo !== 'EGRESO') throw inputError('Las cuotas con tarjeta requieren un egreso sin distribución.');
+      return createConsumoTC({ ...req, body: { ...mov, idTarjeta: mov.idTarjetaCuotas, imputar: true, idCuentaImputar: mov.idCuenta } }, res);
+    }
 
     const rows = [];
     const fechaBase = new Date(mov.fecha + 'T12:00:00Z');
@@ -83,7 +86,7 @@ export default async function handler(req, res) {
 
     if (periodos < 1) periodos = 1;
     const isSeries = periodos > 1;
-    const seriesGroupId = isSeries ? groupIdPrefix + crypto.randomUUID() : null;
+    const seriesGroupId = isSeries ? (req.seriesGroupId || groupIdPrefix + crypto.randomUUID()) : null;
 
     // Store frequency metadata in the first row for later editing
     const metaFrequency = mov.tipoConsumo === 'RECURRENTE' ? (mov.frecuencia || 'MENSUAL') : null;
@@ -106,9 +109,10 @@ export default async function handler(req, res) {
 
       if (mov.esSplit && destinos.length > 0) {
         const splitGroupId = 'SPLIT_' + crypto.randomUUID();
+        const shares = allocateMoney(mov.importe, [...destinos.map(d => d.pct * 100), ...(pctRetenido > 0 ? [pctRetenido] : [])]);
         // Destinos
-        destinos.forEach(d => {
-          const importeDestino = mov.importe * d.pct;
+        destinos.forEach((d, index) => {
+          const importeDestino = shares[index];
           rows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: d.cuenta,
@@ -119,6 +123,7 @@ export default async function handler(req, res) {
             descripcion: desc,
             importe: importeDestino,
             medio_pago: mov.medioPago,
+            moneda: mov.moneda || 'ARS',
             recur_group_id: seriesGroupId,
             split_group_id: splitGroupId,
             split_rol: 'DESTINO'
@@ -127,7 +132,7 @@ export default async function handler(req, res) {
         
         // Origen Remanente (solo si queda porcentaje en la cuenta origen)
         if (pctRetenido > 0) {
-          const importeOrigen = mov.importe * (pctRetenido / 100);
+          const importeOrigen = shares.at(-1);
           rows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: mov.idCuenta,
@@ -138,6 +143,7 @@ export default async function handler(req, res) {
             descripcion: desc,
             importe: importeOrigen,
             medio_pago: mov.medioPago,
+            moneda: mov.moneda || 'ARS',
             recur_group_id: seriesGroupId,
             split_group_id: splitGroupId,
             split_rol: 'ORIGEN'
@@ -155,13 +161,9 @@ export default async function handler(req, res) {
           descripcion: desc,
           importe: mov.importe,
           medio_pago: mov.medioPago,
+            moneda: mov.moneda || 'ARS',
           recur_group_id: seriesGroupId
         };
-
-        // Link to credit card if cuotas-with-TC
-        if (esCuotas && mov.idTarjetaCuotas) {
-          row.id_consumo_tarjeta_origen = mov.idTarjetaCuotas;
-        }
 
         rows.push(row);
       }
@@ -175,6 +177,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: { count: rows.length } });
   } catch (err) {
     console.error('[API -> createMovimiento]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

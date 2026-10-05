@@ -1,3 +1,4 @@
+import { bookingRate } from '../api_lib/exchange.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 
 export default async function handler(req, res) {
@@ -38,15 +39,7 @@ export default async function handler(req, res) {
     let desc_principal = `${tipo_transfer} de Ahorro (${moneda}) - ${descripcion || ''}`;
     
     if (moneda === 'USD') {
-      let venta = 1400;
-      try {
-        const { data: cotizData } = await supabase.from('cotizaciones_dolar').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-        if (cotizData) {
-          venta = Number(cotizData.valor || cotizData.venta || 1400) || 1400;
-        }
-      } catch (_) {
-        venta = 1400;
-      }
+      const venta = await bookingRate(supabase, data);
       importePrincipal = importe * venta;
       desc_principal = `${tipo_transfer} de Ahorro (USD ${importe.toFixed(2)} @ ${venta}) - ${descripcion || ''}`;
     }
@@ -86,6 +79,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: { id_ahorro: id_ahorro } });
   } catch (err) {
     console.error('[API -> updateAhorro]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

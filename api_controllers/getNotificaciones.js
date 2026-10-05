@@ -351,7 +351,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: notificaciones });
   } catch (err) {
     console.error('[API -> getNotificaciones Error]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }
 

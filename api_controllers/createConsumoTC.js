@@ -1,3 +1,4 @@
+import { addMonthsSafe, money } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
@@ -28,15 +29,7 @@ function toIsoDateStr(val) {
   return parseDateSafe(val).toISOString().split('T')[0];
 }
 
-function addMonthsSafe(date, months) {
-  const d = parseDateSafe(date);
-  const day = d.getUTCDate();
-  d.setUTCMonth(d.getUTCMonth() + months);
-  if (d.getUTCDate() !== day) {
-    d.setUTCDate(0);
-  }
-  return d;
-}
+
 
 function isTaxConcept(desc) {
   if (!desc) return false;
@@ -106,42 +99,6 @@ export default async function handler(req, res) {
       const resolved = await resolveUserCuenta(supabase, consumo.idCuentaImputar, userId);
       if (!resolved) return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta seleccionada para imputar no pertenece al usuario autenticado.' });
       consumo.idCuentaImputar = resolved;
-    }
-
-    // Auto-remediation: Migrate any consumos created in the last 72h that mistakenly have dates < 2026-09-01 (e.g. from 2024 or purchase dates in June/July/August) to 2026-09-17
-    try {
-      const recentThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString();
-      const { data: misdatedConsumos } = await supabase
-        .from('consumos_tc')
-        .select('id_consumo_tarjeta, fecha')
-        .eq('user_id', userId)
-        .lt('fecha', '2026-09-01')
-        .gte('created_at', recentThreshold);
-
-      if (misdatedConsumos && misdatedConsumos.length > 0) {
-        for (const row of misdatedConsumos) {
-          const correctedFecha = '2026-09-17';
-          await supabase.from('consumos_tc').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta', row.id_consumo_tarjeta).eq('user_id', userId);
-          await supabase.from('movimientos').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta_origen', row.id_consumo_tarjeta).eq('user_id', userId);
-        }
-      }
-
-      const { data: badTc } = await supabase
-        .from('tarjetas')
-        .select('id_tarjeta, fecha_vencimiento_actual, fecha_cierre_actual')
-        .eq('user_id', userId)
-        .lt('fecha_vencimiento_actual', '2026-09-01');
-
-      if (badTc && badTc.length > 0) {
-        for (const tc of badTc) {
-          await supabase.from('tarjetas').update({
-            fecha_vencimiento_actual: '2026-09-17',
-            fecha_cierre_actual: '2026-09-12'
-          }).eq('id_tarjeta', tc.id_tarjeta).eq('user_id', userId);
-        }
-      }
-    } catch (e) {
-      console.warn('[createConsumoTC Remediation]', e.message);
     }
 
     // Garantizar que id_categoria nunca sea NULL (cumplir restricción NOT NULL de consumos_tc)
@@ -345,23 +302,7 @@ export default async function handler(req, res) {
                 recur_group_id: recurGroupId
               });
 
-              if (cardAccountId && rowAccountId !== cardAccountId) {
-                const targetAccName = cuentaNombreMap[rowAccountId] || 'Externa';
-                movRows.push({
-                  id_movimiento: crypto.randomUUID(),
-                  id_cuenta_principal: cardAccountId,
-                  user_id: userId,
-                  fecha: fechaFutura,
-                  id_categoria: 'CAT_REINTEGRO_TC',
-                  tipo_mov: 'INGRESO',
-                  descripcion: `Reintegro TC: ${item.descripcion} (${cuotaFutura}/${cuotaTot}) (${targetAccName})`,
-                  importe: Number(item.importe || 0),
-                  moneda: monedaItem,
-                  medio_pago: 'Tarjeta de Crédito',
-                  id_consumo_tarjeta_origen: idFuturo,
-                  recur_group_id: recurGroupId
-                });
-              }
+              // Reimbursements are booked once, when paying the statement.
             }
           }
         }
@@ -674,6 +615,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: { tcCount: tcRows.length, movCount: movRows.length } });
   } catch (err) {
     console.error('[API -> createConsumoTC]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

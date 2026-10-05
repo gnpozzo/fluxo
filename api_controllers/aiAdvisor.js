@@ -1,3 +1,4 @@
+import { monthBounds } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { getDynamicGeminiFlashModels, DEFAULT_FLASH_MODELS } from '../api_lib/gemini.js';
 import XLSX from 'xlsx';
@@ -21,11 +22,12 @@ export default async function handler(req, res) {
       fileName = null
     } = req.body || {};
 
+    if ((message && (typeof message!=='string' || message.length>12000)) || !Array.isArray(chatHistory) || chatHistory.length>100 || JSON.stringify(chatHistory).length>200000 || (fileBase64 && (typeof fileBase64!=='string' || Buffer.byteLength(fileBase64,'base64')>3*1024*1024))) return res.status(400).json({success:false,error:'Mensaje, historial o archivo demasiado grande.'});
     if (!message && !fileBase64) {
       return res.status(400).json({ success: false, error: 'Mensaje o archivo requerido' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return res.status(500).json({ success: false, error: 'GEMINI_API_KEY no configurada en el servidor.' });
     }
@@ -67,6 +69,8 @@ export default async function handler(req, res) {
           const matchedAcc = accounts.find(a => a.id_cuenta_principal === cuentaId);
           if (matchedAcc) {
             financialContext.cuentaNombre = matchedAcc.nombre;
+          } else if (cuentaId) {
+            return res.status(403).json({success:false,error:'La cuenta no pertenece al usuario.'});
           } else if (accounts.length > 0) {
             financialContext.cuentaNombre = accounts[0].nombre;
             financialContext.cuentaId = accounts[0].id_cuenta_principal;
@@ -78,6 +82,7 @@ export default async function handler(req, res) {
           supabase
             .from('categorias')
             .select('id_categoria, nombre, tipo_mov')
+            .or(`user_id.is.null,user_id.eq.${userId}`)
             .eq('activa', true),
           supabase
             .from('perfiles_usuario')
@@ -95,16 +100,15 @@ export default async function handler(req, res) {
         }
 
         if (financialContext.cuentaId && mes) {
-          const start = mes + '-01';
-          const [y, m] = mes.split('-').map(Number);
-          const lastDay = new Date(y, m, 0).getDate();
-          const end = `${mes}-${String(lastDay).padStart(2, '0')}`;
+          const [start,end] = monthBounds(mes);
+          financialContext.monedaDeCalculo='ARS';
 
           // Movimientos del mes con categorías
           const { data: movs } = await supabase
             .from('movimientos')
             .select('*, categorias (nombre)')
             .eq('id_cuenta_principal', financialContext.cuentaId)
+            .eq('moneda','ARS')
             .eq('user_id', userId)
             .gte('fecha', start)
             .lte('fecha', end);
@@ -179,13 +183,15 @@ export default async function handler(req, res) {
           // Deuda de tarjetas
           const { data: tcConsumos } = await supabase
             .from('consumos_tc')
-            .select('importe, cuota_actual, cuota_total, descripcion, id_tarjeta')
+            .select('id_consumo_tarjeta, importe, cuota_actual, cuota_total, descripcion, id_tarjeta, tarjetas!inner(id_cuenta_principal)')
+            .eq('tarjetas.id_cuenta_principal',financialContext.cuentaId)
+            .eq('moneda','ARS')
             .eq('user_id', userId)
             .gte('fecha', start)
             .lte('fecha', end);
 
           if (tcConsumos) {
-            financialContext.deudaTarjetasTotal = tcConsumos.reduce((acc, c) => acc + Number(c.importe || 0), 0);
+            financialContext.deudaTarjetasTotal = tcConsumos.filter(c=>!pagosMap[c.id_consumo_tarjeta]?.pagado).reduce((acc, c) => acc + Number(c.importe || 0), 0);
             financialContext.consumoTCPctSobreIngresos = financialContext.ingresosMes > 0 
               ? Math.round((financialContext.deudaTarjetasTotal / financialContext.ingresosMes) * 100 * 10) / 10 
               : 0;
@@ -194,13 +200,14 @@ export default async function handler(req, res) {
           // Ahorros
           const { data: ahorros } = await supabase
             .from('ahorros')
-            .select('moneda, importe')
+            .select('moneda, importe, tipo_transfer, movimientos!inner(id_cuenta_principal)')
+            .eq('movimientos.id_cuenta_principal',financialContext.cuentaId)
             .eq('user_id', userId);
 
           if (ahorros) {
             ahorros.forEach(a => {
-              if (a.moneda === 'USD') financialContext.ahorroTotalUSD += Number(a.importe || 0);
-              else financialContext.ahorroTotalARS += Number(a.importe || 0);
+              if (a.moneda === 'USD') financialContext.ahorroTotalUSD += Number(a.importe || 0)*(a.tipo_transfer==='DEPOSITO'?1:-1);
+              else financialContext.ahorroTotalARS += Number(a.importe || 0)*(a.tipo_transfer==='DEPOSITO'?1:-1);
             });
           }
 
@@ -208,6 +215,7 @@ export default async function handler(req, res) {
           const { data: invs } = await supabase
             .from('inversiones_movimientos')
             .select('ticker, tipo_operacion, cantidad_nominales, precio_compra, moneda')
+            .eq('id_cuenta_principal',financialContext.cuentaId)
             .eq('user_id', userId);
 
           if (invs) {
@@ -217,20 +225,11 @@ export default async function handler(req, res) {
       }
     } catch (dbErr) {
       console.warn('[FluxoAI -> Context gathering notice]:', dbErr.message);
+      return res.status(503).json({success:false,error:'No se pudo consultar tu información financiera.'});
     }
 
     // 2. Obtener datos de mercado en vivo
-    let marketContext = {
-      dolarMEP: 1545,
-      dolarCCL: 1605,
-      dolarBlue: 1555,
-      dolarOficial: 1535,
-      riesgoPais: 509,
-      inflacionEstimadaMensual: '2.8% - 3.5%',
-      tasaLECAPsMensualTNA: '34% - 38% (TEM ~2.8% - 3.1%)',
-      rendimientoONsUSD: '7.5% - 9.2% anual en USD',
-      cedearsDestacados: ['SPY (ETF S&P 500)', 'QQQ (Nasdaq 100)', 'AAPL', 'NVDA', 'MELI', 'MSFT']
-    };
+    let marketContext = {dolarMEP:null,dolarCCL:null,dolarBlue:null,dolarOficial:null,riesgoPais:null,datosNoDisponibles:'No inferir tasas, inflación ni rendimientos sin una fuente fechada.'};
 
     try {
       const respDolar = await fetch('https://dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(3000) }).then(r => r.json()).catch(() => null);
@@ -288,7 +287,7 @@ export default async function handler(req, res) {
     const cuentasTxt = financialContext.cuentasDisponibles.map(a => `${a.nombre} (ID: ${a.id_cuenta_principal})`).join(', ') || 'Principal';
     const categoriasTxt = financialContext.categoriasDisponibles.map(c => `${c.nombre} (${c.tipo_mov}, ID: ${c.id_categoria})`).join(', ') || 'General';
 
-    const systemPrompt = `Eres "FluxoAI", un asesor financiero matriculado, planificador patrimonial y estratega de inversiones con CRITERIO PROPIO, PENSAMIENTO CRÍTICO y DISCIPLINA FINANCIERA RIGUROSA en Argentina y mercados globales.
+    const systemPrompt = `Eres "FluxoAI", un asistente de organización financiera y análisis de datos con CRITERIO PROPIO, PENSAMIENTO CRÍTICO y DISCIPLINA FINANCIERA RIGUROSA en Argentina y mercados globales.
 
 TUS PRINCIPIOS Y PERSONALIDAD:
 1. PENSAMIENTO CRÍTICO Y CUESTIONAMIENTO:
@@ -460,6 +459,6 @@ FORMATO: Escribe con elegancia, precisión profesional en español y negritas de
 
   } catch (err) {
     console.error('[FluxoAI -> ERROR]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

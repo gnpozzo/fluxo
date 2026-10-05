@@ -1,10 +1,11 @@
 // [Origen -> src/core -> AppAPI.js]
 // v7.0.0 (Migración a REST Compatible con interfaces GAS Legacy)
 
-import { EventBus } from './EventBus.js';
 
-class ApiService {
+
+export class ApiService {
   constructor() {
+    this.generation = 0;
     this.defaultTtl = 5 * 60 * 1000;
     this._cache = new Map();
     this._inFlight = new Map();
@@ -24,7 +25,8 @@ class ApiService {
   }
 
   async swr(fnName, args = [], ttlMs = this.defaultTtl, onRevalidate = null) {
-    const key = fnName + JSON.stringify(args);
+    const key = (window.App?.Auth?.user?.id || 'anonymous') + ':' + fnName + JSON.stringify(args);
+    const generation = this.generation;
     const now = Date.now();
     const cached = this._cache.get(key);
     const argsArray = Array.isArray(args) ? args : [args];
@@ -47,7 +49,7 @@ class ApiService {
     }
 
     const data = await this.call(fnName, ...argsArray);
-    this._cache.set(key, { timestamp: Date.now(), data: data });
+    if (generation === this.generation) this._cache.set(key, { timestamp: Date.now(), data });
     return { data: data };
   }
 
@@ -70,7 +72,7 @@ class ApiService {
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch(e) {}
     }
-    return this.#internalFetch(endpoint, method, body || {});
+    return this.#internalFetch(endpoint, method, body || {}, options.idempotencyKey);
   }
 
   invalidatePattern(pattern) {
@@ -80,115 +82,49 @@ class ApiService {
   }
 
   invalidateAll() {
+    this.generation++;
     this._cache.clear();
     this._inFlight.clear();
   }
 
   // --- CORE DE RED ---
 
-  async #internalFetch(endpoint, method = 'POST', bodyFields = {}, attempt = 1) {
-    const isRead = method === 'GET' || endpoint.includes('/get') || endpoint.includes('/admin_get');
-    const inflightKey = isRead ? `${method}:${endpoint}:${JSON.stringify(bodyFields)}` : null;
-
-    if (inflightKey && this._inFlight.has(inflightKey)) {
-      if (window.App) window.App.log('AppAPI', 'fetch:deduped_inflight', { endpoint });
-      return this._inFlight.get(inflightKey);
-    }
-
-    const fetchPromise = (async () => {
-      if (window.App) window.App.log('AppAPI', 'fetch:start', { endpoint, method, bodyFields, attempt });
-      const t0 = performance.now();
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-      if (window.App && window.App.Auth) {
-        const token = window.App.Auth.getValidToken ? await window.App.Auth.getValidToken() : window.App.Auth.getToken();
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-      }
-
-      let finalBody = bodyFields;
-      if (bodyFields.args) {
-        finalBody = bodyFields.args;
-      }
-
-      let response;
-      let resObj = null;
-      let errorToThrow = null;
-
-      try {
-        response = await fetch(endpoint, {
-          method: method,
-          headers: headers,
-          body: JSON.stringify(finalBody)
-        });
-
+  async #internalFetch(endpoint, method = 'POST', bodyFields = {}, idempotencyKey = null) {
+    const isRead = method === 'GET' || /\/(get|admin_get|search)/.test(endpoint);
+    const user = window.App?.Auth?.user?.id || 'anonymous';
+    const generation = this.generation;
+    const key = isRead ? user + ':' + method + ':' + endpoint + ':' + JSON.stringify(bodyFields) : null;
+    if (key && this._inFlight.has(key)) return this._inFlight.get(key);
+    const requestKey = isRead ? null : (idempotencyKey || crypto.randomUUID());
+    const promise = (async () => {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        if(generation !== this.generation) throw new Error('La sesión cambió. Volvé a intentar.');
+        const auth = window.App?.Auth;
+        const token = auth?.getValidToken ? await auth.getValidToken() : auth?.getToken?.();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = 'Bearer ' + token;
+        if (requestKey) headers['Idempotency-Key'] = requestKey;
+        let response, result;
         try {
-          resObj = await response.json();
-        } catch (e) {
-          // Response is not JSON
+          response = await fetch(endpoint, { method, headers, signal: AbortSignal.timeout(45000),
+            ...(['GET','HEAD'].includes(method) ? {} : { body: JSON.stringify(bodyFields.args || bodyFields) }) });
+          result = await response.json();
+        } catch (error) {
+          if(isRead && attempt < 3) { await new Promise(r => setTimeout(r,attempt*500)); continue; }
+          throw new Error(requestKey ? 'No se pudo confirmar la operación. Actualizá los datos antes de volver a guardar.' : 'No se pudo conectar con el servidor.');
         }
-
-        if (!response.ok) {
-          errorToThrow = new Error(resObj?.error || `HTTP Error: ${response.status} en ${endpoint}`);
-        } else if (resObj && resObj.success === false) {
-          errorToThrow = new Error(resObj.error || 'Error genérico en el servidor');
-        }
-      } catch (networkErr) {
-        errorToThrow = networkErr;
+        if(response.status === 401 && attempt === 1 && auth?.refreshSession && await auth.refreshSession()) continue;
+        if(isRead && [502,503,504].includes(response.status) && attempt < 3) { await new Promise(r => setTimeout(r,attempt*500)); continue; }
+        if(response.status === 401) window.App?.Events?.emit('auth:unauthorized');
+        if(!response.ok || result?.success === false) throw new Error(result?.error || 'No se pudo completar la solicitud.');
+        if(generation !== this.generation) throw new Error('La sesión cambió.');
+        return result;
       }
-
-      if (errorToThrow) {
-        const errMsg = errorToThrow.message || '';
-        if (errMsg.includes('JWT issued at future') && attempt < 3) {
-          if (window.App) window.App.warn('AppAPI', 'fetch:clock_skew_retry', { endpoint, attempt, errMsg });
-          await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
-          return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
-        }
-
-        const isServerTimeoutOrTemp = (response && [502, 503, 504].includes(response.status)) || errMsg.includes('Gateway Timeout');
-        if (isServerTimeoutOrTemp && attempt < 3) {
-          if (window.App) window.App.warn('AppAPI', 'fetch:server_retry', { endpoint, attempt, status: response?.status || 504 });
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-          return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
-        }
-
-        // Retry on 401: attempt to refresh the session token seamlessly before throwing
-        if (response && response.status === 401 && attempt < 2 && window.App && window.App.Auth && window.App.Auth.refreshSession) {
-          try {
-            const refreshed = await window.App.Auth.refreshSession();
-            if (refreshed) {
-              if (window.App) window.App.log('AppAPI', 'fetch:token_refreshed_retry', { endpoint, attempt });
-              return this.#internalFetch(endpoint, method, bodyFields, attempt + 1);
-            }
-          } catch (refErr) {
-            console.warn('[AppAPI] Token refresh attempt failed:', refErr);
-          }
-        }
-
-        if (response && response.status === 401 && window.App && window.App.Events) {
-          window.App.Events.emit('auth:unauthorized');
-        }
-
-        if (window.App) window.App.error('AppAPI', 'fetch:error', { endpoint, error: errorToThrow.message, time: `${(performance.now() - t0).toFixed(1)}ms` });
-        throw errorToThrow;
-      }
-
-      if (window.App) window.App.log('AppAPI', 'fetch:success', { endpoint, time: `${(performance.now() - t0).toFixed(1)}ms` });
-      return resObj;
+      throw new Error('No se pudo completar la solicitud.');
     })();
-
-    if (inflightKey) {
-      this._inFlight.set(inflightKey, fetchPromise);
-      fetchPromise.finally(() => {
-        this._inFlight.delete(inflightKey);
-      });
-    }
-
-    return fetchPromise;
+    if(key) this._inFlight.set(key,promise);
+    try { return await promise; } finally { if(key && this._inFlight.get(key) === promise) this._inFlight.delete(key); }
   }
-
 }
 
 export const API = new ApiService();

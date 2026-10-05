@@ -1,3 +1,4 @@
+import { saveOwned } from '../api_lib/validation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import crypto from 'crypto';
 
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
       }
     }
     
-    let { data, error } = await supabase.from('cta_corriente_usuarios').upsert(payload).select().single();
+    let { data, error } = await saveOwned(supabase, 'cta_corriente_usuarios', 'id_usuario', payload, userId, ["id_usuario","nombre","es_yo","id_cuenta_principal"]);
     if (error) {
       if (error.message && (error.message.includes('es_yo') || error.message.includes('id_cuenta_principal') || error.message.includes('does not exist'))) {
         const cleanPayload = { ...payload };
@@ -46,6 +47,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data, isNew });
   } catch (err) {
     console.error('[API -> admin_saveCtaCorrienteUsuario]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

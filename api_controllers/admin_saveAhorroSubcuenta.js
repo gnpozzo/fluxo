@@ -1,3 +1,4 @@
+import { saveOwned } from '../api_lib/validation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
@@ -25,12 +26,12 @@ export default async function handler(req, res) {
     }
     payload.user_id = userId;
 
-    const { data, error } = await supabase.from('ahorro_subcuentas').upsert(payload).select().single();
+    const { data, error } = await saveOwned(supabase, 'ahorro_subcuentas', 'id_subcuenta', payload, userId, ["id_subcuenta","nombre","moneda","id_cuenta_principal","meta","icono","activa"]);
     if (error) throw error;
     
     return res.status(200).json({ success: true, data, isNew });
   } catch (err) {
     console.error('[API -> admin_saveAhorroSubcuenta]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

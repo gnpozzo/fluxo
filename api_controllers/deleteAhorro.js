@@ -19,20 +19,12 @@ export default async function handler(req, res) {
     const idAhorro = request.id_ahorro || request.id || (rawArgs ? rawArgs[0] : null);
     if (!idAhorro) throw new Error('id_ahorro requerido');
     
-    // Delete from movimientos first (FK) scoped to user_id
-    const movResult = await supabase.from('movimientos').delete().eq('id_transfer_ahorro', idAhorro).eq('user_id', userId);
-    if (movResult.error) throw movResult.error;
-    
-    // Delete from ahorros scoped to user_id
-    const ahResult = await supabase.from('ahorros').delete().eq('id_ahorro', idAhorro).eq('user_id', userId).select();
-    if (ahResult.error) throw ahResult.error;
-    if (!ahResult.data || ahResult.data.length === 0) {
-      return res.status(404).json({ success: false, error: 'No se encontró el registro de ahorro para eliminar.' });
-    }
-    
+    const {data:deleted}=await supabase.from('ahorros').delete().eq('id_ahorro',idAhorro).eq('user_id',userId).select();
+    if(!deleted.length) return res.status(404).json({success:false,error:'No se encontró el ahorro.'});
+    await supabase.from('movimientos').delete().eq('id_transfer_ahorro',idAhorro).eq('user_id',userId);
     return res.status(200).json({ success: true, data: { id_ahorro: idAhorro } });
   } catch (err) {
     console.error('[API -> deleteAhorro]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

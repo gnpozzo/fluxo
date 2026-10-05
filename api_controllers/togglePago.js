@@ -1,341 +1,74 @@
 import { getSupabaseClient } from '../api_lib/supabase.js';
-import crypto from 'crypto';
+import { civilDate, monthBounds, todayArgentina, money } from '../shared/finance.js';
+import { inputError } from '../api_lib/validation.js';
+import crypto from 'node:crypto';
 
+// Runs inside atomicRequest: payment state and ledger entries commit together.
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-
-  try {
-    const supabase = getSupabaseClient(req);
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ success: false, error: 'No autenticado' });
-
-    let body = req.body;
-    if (body && Array.isArray(body.args)) {
-      body = body.args[0] || {};
+  const db = getSupabaseClient(req), userId = req.user.id;
+  const body = req.body?.args?.[0] || (Array.isArray(req.body) ? req.body[0] : req.body) || {};
+  const { action = 'toggle', pagado } = body;
+  const date = civilDate(body.fechaPago || todayArgentina());
+  const { data: logs } = await db.from('logs').select('id,contexto').eq('funcion','ESTADO_PAGOS').eq('mensaje',userId).order('id',{ascending:false}).limit(1);
+  const logId = logs[0]?.id, state = { ...(logs[0]?.contexto || {}) };
+  if(action === 'get_state') return res.status(200).json({success:true,data:state});
+  let count = 0, last = false;
+  const mark = (id,value,type) => { state[id]={pagado:value,fecha_pago:value?date:null,...(type?{tipo:type}:{})}; count++; last=value; };
+  if(action === 'toggle') {
+    const raw = body.idMovimiento || body.id || body.idConsumo;
+    const ids = [...new Set(Array.isArray(raw)?raw:[raw])];
+    if(!ids.length || ids.length>1000 || ids.some(id=>typeof id!=='string')) throw inputError('IDs inválidos.');
+    const {data:movs}=await db.from('movimientos').select('id_movimiento,id_consumo_tarjeta_origen').in('id_movimiento',ids).eq('user_id',userId);
+    const {data:tcs}=await db.from('consumos_tc').select('id_consumo_tarjeta').in('id_consumo_tarjeta',ids).eq('user_id',userId);
+    const owned=new Set([...movs.map(m=>m.id_movimiento),...tcs.map(c=>c.id_consumo_tarjeta)]);
+    if(ids.some(id=>!owned.has(id))) throw inputError('La operación no pertenece al usuario.',403);
+    for(const id of ids) mark(id,pagado===undefined?!state[id]?.pagado:!!pagado);
+    const {data:linked}=await db.from('movimientos').select('id_movimiento,id_consumo_tarjeta_origen').in('id_consumo_tarjeta_origen',ids).eq('user_id',userId);
+    for(const m of linked) mark(m.id_movimiento,state[m.id_consumo_tarjeta_origen].pagado,'MOV_FROM_TC');
+    for(const m of movs) if(m.id_consumo_tarjeta_origen) mark(m.id_consumo_tarjeta_origen,state[m.id_movimiento].pagado,'TC_FROM_MOV');
+  } else if(action === 'pagar_resumen') {
+    const month=body.mes;
+    const [start,end]=monthBounds(month);
+    let q=db.from('consumos_tc').select('*').eq('user_id',userId).gte('fecha',start).lte('fecha',end);
+    if(body.idTarjeta) q=q.eq('id_tarjeta',body.idTarjeta);
+    if(body.ids && (!Array.isArray(body.ids) || body.ids.length>1000 || body.ids.some(id=>typeof id!=='string'))) throw inputError('IDs inválidos.');
+    const {data:periodConsumos}=await q;
+    const consumos=periodConsumos.filter(c=>!body.ids?.length || body.ids.includes(c.id_consumo_tarjeta) || state[c.id_consumo_tarjeta]?.pagado);
+    if(!consumos.length) throw inputError('No hay consumos para pagar en ese período.');
+    if(body.ids?.some(id=>!consumos.some(c=>c.id_consumo_tarjeta===id))) throw inputError('Consumos fuera del período o del usuario.',403);
+    const {data:cards}=await db.from('tarjetas').select('*').in('id_tarjeta',[...new Set(consumos.map(c=>c.id_tarjeta))]).eq('user_id',userId);
+    const {data:linked}=await db.from('movimientos').select('*').in('id_consumo_tarjeta_origen',consumos.map(c=>c.id_consumo_tarjeta)).eq('user_id',userId);
+    const ledger = async (card,currency,type,category,description,total) => {
+      const {data:found}=await db.from('movimientos').select('id_movimiento').eq('user_id',userId).eq('id_cuenta_principal',card.id_cuenta_principal).eq('descripcion',description).eq('moneda',currency).limit(1);
+      if(total<=0) {
+        if(found.length) { await db.from('movimientos').delete().eq('id_movimiento',found[0].id_movimiento).eq('user_id',userId); delete state[found[0].id_movimiento]; }
+        return;
+      }
+      const id=found[0]?.id_movimiento || crypto.randomUUID();
+      const row={id_movimiento:id,user_id:userId,id_cuenta_principal:card.id_cuenta_principal,fecha:date,id_categoria:category,tipo_mov:type,descripcion:description,importe:money(total),moneda:currency,medio_pago:'Transferencia'};
+      if(found.length) await db.from('movimientos').update(row).eq('id_movimiento',id).eq('user_id',userId);
+      else await db.from('movimientos').insert(row);
+      mark(id,true,type==='EGRESO'?'PAGO_TC':'REINTEGRO_TC');
+    };
+    for(const card of cards) {
+      const own=consumos.filter(c=>c.id_tarjeta===card.id_tarjeta);
+      const current=card.fecha_vencimiento_actual?.slice(0,7)===month;
+      for(const currency of ['ARS','USD']) {
+        const subtotal=own.filter(c=>(c.moneda||'ARS')===currency).reduce((n,c)=>n+Number(c.importe),0);
+        const complete=periodConsumos.filter(c=>c.id_tarjeta===card.id_tarjeta).every(c=>own.some(p=>p.id_consumo_tarjeta===c.id_consumo_tarjeta));
+        const official=current && complete ? Number(card[currency==='USD'?'total_resumen_usd':'total_resumen_ars']) : 0;
+        await ledger(card,currency,'EGRESO','CAT_PAGO_TC',`Pago Resumen: ${card.nombre} (${month}) [${currency}]`,official>0?official:subtotal);
+        const reimburse=linked.filter(m=>m.tipo_mov==='EGRESO' && m.id_cuenta_principal!==card.id_cuenta_principal && (m.moneda||'ARS')===currency && own.some(c=>c.id_consumo_tarjeta===m.id_consumo_tarjeta_origen)).reduce((n,m)=>n+Number(m.importe),0);
+        const alreadyBooked=linked.filter(m=>m.tipo_mov==='INGRESO' && m.id_cuenta_principal===card.id_cuenta_principal && (m.moneda||'ARS')===currency && own.some(c=>c.id_consumo_tarjeta===m.id_consumo_tarjeta_origen)).reduce((n,m)=>n+Number(m.importe),0);
+        await ledger(card,currency,'INGRESO','CAT_REINTEGRO_TC',`Reintegro TC: ${card.nombre} (${month}) [${currency}]`,Math.max(0,reimburse-alreadyBooked));
+      }
+      if(!body.ids?.length) mark(`RESUMEN_${card.id_tarjeta}_${month}`,true);
     }
-
-    const { action = 'toggle', idMovimiento, idTarjeta, mes, pagado, fechaPago, ids: rawIds } = body || {};
-
-    // 1. Obtener registro de estado de pagos del usuario
-    const { data: logRows } = await supabase
-      .from('logs')
-      .select('id, contexto')
-      .eq('funcion', 'ESTADO_PAGOS')
-      .eq('mensaje', userId)
-      .limit(1);
-
-    let logId = logRows?.[0]?.id || null;
-    let pagosMap = logRows?.[0]?.contexto || {};
-
-    if (action === 'get_state') {
-      return res.status(200).json({ success: true, data: pagosMap });
-    }
-
-    const todayStr = fechaPago || new Date().toISOString().split('T')[0];
-    let lastStatus = false;
-    let updatedCount = 0;
-
-    if (action === 'toggle') {
-      const rawId = idMovimiento || body.id || body.idConsumo;
-      if (!rawId) {
-        return res.status(400).json({ success: false, error: 'id requerido' });
-      }
-      const ids = Array.isArray(rawId) ? rawId : [rawId];
-      ids.forEach(id => {
-        const currentlyPaid = !!pagosMap[id]?.pagado;
-        const newStatus = (pagado !== undefined) ? !!pagado : !currentlyPaid;
-        pagosMap[id] = {
-          pagado: newStatus,
-          fecha_pago: newStatus ? todayStr : null
-        };
-        lastStatus = newStatus;
-        updatedCount++;
-      });
-
-      // Sincronizar bidireccionalmente entre consumos_tc y movimientos vinculados
-      const idsToCheck = ids.filter(Boolean);
-      if (idsToCheck.length > 0) {
-        // Si son consumos_tc, buscar movimientos vinculados
-        const { data: linkedMovs } = await supabase
-          .from('movimientos')
-          .select('id_movimiento, id_consumo_tarjeta_origen')
-          .in('id_consumo_tarjeta_origen', idsToCheck)
-          .eq('user_id', userId);
-        (linkedMovs || []).forEach(m => {
-          pagosMap[m.id_movimiento] = {
-            pagado: lastStatus,
-            fecha_pago: lastStatus ? todayStr : null,
-            tipo: 'MOV_FROM_TC'
-          };
-        });
-
-        // Si son movimientos vinculados a consumos_tc, sincronizar el consumo origen
-        const { data: movsWithTc } = await supabase
-          .from('movimientos')
-          .select('id_movimiento, id_consumo_tarjeta_origen')
-          .in('id_movimiento', idsToCheck)
-          .eq('user_id', userId)
-          .not('id_consumo_tarjeta_origen', 'is', null);
-        (movsWithTc || []).forEach(m => {
-          if (m.id_consumo_tarjeta_origen) {
-            pagosMap[m.id_consumo_tarjeta_origen] = {
-              pagado: lastStatus,
-              fecha_pago: lastStatus ? todayStr : null,
-              tipo: 'TC_FROM_MOV'
-            };
-          }
-        });
-      }
-
-    } else if (action === 'pagar_resumen') {
-      let tcIds = Array.isArray(rawIds) && rawIds.length > 0 ? rawIds : [];
-
-      // Si no vienen IDs directamente, buscar consumos por idTarjeta y mes
-      if (tcIds.length === 0 && idTarjeta && mes) {
-        const [y, m] = mes.split('-').map(Number);
-        const lastDay = new Date(y, m, 0).getDate();
-        const start = `${mes}-01`;
-        const end = `${mes}-${String(lastDay).padStart(2, '0')}`;
-
-        const { data: consumos } = await supabase
-          .from('consumos_tc')
-          .select('id_consumo_tarjeta')
-          .eq('id_tarjeta', idTarjeta)
-          .eq('user_id', userId)
-          .gte('fecha', start)
-          .lte('fecha', end);
-
-        tcIds = (consumos || []).map(c => c.id_consumo_tarjeta);
-      }
-
-      // Obtener todas las tarjetas activas del usuario para mapear consumos a sus respectivas cuentas
-      const { data: allTarjetas } = await supabase
-        .from('tarjetas')
-        .select('id_tarjeta, nombre, id_cuenta_principal, fecha_vencimiento_actual, total_resumen_ars')
-        .eq('user_id', userId);
-
-      const tarjetaMap = new Map((allTarjetas || []).map(t => [t.id_tarjeta, t]));
-
-      // Obtener cuenta Hogar
-      const { data: allCuentas } = await supabase
-        .from('cuentas_principales')
-        .select('id_cuenta_principal, nombre')
-        .eq('user_id', userId);
-      const hogarCuenta = (allCuentas || []).find(c => c.nombre.toLowerCase().includes('hogar'));
-      const hogarId = hogarCuenta?.id_cuenta_principal || null;
-
-      // Obtener consumos completos con id_tarjeta e importe
-      let consumosList = [];
-      if (tcIds.length > 0) {
-        const { data: cData } = await supabase
-          .from('consumos_tc')
-          .select('id_consumo_tarjeta, id_tarjeta, importe, moneda, fecha')
-          .in('id_consumo_tarjeta', tcIds)
-          .eq('user_id', userId);
-        consumosList = cData || [];
-      }
-
-      // Obtener movimientos asociados a estos consumos
-      let movsVinculados = [];
-      if (tcIds.length > 0) {
-        const { data: movs } = await supabase
-          .from('movimientos')
-          .select('*')
-          .in('id_consumo_tarjeta_origen', tcIds)
-          .eq('user_id', userId);
-        movsVinculados = movs || [];
-      }
-
-      const paymentDate = todayStr || new Date().toISOString().split('T')[0];
-
-      // Determinar qué tarjetas procesar: individual o todas (consolidado)
-      const targetTarjetas = idTarjeta
-        ? (allTarjetas || []).filter(t => t.id_tarjeta === idTarjeta)
-        : (allTarjetas || []).filter(t => consumosList.some(c => c.id_tarjeta === t.id_tarjeta));
-
-      for (const tc of targetTarjetas) {
-        const cardConsumos = consumosList.filter(c => c.id_tarjeta === tc.id_tarjeta);
-        const cardSumConsumos = cardConsumos.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
-
-        // Si la tarjeta tiene total_resumen_ars para este mes, usarlo; sino la suma de consumos
-        const cardTotal = (tc.total_resumen_ars && Number(tc.total_resumen_ars) > 0)
-          ? Number(tc.total_resumen_ars)
-          : cardSumConsumos;
-
-        if (tc.id_cuenta_principal && cardTotal > 0) {
-          const descPago = `Pago Resumen: ${tc.nombre}`;
-          const { data: existingPayment } = await supabase
-            .from('movimientos')
-            .select('id_movimiento')
-            .eq('id_cuenta_principal', tc.id_cuenta_principal)
-            .eq('tipo_mov', 'EGRESO')
-            .eq('descripcion', descPago)
-            .gte('fecha', paymentDate.substring(0, 7) + '-01')
-            .lte('fecha', paymentDate.substring(0, 7) + '-31')
-            .eq('user_id', userId);
-
-          let paymentMovId = existingPayment?.[0]?.id_movimiento;
-          if (!paymentMovId) {
-            const newPaymentMov = {
-              id_movimiento: crypto.randomUUID(),
-              id_cuenta_principal: tc.id_cuenta_principal,
-              user_id: userId,
-              fecha: paymentDate,
-              id_categoria: 'CAT_PAGO_TC',
-              tipo_mov: 'EGRESO',
-              descripcion: descPago,
-              importe: Math.round(cardTotal * 100) / 100,
-              moneda: 'ARS',
-              medio_pago: 'Débito Automático'
-            };
-            const { data: insertedMov } = await supabase
-              .from('movimientos')
-              .insert([newPaymentMov])
-              .select('id_movimiento');
-            paymentMovId = insertedMov?.[0]?.id_movimiento;
-          } else {
-            // Asegurar que quede categorizado como CAT_PAGO_TC
-            await supabase
-              .from('movimientos')
-              .update({ id_categoria: 'CAT_PAGO_TC' })
-              .eq('id_movimiento', paymentMovId)
-              .eq('user_id', userId);
-          }
-
-          if (paymentMovId) {
-            pagosMap[paymentMovId] = { pagado: true, fecha_pago: paymentDate, tipo: 'PAGO_TC' };
-          }
-        }
-
-        // 1.b Generar o actualizar el INGRESO por Reintegro TC para consumos imputados a cuentas externas (ej: Hogar)
-        const extMovs = movsVinculados.filter(m => 
-          m.id_cuenta_principal !== tc.id_cuenta_principal && 
-          m.tipo_mov === 'EGRESO' &&
-          cardConsumos.some(c => c.id_consumo_tarjeta === m.id_consumo_tarjeta_origen)
-        );
-
-        const reintegrosPorCuenta = {};
-        extMovs.forEach(m => {
-          const destId = m.id_cuenta_principal;
-          if (!reintegrosPorCuenta[destId]) {
-            reintegrosPorCuenta[destId] = { total: 0, items: [] };
-          }
-          reintegrosPorCuenta[destId].total += Number(m.importe || 0);
-          reintegrosPorCuenta[destId].items.push(m);
-        });
-
-        for (const [destAccId, rData] of Object.entries(reintegrosPorCuenta)) {
-          if (rData.total > 0) {
-            const destCuenta = (allCuentas || []).find(c => c.id_cuenta_principal === destAccId);
-            const destAccName = destCuenta?.nombre || 'Externa';
-            const descReintegro = `Reintegro TC: Consumos ${destAccName} (${tc.nombre})`;
-            const importeReintegro = Math.round(rData.total * 100) / 100;
-
-            const { data: existingReintegro } = await supabase
-              .from('movimientos')
-              .select('id_movimiento')
-              .eq('id_cuenta_principal', tc.id_cuenta_principal)
-              .eq('tipo_mov', 'INGRESO')
-              .eq('id_categoria', 'CAT_REINTEGRO_TC')
-              .eq('descripcion', descReintegro)
-              .gte('fecha', paymentDate.substring(0, 7) + '-01')
-              .lte('fecha', paymentDate.substring(0, 7) + '-31')
-              .eq('user_id', userId);
-
-            let reintegroMovId = existingReintegro?.[0]?.id_movimiento;
-            if (!reintegroMovId) {
-              const newReintegroMov = {
-                id_movimiento: crypto.randomUUID(),
-                id_cuenta_principal: tc.id_cuenta_principal,
-                user_id: userId,
-                fecha: paymentDate,
-                id_categoria: 'CAT_REINTEGRO_TC',
-                tipo_mov: 'INGRESO',
-                descripcion: descReintegro,
-                importe: importeReintegro,
-                moneda: 'ARS',
-                medio_pago: 'Transferencia'
-              };
-              const { data: insertedR } = await supabase
-                .from('movimientos')
-                .insert([newReintegroMov])
-                .select('id_movimiento');
-              reintegroMovId = insertedR?.[0]?.id_movimiento;
-            } else {
-              await supabase
-                .from('movimientos')
-                .update({ importe: importeReintegro, fecha: paymentDate })
-                .eq('id_movimiento', reintegroMovId)
-                .eq('user_id', userId);
-            }
-
-            if (reintegroMovId) {
-              pagosMap[reintegroMovId] = { pagado: true, fecha_pago: paymentDate, tipo: 'REINTEGRO_TC' };
-            }
-          }
-        }
-
-        if (mes) {
-          pagosMap[`RESUMEN_${tc.id_tarjeta}_${mes}`] = { pagado: true, fecha_pago: paymentDate };
-        }
-      }
-
-      // 2. Sincronizar fecha de egresos de cuentas externas si estaban fechados antes del período de pago
-      const extMovsToAlign = movsVinculados.filter(m => 
-        (allTarjetas || []).some(t => t.id_cuenta_principal !== m.id_cuenta_principal) &&
-        m.tipo_mov === 'EGRESO' && 
-        m.fecha < paymentDate.substring(0, 7) + '-01'
-      );
-      for (const em of extMovsToAlign) {
-        await supabase
-          .from('movimientos')
-          .update({ fecha: paymentDate })
-          .eq('id_movimiento', em.id_movimiento)
-          .eq('user_id', userId);
-        em.fecha = paymentDate;
-      }
-
-      // 3. Marcar todos los consumos y movimientos asociados como Saldados
-      tcIds.forEach(id => {
-        pagosMap[id] = { pagado: true, fecha_pago: paymentDate, tipo: 'TC' };
-        updatedCount++;
-      });
-      movsVinculados.forEach(m => {
-        pagosMap[m.id_movimiento] = { pagado: true, fecha_pago: paymentDate, tipo: 'MOV' };
-      });
-
-      lastStatus = true;
-    }
-
-    // 2. Persistir en Supabase
-    if (logId) {
-      await supabase
-        .from('logs')
-        .update({ contexto: pagosMap, timestamp: new Date().toISOString() })
-        .eq('id', logId);
-    } else {
-      const { data: newLog } = await supabase
-        .from('logs')
-        .insert([{
-          nivel: 'INFO',
-          funcion: 'ESTADO_PAGOS',
-          mensaje: userId,
-          contexto: pagosMap,
-          timestamp: new Date().toISOString()
-        }])
-        .select('id');
-      logId = newLog?.[0]?.id;
-    }
-
-    return res.status(200).json({
-      success: true,
-      pagado: lastStatus,
-      updatedCount,
-      data: pagosMap
-    });
-
-  } catch (err) {
-    console.error('[API -> togglePago -> ERROR]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
-  }
+    for(const c of consumos) mark(c.id_consumo_tarjeta,true,'TC');
+    for(const m of linked) mark(m.id_movimiento,true,'MOV');
+  } else throw inputError('Acción inválida.');
+  const row={funcion:'ESTADO_PAGOS',mensaje:userId,nivel:'INFO',contexto:state,timestamp:new Date().toISOString()};
+  if(logId) await db.from('logs').update(row).eq('id',logId).eq('mensaje',userId);
+  else await db.from('logs').insert(row);
+  return res.status(200).json({success:true,pagado:last,updatedCount:count,data:state});
 }

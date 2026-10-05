@@ -1,3 +1,4 @@
+import { saveOwned } from '../api_lib/validation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import crypto from 'crypto';
 
@@ -62,12 +63,12 @@ export default async function handler(req, res) {
     }
     payload.user_id = userId;
 
-    const { data, error } = await supabase.from('categorias').upsert(payload).select().single();
+    const { data, error } = await saveOwned(supabase, 'categorias', 'id_categoria', payload, userId, ["id_categoria","nombre","tipo_mov","activa","presupuesto_mensual","id_cuenta","jerarquia"]);
     if (error) throw error;
     
     return res.status(200).json({ success: true, data, isNew });
   } catch (err) {
     console.error('[API -> admin_saveCategoria]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

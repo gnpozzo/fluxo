@@ -38,8 +38,8 @@ class AppInit {
     try {
       const storedVersion = localStorage.getItem('fluxo_app_version');
       if (storedVersion !== App.VERSION) {
-        localStorage.removeItem('fluxo_cached_cuentas');
-        localStorage.removeItem('fluxo_cached_meses');
+        localStorage.removeItem('fluxo_cached_cuentas:' + (App.Auth?.user?.id || 'anonymous'));
+        localStorage.removeItem('fluxo_cached_meses:' + (App.Auth?.user?.id || 'anonymous'));
         localStorage.setItem('fluxo_app_version', App.VERSION);
       }
     } catch (_) {}
@@ -186,17 +186,17 @@ class AppInit {
       let cachedCuentas = null;
       let cachedMeses = null;
       try {
-        const storedC = localStorage.getItem('fluxo_cached_cuentas');
+        const storedC = localStorage.getItem('fluxo_cached_cuentas:' + (App.Auth?.user?.id || 'anonymous'));
         if (storedC) cachedCuentas = JSON.parse(storedC);
-        const storedM = localStorage.getItem('fluxo_cached_meses');
+        const storedM = localStorage.getItem('fluxo_cached_meses:' + (App.Auth?.user?.id || 'anonymous'));
         if (storedM) cachedMeses = JSON.parse(storedM);
       } catch (_) {}
 
       if (initialData?.cuentas?.length) {
-        try { localStorage.setItem('fluxo_cached_cuentas', JSON.stringify(initialData.cuentas)); } catch (_) {}
+        try { localStorage.setItem('fluxo_cached_cuentas:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(initialData.cuentas)); } catch (_) {}
       }
       if (initialData?.meses?.length) {
-        try { localStorage.setItem('fluxo_cached_meses', JSON.stringify(initialData.meses)); } catch (_) {}
+        try { localStorage.setItem('fluxo_cached_meses:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(initialData.meses)); } catch (_) {}
       }
 
       const defaultCuentas = (cachedCuentas && cachedCuentas.length)
@@ -274,8 +274,8 @@ class AppInit {
           btnLogout.addEventListener('click', async () => {
             if(confirm('¿Seguro que quieres cerrar sesión?')) {
               try {
-                localStorage.removeItem('fluxo_cached_cuentas');
-                localStorage.removeItem('fluxo_cached_meses');
+                localStorage.removeItem('fluxo_cached_cuentas:' + (App.Auth?.user?.id || 'anonymous'));
+                localStorage.removeItem('fluxo_cached_meses:' + (App.Auth?.user?.id || 'anonymous'));
                 localStorage.removeItem('fluxo_app_version');
               } catch (_) {}
               await App.Auth.logout();
@@ -790,7 +790,7 @@ class AppInit {
 
   #getReadNotificationIds() {
     try {
-      const read = localStorage.getItem('fluxo_read_notifications');
+      const read = localStorage.getItem('fluxo_read_notifications:' + (App.Auth?.user?.id || 'anonymous'));
       return read ? JSON.parse(read) : [];
     } catch (e) {
       return [];
@@ -802,7 +802,7 @@ class AppInit {
       const read = this.#getReadNotificationIds();
       if (!read.includes(id)) {
         read.push(id);
-        localStorage.setItem('fluxo_read_notifications', JSON.stringify(read));
+        localStorage.setItem('fluxo_read_notifications:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(read));
       }
     } catch (e) {
       console.error('Error marking notification as read:', e);
@@ -900,7 +900,7 @@ class AppInit {
     if (!notif) return;
     try {
       if (notif.tipo_entidad === 'consumo_tc' && notif.id_entidad) {
-        if (App.Modules.tarjetas?.abrirModalDetalleConsumoById?.(notif.id_entidad)) {
+        if (await App.Modules.tarjetas?.abrirModalDetalleConsumoById?.(notif.id_entidad)) {
           return;
         }
         const cuenta = App.Store.cuenta;
@@ -914,7 +914,7 @@ class AppInit {
           return;
         }
       } else if (notif.tipo_entidad === 'movimiento' && notif.id_entidad) {
-        if (App.Modules.dashboard?.abrirModalDetalleMovById?.(notif.id_entidad)) {
+        if (await App.Modules.dashboard?.abrirModalDetalleMovById?.(notif.id_entidad)) {
           return;
         }
       }
@@ -1463,7 +1463,11 @@ class AppInit {
         const elAvatar = document.getElementById('topbar-avatar');
         if (elAvatar) {
           const avatarUrl = metadata.avatar_url || metadata.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=1D195D&color=fff&bold=true`;
-          elAvatar.innerHTML = `<img src="${avatarUrl}" alt="Avatar" onerror="this.outerHTML='<span style=\\'font-weight:700;font-size:0.85rem;\\'>${(primerNombre||'U')[0].toUpperCase()}</span>'">`;
+          const image=document.createElement('img');
+          try { const url=new URL(avatarUrl); if(url.protocol==='https:') image.src=url.href; }catch{}
+          image.alt='Avatar';
+          image.addEventListener('error',()=>{elAvatar.textContent=(primerNombre||'U')[0].toUpperCase();});
+          elAvatar.replaceChildren(image);
         }
 
         App.Store.setUsuario({ email: email, name: fullName });
@@ -1537,7 +1541,7 @@ class AppInit {
                 <img src="/Fluxo-logo-azul.png" alt="Fluxo Logo" style="width:170px;margin:0 auto 16px;object-fit:contain;" class="modal-logo logo-light">
                 <img src="/Fluxo-logo-blanco.png" alt="Fluxo Logo" style="width:170px;margin:0 auto 16px;object-fit:contain;" class="modal-logo logo-dark">
                 <p style="font-weight:600;margin-bottom:8px;">Fluxo — Gestión Inteligente de Finanzas</p>
-                <p style="font-size:0.85rem;color:var(--texto-2);margin-bottom:20px;">Versión 6.0.0 (Rediseño Mobile-First)</p>
+                <p style="font-size:0.85rem;color:var(--texto-2);margin-bottom:20px;">Versión ${App.VERSION}</p>
                 <div style="border-top:1px solid var(--borde);padding-top:16px;font-size:0.82rem;color:var(--texto-2);">
                   <p>Desarrollado con amor para la gestión financiera personal y familiar.</p>
                   <p style="margin-top:8px;">© ${new Date().getFullYear()} Fluxo Inc.</p>
@@ -1548,7 +1552,7 @@ class AppInit {
             cancelLabel: 'Cerrar'
           });
         } else if (App.Toast) {
-          App.Toast.info('Fluxo v6.0.0 — Gestión Inteligente de Finanzas');
+          App.Toast.info(`Fluxo v${App.VERSION} — Gestión Inteligente de Finanzas`);
         }
       });
 

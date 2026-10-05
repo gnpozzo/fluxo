@@ -1,3 +1,4 @@
+import { saveOwned } from '../api_lib/validation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import crypto from 'crypto';
 
@@ -44,12 +45,12 @@ export default async function handler(req, res) {
         .neq('id_cuenta_principal', cleanPayload.id_cuenta_principal);
     }
     
-    const { data, error } = await supabase.from('cuentas_principales').upsert(cleanPayload).select().single();
+    const { data, error } = await saveOwned(supabase, 'cuentas_principales', 'id_cuenta_principal', cleanPayload, userId, ["id_cuenta_principal","nombre","moneda_principal","es_predeterminada","activa","modulo_tarjetas_activo","modulo_cc_activo","modulo_ahorro_activo","modulo_inversiones_activo","icono"]);
     if (error) throw error;
     
     return res.status(200).json({ success: true, data, isNew });
   } catch (err) {
     console.error('[API -> admin_saveCuentaPrincipal]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

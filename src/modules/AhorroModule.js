@@ -817,7 +817,7 @@ export class AhorroModule extends BaseModule {
             <span style="font-size:0.7rem; color:var(--texto-3); font-weight:600;">${t.moneda || 'ARS'}</span>
           </div>
 
-          <div class="dh-drill-actions" style="display:flex; align-items:center; gap:4px; margin-left:8px;" onclick="event.stopPropagation();">
+          <div class="dh-drill-actions" style="display:flex; align-items:center; gap:4px; margin-left:8px;">
             <button class="btn-icon-sm aho-btn-edit" data-id="${t.id_ahorro}" title="Editar">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </button>
@@ -927,6 +927,11 @@ export class AhorroModule extends BaseModule {
           </select>
         </div>
 
+        <div class="form-group">
+          <label>Tipo de cambio de la operación (ARS por USD)</label>
+          <input class="input" type="number" name="tipoCambio" min="0.01" step="0.01" placeholder="Solo para operaciones en USD">
+        </div>
+
         <div class="form-group full-width">
           <label>Subcuenta / Alcancía <span class="required-mark">*</span></label>
           <select class="input" name="id_subcuenta" id="aho-subcuenta" required>
@@ -998,6 +1003,7 @@ export class AhorroModule extends BaseModule {
       tipo_transfer  : tipo,
       fecha          : d.fecha,
       moneda         : d.moneda,
+      ...(d.moneda==='USD' && d.tipoCambio ? {tipoCambio:Number(d.tipoCambio)} : {}),
       idSubcuenta    : d.id_subcuenta,
       importe        : Number(d.importe),
       descripcion    : d.descripcion || ''

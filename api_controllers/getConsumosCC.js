@@ -1,3 +1,5 @@
+import { readAll } from '../api_lib/read-all.js';
+import { sharedBalance } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 
@@ -27,26 +29,20 @@ export default async function handler(req, res) {
     }
     cuenta = resolvedCuenta;
 
-    const { data: consumos, error } = await supabase.rpc('get_consumos_cc_list', {
-      p_id_cuenta: cuenta,
-      p_fecha_inicio: fechaInicio,
-      p_fecha_fin: fechaFin
-    });
-
-    if (error) throw error;
+    const consumos=await readAll(()=>supabase.rpc('get_consumos_cc_list',{p_id_cuenta:cuenta,p_fecha_inicio:fechaInicio,p_fecha_fin:fechaFin}));
 
     let gastoYo = 0;
     let gastoOtro = 0;
     let saldoNeto = 0;
 
     const mappedConsumos = (consumos || []).map(c => {
-      const miParte = (Number(c.importe || 0) * Number(c.porcentaje_imputado || 100)) / 100;
+      const { own: miParte, balance } = sharedBalance(c.importe || 0, c.porcentaje_imputado, c.pagador);
       if (c.pagador === 'YO') {
         gastoYo += Number(c.importe || 0);
-        saldoNeto += miParte;
+        saldoNeto += balance;
       } else {
         gastoOtro += Number(c.importe || 0);
-        saldoNeto -= miParte;
+        saldoNeto += balance;
       }
       return {
         ...c,
@@ -64,7 +60,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('[API -> getConsumosCC Error]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }
 

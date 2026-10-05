@@ -12,13 +12,13 @@ export default async function handler(req, res) {
   try {
     const cotizaciones = {
       success: true,
-      oficial: { compra: 1500, venta: 1535 },
-      bolsa: { compra: 1520, venta: 1545 },
-      contadoconliqui: { compra: 1580, venta: 1605 },
-      blue: { compra: 1530, venta: 1555 },
-      cripto: { compra: 1570, venta: 1595 },
-      mayorista: { compra: 1490, venta: 1515 },
-      risk_country: 509,
+      oficial: null,
+      bolsa: null,
+      contadoconliqui: null,
+      blue: null,
+      cripto: null,
+      mayorista: null,
+      risk_country: null,
       lastUpdated: new Date().toISOString()
     };
 
@@ -58,6 +58,12 @@ export default async function handler(req, res) {
       console.warn('[getDolarCotizaciones] argentinadatos error:', e.message);
     }
 
+    const available=Object.entries(cotizaciones).some(([key,value])=>value?.venta>0);
+    if(!available) {
+      if(cachedData) return res.status(200).json({...cachedData,stale:true});
+      return res.status(503).json({success:false,error:'Cotizaciones no disponibles.'});
+    }
+    cotizaciones.stale=false;
     cotizaciones.lastUpdated = new Date().toISOString();
     cachedData = cotizaciones;
     lastFetchTime = now;
@@ -66,6 +72,6 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('[getDolarCotizaciones -> ERROR]', err.message);
     if (cachedData) return res.status(200).json(cachedData);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

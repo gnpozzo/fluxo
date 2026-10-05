@@ -3,6 +3,7 @@
 // QA Passed: Bootstrap and Dependency Injection completely wired.
 
 import './styles/main.css';
+import './core/Shell.js';
 
 // 1. Initialize namespace and BaseModule
 import { BaseModule } from './core/AppBootstrap.js';
@@ -35,34 +36,15 @@ import "./core/AppIcons.js";
 import { KpiCard } from './components/KpiCard.js';
 window.App.KpiCard = KpiCard;
 
-// 4. Modules
-import { DashboardModule } from './modules/DashboardModule.js';
-window.App.Modules['dashboard'] = new DashboardModule();
-
-import { MovimientosModule } from './modules/MovimientosModule.js';
-window.App.Modules['movimientos'] = new MovimientosModule();
-
-import { TarjetasModule } from './modules/TarjetasModule.js';
-window.App.Modules['tarjetas'] = new TarjetasModule();
-
-import { CCModule } from './modules/CcModule.js';
-window.App.Modules['cc'] = new CCModule();
-
-import { AhorroModule } from './modules/AhorroModule.js';
-window.App.Modules['ahorro'] = new AhorroModule();
-
-import { InversionesModule } from './modules/InversionesModule.js';
-window.App.Modules['inversiones'] = new InversionesModule();
-
-import { AdminModule } from './modules/AdminModule.js';
-window.App.Modules['admin'] = new AdminModule();
+// Modules are loaded when opened; login and core do not download every screen.
+import { lazyModule } from './core/LazyModule.js';
+window.App.Modules.dashboard=lazyModule('dashboard',()=>import('./modules/DashboardModule.js'),'DashboardModule');
+window.App.Modules.movimientos=lazyModule('movimientos',()=>import('./modules/MovimientosModule.js'),'MovimientosModule');
+window.App.Modules.tarjetas=lazyModule('tarjetas',()=>import('./modules/TarjetasModule.js'),'TarjetasModule');
+window.App.Modules.cc=lazyModule('cc',()=>import('./modules/CcModule.js'),'CCModule');
+window.App.Modules.ahorro=lazyModule('ahorro',()=>import('./modules/AhorroModule.js'),'AhorroModule');
+window.App.Modules.inversiones=lazyModule('inversiones',()=>import('./modules/InversionesModule.js'),'InversionesModule');
+window.App.Modules.admin=lazyModule('admin',()=>import('./modules/AdminModule.js'),'AdminModule');
 
 // 5. Init Application (binds sidebar buttons, auth, and data fetching)
 import './core/AppInit.js';
-
-// QA Chart rendering shim (mock)
-window.renderChart = function() {
-  const chartEl = document.getElementById('dash-chart-canvas');
-  if(!chartEl) return;
-  console.log('✓ QA: Chart placeholder rendered');
-};

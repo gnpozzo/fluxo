@@ -9,7 +9,7 @@ class EventBusCore {
     // Almacén de callbacks suscritos por evento
     this.listeners = {};
     // QA: Guardamos un log interno para tracing
-    this.debug = true;
+    this.debug = import.meta.env.DEV;
   }
 
   /**

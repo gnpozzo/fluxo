@@ -1,3 +1,4 @@
+import { readAll, readInBatches } from '../api_lib/read-all.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 
@@ -43,25 +44,14 @@ export default async function handler(req, res) {
       return res.status(403).json({ success: false, error: 'Acceso denegado: La cuenta no pertenece al usuario autenticado.' });
     }
 
-    const { data: movimientos, error: movError } = await supabase
-      .from('movimientos')
-      .select('*, categorias (nombre)')
-      .eq('id_cuenta_principal', resolvedCuenta)
-      .eq('user_id', userId)
-      .gte('fecha', fechaInicio)
-      .lte('fecha', fechaFin)
-      .order('fecha', { ascending: false });
+    const movimientos=await readAll(()=>supabase.from('movimientos').select('*, categorias(nombre)').eq('id_cuenta_principal',resolvedCuenta).eq('user_id',userId).gte('fecha',fechaInicio).lte('fecha',fechaFin).order('fecha',{ascending:false}).order('id_movimiento'));
 
     // Map categorization name & series info
     if (movimientos && movimientos.length > 0) {
       const recurIds = [...new Set(movimientos.map(m => m.recur_group_id).filter(Boolean))];
       let recurCountsMap = {};
       if (recurIds.length > 0) {
-        const { data: recurRows } = await supabase
-          .from('movimientos')
-          .select('recur_group_id')
-          .in('recur_group_id', recurIds)
-          .eq('user_id', userId);
+        const recurRows=await readInBatches(recurIds,batch=>supabase.from('movimientos').select('recur_group_id').in('recur_group_id',batch).eq('user_id',userId).order('id_movimiento'));
         if (recurRows) {
           recurRows.forEach(r => {
             recurCountsMap[r.recur_group_id] = (recurCountsMap[r.recur_group_id] || 0) + 1;
@@ -81,7 +71,7 @@ export default async function handler(req, res) {
       });
     }
 
-    if (movError) throw movError;
+
 
     // Estado de pagos desde logs (persistencia sin requerir migración DDL estricta)
     const { data: logRows } = await supabase
@@ -89,11 +79,13 @@ export default async function handler(req, res) {
       .select('contexto')
       .eq('funcion', 'ESTADO_PAGOS')
       .eq('mensaje', userId)
+      .order('id', {ascending:false})
       .limit(1);
     const pagosMap = logRows?.[0]?.contexto || {};
 
     // Cálculo de capa intermedia en Edge Node.js (Más veloz que hacer el match en Frontend)
     let ingresos = 0, egresos = 0, egresosSaldados = 0, egresosPendientes = 0;
+    const kpisPorMoneda={ARS:{ingresos:0,egresos:0,resultado:0},USD:{ingresos:0,egresos:0,resultado:0}};
     (movimientos || []).forEach(m => {
         m.pagado = !!pagosMap[m.id_movimiento]?.pagado;
         m.fecha_pago = pagosMap[m.id_movimiento]?.fecha_pago || null;
@@ -102,6 +94,9 @@ export default async function handler(req, res) {
         m.is_pago_tc = isPagoTC;
 
         const amt = Math.abs(Number(m.importe));
+        const native=kpisPorMoneda[m.moneda||'ARS'];
+        if(native && !isPagoTC) {if(m.tipo_mov==='INGRESO')native.ingresos+=amt;else native.egresos+=amt;native.resultado=native.ingresos-native.egresos;}
+        if(m.moneda==='USD') return;
         if (m.tipo_mov === 'INGRESO') ingresos += amt;
         if (m.tipo_mov === 'EGRESO') {
           // Filosofía Copilot / Monarch: El pago de resumen es un flujo de transferencia/pasivo.
@@ -128,17 +123,7 @@ export default async function handler(req, res) {
     // Hasta fin de año en curso para proyecciones
     const endRange = `${yNum}-12-31`;
 
-    const { data: histMovs, error: histError } = await supabase
-      .from('movimientos')
-      .select('fecha, tipo_mov, importe, id_categoria, descripcion')
-      .eq('id_cuenta_principal', resolvedCuenta)
-      .eq('user_id', userId)
-      .gte('fecha', startRange)
-      .lte('fecha', endRange);
-
-    if (histError) {
-      console.error('[getDashboardData] Error fetching histMovs:', histError);
-    }
+    const histMovs=await readAll(()=>supabase.from('movimientos').select('fecha,tipo_mov,importe,id_categoria,descripcion,moneda').eq('id_cuenta_principal',resolvedCuenta).eq('user_id',userId).gte('fecha',startRange).lte('fecha',endRange).order('fecha').order('id_movimiento'));
 
     // Identificar todos los meses desde startRange hasta fin de año en curso
     const mesesBuckets = {};
@@ -158,6 +143,7 @@ export default async function handler(req, res) {
     }
 
     (histMovs || []).forEach(hm => {
+      if(hm.moneda==='USD') return;
       const mKey = (hm.fecha || '').substring(0, 7);
       if (mesesBuckets[mKey]) {
         const isPagoTC = hm.id_categoria === 'CAT_PAGO_TC' || (typeof hm.descripcion === 'string' && hm.descripcion.toLowerCase().startsWith('pago resumen:'));
@@ -186,6 +172,8 @@ export default async function handler(req, res) {
         pctSaldado: totalEgrAbs > 0 ? Math.round((egresosSaldados / totalEgrAbs) * 100) : 0,
         pctPendiente: totalEgrAbs > 0 ? Math.round((egresosPendientes / totalEgrAbs) * 100) : 0
       },
+      monedaKpis: 'ARS',
+      kpisPorMoneda,
       movimientos: movimientos || [],
       evolucionMensual
     });
@@ -193,6 +181,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('[API -> getDashboardData -> ERROR]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

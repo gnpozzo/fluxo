@@ -1,3 +1,5 @@
+import { holdings } from '../shared/finance.js';
+import { readAll } from '../api_lib/read-all.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 
@@ -35,20 +37,7 @@ export default async function handler(req, res) {
 
     let movimientos = [];
 
-    // 1. Consultar tabla de inversiones_movimientos (garantiza id_inversion_mov)
-    const { data, error } = await supabase
-      .from('inversiones_movimientos')
-      .select('*')
-      .eq('id_cuenta_principal', idCuenta)
-      .eq('user_id', userId)
-      .order('fecha', { ascending: false });
-
-    if (!error && data) {
-      movimientos = data;
-    } else {
-      const rpcRes = await supabase.rpc('get_inversiones_movimientos', { p_id_cuenta: idCuenta });
-      movimientos = rpcRes.data || [];
-    }
+    movimientos = await readAll(() => supabase.from('inversiones_movimientos').select('*').eq('id_cuenta_principal',idCuenta).eq('user_id',userId).order('fecha').order('created_at').order('id_inversion_mov'));
 
     if (!movimientos || movimientos.length === 0) {
       return res.status(200).json({
@@ -62,110 +51,34 @@ export default async function handler(req, res) {
     const tickersUnicos = [...new Set(movimientos.map(m => m.ticker).filter(Boolean))];
     const preciosPorTicker = {};
 
-    // Obtener cotización Dólar CCL / MEP para conversiones
-    let cotizUSD = 1540;
+    let cotizUSD = null;
     try {
-      const rdResp = await fetch('https://rendimientos.co/api/cotizaciones', { signal: AbortSignal.timeout(3000) });
-      if (rdResp.ok) {
-        const rd = await rdResp.json();
-        if (rd?.ccl?.price) cotizUSD = rd.ccl.price;
-        else if (rd?.mep?.price) cotizUSD = rd.mep.price;
-      }
-    } catch (_) {}
-
-    // Intentar cotizar tickers consultando rendimientos.co
-    await Promise.all(tickersUnicos.map(async (ticker) => {
+      const response=await fetch('https://dolarapi.com/v1/dolares/bolsa',{signal:AbortSignal.timeout(3000)});
+      if(response.ok){const quote=await response.json();if(Number(quote.venta)>0 && Date.now()-Date.parse(quote.fechaActualizacion)<3*86400000) cotizUSD=Number(quote.venta);}
+    }catch{}
+    await Promise.all(tickersUnicos.map(async ticker=>{
       try {
-        const resp = await fetch(`https://rendimientos.co/api/mundo?symbol=${encodeURIComponent(ticker.toUpperCase())}&range=1d`, {
-          signal: AbortSignal.timeout(2500)
-        });
-        if (resp.ok) {
-          const item = await resp.json();
-          const d = Array.isArray(item) ? item[0] : item;
-          const precio = d?.price || d?.regularMarketPrice || d?.c || null;
-          if (precio) preciosPorTicker[ticker] = Number(precio);
-        }
-      } catch (_) {}
+        const response=await fetch('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker),{signal:AbortSignal.timeout(3000)});
+        if(!response.ok)return;
+        const meta=(await response.json())?.chart?.result?.[0]?.meta;
+        if(Number(meta?.regularMarketPrice)>0 && meta.currency && Date.now()-Number(meta.regularMarketTime)*1000<7*86400000) preciosPorTicker[ticker]={price:Number(meta.regularMarketPrice),currency:meta.currency,fechaActualizacion:new Date(meta.regularMarketTime*1000).toISOString()};
+      }catch{}
     }));
 
-    // 3. Calcular tenencias actuales
-    const tenencias = {};
-    movimientos.forEach(mov => {
-      const t = mov.ticker;
-      if (!t) return;
-      if (!tenencias[t]) {
-        tenencias[t] = { cantNominales: 0, costoTotalArs: 0, cantCompra: 0, moneda: mov.moneda || 'ARS' };
-      }
-      const cant = Number(mov.cantidad_nominales || mov.cantidad || 0);
-      const imp = Number(mov.importe_total_ars || (cant * Number(mov.precio_compra || mov.precio || 0)));
-
-      if (mov.tipo_operacion === 'COMPRA') {
-        tenencias[t].cantNominales += cant;
-        tenencias[t].costoTotalArs += imp;
-        tenencias[t].cantCompra += cant;
-      } else if (mov.tipo_operacion === 'VENTA') {
-        tenencias[t].cantNominales -= cant;
-      }
+    const tenencias = holdings(movimientos).filter(h=>h.quantity>0.000001).map(h=>{
+      const quote=preciosPorTicker[h.ticker];
+      const priced=quote?.currency===h.moneda && (h.moneda!=='USD' || cotizUSD>0);
+      const current=priced ? h.quantity*quote.price*(h.moneda==='USD'?cotizUSD:1) : null;
+      return {...h,cantidad:h.quantity,costoTotalArs:h.costArs,precioProm:h.costNative/h.quantity,precioActual:priced?quote.price:null,valorActualArs:current,gananciaArs:current===null?null:current-h.costArs,rendPct:current===null?null:(h.costArs>0?(current-h.costArs)/h.costArs*100:0)};
     });
-
-    let kpiValorTotal = 0;
-    let kpiCostoTotal = 0;
-
-    Object.keys(tenencias).forEach(ticker => {
-      const ten = tenencias[ticker];
-      if (ten.cantNominales <= 0.0001) return;
-      const precioActual = preciosPorTicker[ticker] || 0;
-      let valorActualArs = ten.cantNominales * precioActual;
-      if (ten.moneda === 'USD') valorActualArs *= cotizUSD;
-      const precioPromArs = ten.cantCompra > 0 ? ten.costoTotalArs / ten.cantCompra : 0;
-      const costoProporArs = precioPromArs * ten.cantNominales;
-      kpiValorTotal += valorActualArs;
-      kpiCostoTotal += costoProporArs;
-    });
-
-    const kpiGananciaTotal = kpiValorTotal - kpiCostoTotal;
-    const kpiRendimientoPorc = kpiCostoTotal > 0 ? (kpiGananciaTotal / kpiCostoTotal) * 100 : 0;
-
-    // 4. Mapear operaciones individuales para la UI
-    const portfolio = movimientos.map(mov => {
-      const precioActual = preciosPorTicker[mov.ticker] || null;
-      const cant = Number(mov.cantidad_nominales || mov.cantidad || 0);
-      const precioCompra = Number(mov.precio_compra || mov.precio || 0);
-      let ganancia = null;
-
-      if (mov.tipo_operacion === 'COMPRA' && precioActual != null && precioActual > 0) {
-        const valorActual = cant * precioActual;
-        const costo = cant * precioCompra;
-        const gananciaEnMoneda = valorActual - costo;
-        ganancia = (mov.moneda === 'USD') ? gananciaEnMoneda * cotizUSD : gananciaEnMoneda;
-      }
-
-      return {
-        id_operacion: mov.id_inversion_mov || mov.id,
-        fecha: mov.fecha,
-        tipo_op: mov.tipo_operacion || mov.tipo_op,
-        ticker: mov.ticker,
-        moneda: mov.moneda || 'ARS',
-        cantidad: cant,
-        precio: precioCompra,
-        precio_actual: precioActual,
-        ganancia: ganancia
-      };
-    });
-
-    return res.status(200).json({
-      success: true,
-      kpis: {
-        valorActual: kpiValorTotal,
-        costoTotal: kpiCostoTotal,
-        gananciaTotal: kpiGananciaTotal,
-        rendimientoPorc: kpiRendimientoPorc
-      },
-      portfolio: portfolio
-    });
+    const complete=tenencias.every(h=>h.valorActualArs!==null);
+    const cost=tenencias.reduce((sum,h)=>sum+h.costArs,0);
+    const value=complete?tenencias.reduce((sum,h)=>sum+h.valorActualArs,0):null;
+    const portfolio=movimientos.map(m=>({id_operacion:m.id_inversion_mov,fecha:m.fecha,created_at:m.created_at,tipo_op:m.tipo_operacion,ticker:m.ticker,moneda:m.moneda,cantidad:Number(m.cantidad_nominales),precio:Number(m.precio_compra),importe_total_ars:Number(m.importe_total_ars),precio_actual:preciosPorTicker[m.ticker]?.currency===m.moneda?preciosPorTicker[m.ticker].price:null,ganancia:null}));
+    return res.status(200).json({success:true,kpis:{valorActual:value,costoTotal:cost,gananciaTotal:value===null?null:value-cost,rendimientoPorc:value===null?null:(cost>0?(value-cost)/cost*100:0),valuacionCompleta:complete},tenencias,portfolio});
 
   } catch (err) {
     console.error('[getPortfolio -> ERROR]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

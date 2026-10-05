@@ -27,10 +27,10 @@
            <img src="/Fluxo-logo-blanco.png" alt="Fluxo" class="logo-dark" style="width:180px;height:auto;object-fit:contain;margin:0 auto;">
            <p style="color:var(--texto-2);margin-top:10px;">Inicia sesión para continuar</p>
         </div>
-        <form id="form-login" onsubmit="event.preventDefault()">
+        <form id="form-login">
           <div id="login-name-group" style="margin-bottom:16px;">
             <label style="display:block;margin-bottom:6px;color:var(--texto-2);font-size:0.85rem;">Nombre y Apellido <span style="font-size:0.75rem;color:var(--texto-3);">(para registro)</span></label>
-            <input type="text" id="login-name" placeholder="Ej: Gastón Pozzo" style="width:100%;padding:10px 12px;border:1px solid var(--borde);border-radius:8px;background:var(--fondo);color:var(--texto);font-size:0.9rem;">
+            <input type="text" id="login-name" placeholder="Tu nombre" style="width:100%;padding:10px 12px;border:1px solid var(--borde);border-radius:8px;background:var(--fondo);color:var(--texto);font-size:0.9rem;">
           </div>
           <div style="margin-bottom:16px;">
             <label style="display:block;margin-bottom:6px;color:var(--texto-2);font-size:0.85rem;">Email</label>
@@ -161,7 +161,7 @@
             </svg>
           </button>
           <div class="topbar-greeting" id="topbar-greeting">
-            <h2 class="topbar-greeting-title">¡Hola, <span id="topbar-user-name">Gaston</span>!</h2>
+            <h2 class="topbar-greeting-title">¡Hola, <span id="topbar-user-name">Usuario</span>!</h2>
             <span class="topbar-greeting-sub">Gestión financiera inteligente & patrimonio</span>
           </div>
         </div>
@@ -444,7 +444,7 @@
           <button type="button" id="gemini-attachment-remove" title="Quitar archivo adjunto" style="background:none; border:none; color:inherit; cursor:pointer; font-weight:bold; font-size:1rem; padding:0 4px;">✕</button>
         </div>
 
-        <form id="gemini-chat-form" onsubmit="event.preventDefault()" class="gemini-input-wrap">
+        <form id="gemini-chat-form" class="gemini-input-wrap">
           <button type="button" class="gemini-attach-btn" id="gemini-attach-btn" title="Adjuntar archivo (XLSX, PDF, Imagen)" aria-label="Adjuntar archivo" style="background:none; border:none; cursor:pointer; color:var(--texto-3); padding:6px; display:flex; align-items:center; justify-content:center; transition:color .15s ease;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--texto-3)'">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
@@ -497,84 +497,7 @@
     
 
     <!-- Script de tema (independiente, no necesita App.*) -->
-    <script>
-    'use strict';
-    (function() {
-      const THEME_KEY = 'app_theme';
-      const saved     = sessionStorage.getItem(THEME_KEY) || 'light';
-      document.documentElement.setAttribute('data-theme', saved);
 
-      function syncThemeUI(theme) {
-        const themeText = document.getElementById('dropdown-theme-text');
-        if (themeText) {
-          themeText.textContent = theme === 'dark' ? 'Modo claro' : 'Modo oscuro';
-        }
-      }
-
-      window.toggleAppTheme = function() {
-        const current = document.documentElement.getAttribute('data-theme');
-        const next    = current === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        sessionStorage.setItem(THEME_KEY, next);
-        syncThemeUI(next);
-        window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: next } }));
-      };
-
-      // Sincronizar texto inicial de tema
-      if (document.readyState === 'loading') {
-        window.addEventListener('DOMContentLoaded', () => syncThemeUI(saved));
-      } else {
-        syncThemeUI(saved);
-      }
-
-      // --- Sidebar toggle for mobile ---
-      const sidebarToggle = document.getElementById('sidebar-toggle');
-      const sidebar = document.getElementById('app-sidebar');
-      const backdrop = document.getElementById('sidebar-backdrop');
-      
-      function closeSidebar() {
-        sidebar?.classList.remove('sidebar-open');
-        backdrop?.classList.remove('open');
-      }
-
-      sidebarToggle?.addEventListener('click', () => {
-        sidebar?.classList.toggle('sidebar-open');
-        backdrop?.classList.toggle('open');
-      });
-
-      backdrop?.addEventListener('click', closeSidebar);
-
-      // --- Gemini panel toggle ---
-      const btnGemini = document.getElementById('btn-gemini');
-      const btnHeaderGemini = document.getElementById('btn-header-gemini');
-      const geminiPanel = document.getElementById('gemini-panel');
-      const geminiOverlay = document.getElementById('gemini-overlay');
-      const geminiClose = document.getElementById('gemini-panel-close');
-
-      function openGemini() {
-        geminiPanel?.classList.add('open');
-        geminiOverlay?.classList.add('open');
-        if (window.App && window.App.Gemini) {
-          window.App.Gemini.onOpen();
-        }
-      }
-
-      function closeGemini() {
-        geminiPanel?.classList.remove('open');
-        geminiOverlay?.classList.remove('open');
-      }
-
-      btnGemini?.addEventListener('click', openGemini);
-      btnHeaderGemini?.addEventListener('click', openGemini);
-      geminiClose?.addEventListener('click', closeGemini);
-      geminiOverlay?.addEventListener('click', closeGemini);
-
-      // --- Config header button (same as sidebar Ajustes) ---
-      document.getElementById('btn-admin-header')?.addEventListener('click', () => {
-        document.getElementById('btn-admin')?.click();
-      });
-    })();
-    </script>
 
     <script type="module" src="/src/main.js"></script>
   </body>

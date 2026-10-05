@@ -1,3 +1,4 @@
+import { addMonthsSafe, money } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import crypto from 'crypto';
 
@@ -27,15 +28,7 @@ function toIsoDateStr(val) {
   return parseDateSafe(val).toISOString().split('T')[0];
 }
 
-function addMonthsSafe(date, months) {
-  const d = parseDateSafe(date);
-  const day = d.getUTCDate();
-  d.setUTCMonth(d.getUTCMonth() + months);
-  if (d.getUTCDate() !== day) {
-    d.setUTCDate(0);
-  }
-  return d;
-}
+
 
 function isTaxConcept(desc) {
   if (!desc) return false;
@@ -218,22 +211,7 @@ export default async function handler(req, res) {
           id_consumo_tarjeta_origen: idConsumo
         });
 
-        if (cardAccountId && targetAccountId !== cardAccountId) {
-          const fechaReintegro = toIsoDateStr(cardVto || fechaISO);
-          const targetAccName = cuentaNombreMap[targetAccountId] || 'Externa';
-          movRows.push({
-            id_movimiento: crypto.randomUUID(),
-            id_cuenta_principal: cardAccountId,
-            user_id: userId,
-            fecha: fechaReintegro,
-            id_categoria: 'CAT_REINTEGRO_TC',
-            tipo_mov: 'INGRESO',
-            descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
-            importe: cleanImporte,
-            medio_pago: 'Tarjeta de Crédito',
-            id_consumo_tarjeta_origen: idConsumo
-          });
-        }
+        // Reimbursements are booked once, when paying the statement.
       }
     } else if (tipo === 'CUOTAS') {
       const installmentGroupId = (scope === 'SERIES' && recurGrp) ? recurGrp : ('INSTL_' + crypto.randomUUID());
@@ -272,22 +250,7 @@ export default async function handler(req, res) {
             id_consumo_tarjeta_origen: idConsumo
           });
 
-          if (cardAccountId && targetAccountId !== cardAccountId) {
-            const targetAccName = cuentaNombreMap[targetAccountId] || 'Externa';
-            movRows.push({
-              id_movimiento: crypto.randomUUID(),
-              id_cuenta_principal: cardAccountId,
-              user_id: userId,
-              fecha: fechaCuota,
-              id_categoria: 'CAT_REINTEGRO_TC',
-              tipo_mov: 'INGRESO',
-              descripcion: `Reintegro TC: ${consumo.descripcion} (${cuotaNumActual}/${consumo.cuotaTotal}) (${targetAccName})`,
-              importe: cleanImporte,
-              medio_pago: 'Tarjeta de Crédito',
-              recur_group_id: installmentGroupId,
-              id_consumo_tarjeta_origen: idConsumo
-            });
-          }
+          // Reimbursements are booked once, when paying the statement.
         }
       }
     } else if (tipo === 'RECURRENTE') {
@@ -323,22 +286,7 @@ export default async function handler(req, res) {
             id_consumo_tarjeta_origen: idConsumo
           });
 
-          if (cardAccountId && targetAccountId !== cardAccountId) {
-            const targetAccName = cuentaNombreMap[targetAccountId] || 'Externa';
-            movRows.push({
-              id_movimiento: crypto.randomUUID(),
-              id_cuenta_principal: cardAccountId,
-              user_id: userId,
-              fecha: fechaRec,
-              id_categoria: 'CAT_REINTEGRO_TC',
-              tipo_mov: 'INGRESO',
-              descripcion: `Reintegro TC: ${consumo.descripcion} (${targetAccName})`,
-              importe: cleanImporte,
-              medio_pago: 'Tarjeta de Crédito',
-              recur_group_id: recurGroupId,
-              id_consumo_tarjeta_origen: idConsumo
-            });
-          }
+          // Reimbursements are booked once, when paying the statement.
         }
       }
     }
@@ -409,6 +357,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: {} });
   } catch (err) {
     console.error('[API -> updateConsumoTC]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

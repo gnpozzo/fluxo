@@ -2361,7 +2361,7 @@ export class TarjetasModule extends BaseModule {
       baseIngreso: 'TOTAL' // 'TOTAL' o 'SUELDO'
     };
     try {
-      const stored = localStorage.getItem('fluxo_tope_tc');
+      const stored = localStorage.getItem('fluxo_tope_tc:' + (App.Auth?.user?.id || 'anonymous'));
       if (stored) tope = { ...tope, ...JSON.parse(stored) };
     } catch (_) {}
 
@@ -2436,7 +2436,7 @@ export class TarjetasModule extends BaseModule {
       baseIngreso: 'TOTAL'
     };
     try {
-      const stored = localStorage.getItem('fluxo_tope_tc');
+      const stored = localStorage.getItem('fluxo_tope_tc:' + (App.Auth?.user?.id || 'anonymous'));
       if (stored) tope = { ...tope, ...JSON.parse(stored) };
     } catch (_) {}
 
@@ -2479,7 +2479,7 @@ export class TarjetasModule extends BaseModule {
         const modo = fd.get('modo') || 'TOTAL';
         const baseIngreso = fd.get('baseIngreso') || 'TOTAL';
         const nuevoTope = { topePorcentaje, modo, baseIngreso, topeMonto: null };
-        localStorage.setItem('fluxo_tope_tc', JSON.stringify(nuevoTope));
+        localStorage.setItem('fluxo_tope_tc:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(nuevoTope));
         App.Events.emit('tope_tc:updated', nuevoTope);
         App.Toast.success('Tope de tarjeta actualizado.');
         m.close();

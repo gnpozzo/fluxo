@@ -1,21 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 
 export function getSupabaseClient(req) {
+  if (req.db) return req.db;
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const serviceKey = (rawServiceKey && rawServiceKey !== 'undefined' && rawServiceKey.trim() !== '') ? rawServiceKey.trim() : null;
   
   if (!url || !anonKey) {
     throw new Error('Missing Supabase variables in environment config.');
   }
 
-  // On trusted serverless backend endpoints, prioritize serviceKey to bypass RLS restrictions
-  const keyToUse = serviceKey || anonKey;
+  // User requests must retain their JWT so database policies remain effective.
+  const keyToUse = anonKey;
   let options = {};
 
   const authHeader = req.headers?.authorization;
-  if (authHeader && !serviceKey) {
+  if (authHeader) {
     options = { global: { headers: { Authorization: authHeader } } };
   }
   

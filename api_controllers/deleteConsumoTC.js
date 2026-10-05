@@ -43,6 +43,7 @@ export default async function handler(req, res) {
         fechaFin = `${y}-${String(mo).padStart(2, '0')}-${ultimo}`;
       }
 
+      if ((scope==='MONTH' && (!fechaInicio || !fechaFin)) || (scope==='MONTH_AND_FUTURE' && !fechaInicio)) return res.status(400).json({success:false,error:'El período es obligatorio.'});
       let query = supabase.from('consumos_tc').select('id_consumo_tarjeta').eq('user_id', userId);
 
       if (targetCardId) {
@@ -69,7 +70,7 @@ export default async function handler(req, res) {
 
         // Limpiar registro de pagos en logs para los consumos eliminados
         try {
-          const { data: logRow } = await supabase.from('logs').select('id, contexto').eq('user_id', userId).eq('accion', 'ESTADO_PAGO_TC').maybeSingle();
+          const { data: logRow } = await supabase.from('logs').select('id, contexto').eq('mensaje', userId).eq('funcion', 'ESTADO_PAGOS').maybeSingle();
           if (logRow?.contexto) {
             const pagosMap = { ...logRow.contexto };
             let mod = false;
@@ -191,6 +192,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: {} });
   } catch (err) {
     console.error('[API -> deleteConsumoTC]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

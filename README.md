@@ -1,305 +1,105 @@
-# 🌊 Fluxo — Asistente Financiero Personal Inteligente & Suite Fintech
+# Fluxo — Gestión de finanzas personales
 
-Fluxo es una plataforma integral de gestión financiera personal y familiar, desarrollada bajo una arquitectura moderna, reactiva y bimonetaria (ARS/USD). Combina un libro contable mensual, seguimiento y liquidación precisa de tarjetas de crédito, clearing de gastos compartidos, bóvedas de ahorro (chanchitos), monitor de inversiones en tiempo real y un asistente de inteligencia artificial (FluxoBot en Telegram / FluxoAI) potenciado por Google Gemini.
+Fluxo organiza movimientos, tarjetas, gastos compartidos, ahorro e inversiones en ARS/USD. Incluye importación asistida de resúmenes y Gemini en la web y Telegram. Las marcas de pago son registros internos; no ejecutan transferencias bancarias.
 
----
+## Estado de esta versión
 
-## 📌 Índice
-0. [📖 Documento Maestro del Sistema (Arquitectura, Keys y Módulos)](DOCUMENTACION_SISTEMA.md)
-1. [Cómo Realizar el Push y Desplegar Cambios en la App](#-cómo-realizar-el-push-y-desplegar-cambios-en-la-app)
-2. [Cómo Continuar el Proyecto desde Otra PC](#-cómo-continuar-el-proyecto-desde-otra-pc)
-3. [Cómo Pasa el Contexto a Antigravity (IA) en la Nueva PC](#-cómo-pasa-el-contexto-a-antigravity-ia-en-la-nueva-pc)
-4. [Arquitectura del Sistema](#-arquitectura-del-sistema)
-5. [Estructura de Directorios](#-estructura-de-directorios)
-6. [Variables de Entorno Requeridas (.env) y Keys](#-variables-de-entorno-requeridas-env)
-7. [Reglas de Negocio y Criterios Contables Fundamentales](#-reglas-de-negocio-y-criterios-contables-fundamentales)
-8. [Historial Completo de Versiones y Changelog Detallado](#-historial-completo-de-versiones-y-changelog-detallado)
+Versión **6.2.0**, revisión del 5 de octubre de 2026 sobre `62007ea`.
 
----
+- Corregidos aislamiento por usuario, referencias cruzadas y permisos/RPC de Supabase.
+- Escrituras web transaccionales, rollback e idempotencia; cuotas y pagos separados por moneda.
+- Eliminadas reparaciones automáticas al consultar datos y cotizaciones ficticias.
+- Caché y contexto de IA por usuario, HTML sanitizado y módulos cargados bajo demanda.
+- Migración **20261005192629** aplicada al proyecto Supabase de Fluxo.
+- 16 pruebas automatizadas y 19 verificaciones PostgreSQL aprobadas. Fixtures descartadas por rollback.
+- Navegador: login, siete módulos, CSP, menú móvil y tema comprobados con API simulada.
+- Build correcto; JavaScript principal **149 kB**, antes 585 kB. Vendors y módulos se descargan por separado.
+- `npm audit`: **0 vulnerabilidades reportadas**. CI ejecuta sintaxis, pruebas, build y audit.
 
-## 🚀 Cómo Realizar el Push y Desplegar Cambios en la App
+La conexión restringida, CRON_SECRET y SUPABASE_URL están configurados como secretos en Vercel para producción y previews. GitHub está integrado: main publica en https://fluxo-delta.vercel.app. Verificar READY y el commit desplegado después de cada push. El bot requiere completar el vínculo numérico con su usuario.
 
-Cada vez que se realiza un cambio en el código, el despliegue a producción en **Vercel** es 100% automático al empujar a la rama `main` de GitHub:
+## Documentación
 
-```bash
-# 1. Verificar que compila sin errores
-npm run build
+- [Documentación maestra](documentacion_maestra_fluxo.md): producto, arquitectura, correcciones, evidencia, operación y auditoría original.
+- [Documentación anterior](DOCUMENTACION_SISTEMA.md): contexto histórico; contrastar con el código y la documentación maestra.
+- [Manual de usuario](manual_de_usuario.md).
 
-# 2. Agregar todos los archivos modificados
-git add -A
+## Arquitectura
 
-# 3. Commitear con mensaje claro
-git commit -m "fix(modulo): descripcion de la mejora"
+| Capa | Implementación |
+| --- | --- |
+| Frontend | SPA ES Modules, Vite 7, Chart.js y DOMPurify |
+| Backend | Función Node.js de Vercel, router `api/index.js` |
+| Identidad y datos | Supabase Auth/PostgreSQL; JWT+RLS para lecturas |
+| Escrituras | Pooler PostgreSQL, rol limitado, transacción y claims del usuario |
+| Integraciones | Gemini, Telegram y proveedores externos de precios |
 
-# 4. Pushear a GitHub (dispara el deploy automatico en Vercel)
-git push origin main
-```
-> [!TIP]
-> Tras ejecutar `git push origin main`, Vercel detecta el commit y finaliza el despliegue en **30 a 50 segundos**. Para verlo reflejado en tu navegador, haz un **Hard Refresh** (**Ctrl + F5** en Windows o **Cmd + Shift + R** en Mac). Para la guía exhaustiva y detalle de módulos, consulta [DOCUMENTACION_SISTEMA.md](DOCUMENTACION_SISTEMA.md).
+Las lecturas usan mayormente POST por compatibilidad con la API histórica. Las operaciones contables reciben `Idempotency-Key`; la misma clave y payload devuelven el resultado confirmado, y un payload distinto produce 409.
 
----
+## Desarrollo y comprobaciones
 
-## 💻 Cómo Continuar el Proyecto desde Otra PC
+Node.js **24.x** y npm:
 
-Dado que el código fuente y el historial de cambios se encuentran sincronizados en el repositorio de GitHub ([github.com/gnpozzo/fluxo](https://github.com/gnpozzo/fluxo.git)), **no necesitas copiar gigabytes de carpetas temporales ni `node_modules`**.
-
-### Paso 1: Clonar o Descargar el Repositorio
-En la nueva PC, abre una terminal (PowerShell, Bash o Git Bash) y ejecuta:
-```bash
-git clone https://github.com/gnpozzo/fluxo.git
-cd fluxo
-```
-*(Alternativamente, si copias la carpeta `C:\Users\gpozzo\node.js\Fluxo`, asegúrate de **omitir la carpeta `node_modules`** para que la transferencia sea instantánea).*
-
-### Paso 2: Crear el Archivo de Variables de Entorno (`.env`)
-Por razones de seguridad estricta, los archivos `.env` y `.env.service` **están ignorados por Git** y nunca se suben a la nube. **Debes copiarlos manualmente desde la PC anterior** o crearlos en la raíz del proyecto en la nueva PC con los siguientes valores:
-
-**Archivo `.env`:**
-```ini
-SUPABASE_URL=https://ltmpajstmrcmxezpfusn.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0bXBhanN0bXJjbXhlenBmdXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NDIxODQsImV4cCI6MjA4OTUxODE4NH0.5OijGzY6bj2pW_JXr0O4ztvYaN_6wiuzj9IXrbnkpOk
-SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key_aqui
-GEMINI_API_KEY=tu_gemini_api_key_aqui
-TELEGRAM_BOT_TOKEN=tu_telegram_bot_token_aqui
-TELEGRAM_WEBHOOK_SECRET=tu_webhook_secret_aqui
-```
-
-### Paso 3: Instalar Dependencias
-Asegúrate de tener instalado **Node.js 20+**. Luego ejecuta:
-```bash
-npm install
-```
-
-### Paso 4: Ejecutar en Entorno Local
-Para iniciar el servidor de desarrollo de Vite:
-```bash
+```powershell
+npm ci
+Copy-Item .env.example .env
+# Completar las variables locales.
 npm run dev
 ```
-La aplicación web estará disponible de inmediato en `http://localhost:5173`.
 
-Para verificar la compilación de producción:
-```bash
+Vite sirve frontend y `/api/*` en `http://localhost:3000`. Carga `.env`, `.env.service` y `.env.db` para el servidor; solo `VITE_` puede exponerse al frontend. No usar ese prefijo para secretos.
+
+```powershell
+npm run check
+npm test
 npm run build
+npm audit
+npm run preview
 ```
 
----
+`preview` sirve únicamente assets compilados. Para la prueba de navegador con API simulada, después del build:
 
-## 🤖 Cómo Pasa el Contexto a Antigravity (IA) en la Nueva PC
-
-Cuando abras este proyecto con **Antigravity** (o cualquier asistente de desarrollo asistido) en otra PC:
-
-1. **Memoria del Agente**:
-   La memoria de chat de sesiones anteriores reside localmente en la máquina de origen (`C:\Users\<usuario>\.gemini\antigravity`). En una nueva PC, Antigravity inicia una sesión nueva.
-2. **Cómo recupera el 100% del contexto**:
-   Antigravity inspecciona la estructura del repositorio al iniciar. Al leer este `README.md`, el archivo `manual_de_usuario.md` y el historial de commits recientes (`git log`), **el agente comprende inmediatamente todo el modelo de datos, las decisiones de diseño tomadas, las reglas de negocio y el estado actual del código**, exactamente igual a como si hubiera estado en la conversación previa.
-3. **Prompt de inicio recomendado para la nueva PC**:
-   Cuando abras la conversación en la nueva máquina, simplemente puedes escribirle al asistente:
-   > *"Hola, estoy continuando el proyecto Fluxo desde esta máquina. Por favor lee el README.md y el historial de git para situarte en el contexto y estado actual."*
-
----
-
-## 🏛️ Arquitectura del Sistema
-
-Fluxo opera bajo una arquitectura desacoplada de alto rendimiento:
-
-```
-[ Frontend: SPA Vanilla JS + Vite + Chart.js ]
-      │                                   ▲
-      ▼ Fetch / REST                      │ Webhook Updates
-[ Vercel Edge Serverless Functions ]  [ Telegram Bot ]
- (api_controllers / api_lib)              │ (Gemini 3.8 Flash AI)
-      │                                   │
-      ▼ Client SDK / RLS                  ▼
-   [ Supabase PostgreSQL 15 (Auth + Data + Sessions) ]
+```powershell
+npm run test:browser
 ```
 
-1. **Frontend (SPA Modular)**:
-   - Construido en **Vanilla JavaScript ES Modules**, sin frameworks pesados, garantizando tiempos de carga inferiores a 300 ms.
-   - Componentes reactivos nativos (`DataTable`, `KpiCard`, `Modal`, `Toast`, `Store`).
-   - Visualización analítica con **Chart.js**: Anillos Donut modernos (`cutout: 72%`) y series temporales agrupadas.
-   - Estilizado con CSS3 Fintech (variables de diseño, modo oscuro, tokens de espaciado y tipografía Inter).
-2. **Backend Serverless (Vercel Node.js Functions)**:
-   - Ubicado en `api_controllers/` y enrutado dinámicamente mediante `api/index.js` y `vercel.json`.
-   - Conexión a base de datos centralizada y autenticada en `api_lib/supabase.js` y `api_lib/auth.js`.
-3. **Base de Datos (Supabase PostgreSQL)**:
-   - Esquema relacional con políticas RLS (*Row Level Security*) para aislamiento multi-tenant.
-   - Tablas clave: `cuentas_principales`, `categorias`, `movimientos`, `tarjetas`, `consumos_tc`, `cta_corriente_usuarios`, `ahorro_subcuentas`, `inversiones_movimientos`, `recordatorios`, `bot_sessions`, `logs`.
-4. **Inteligencia Artificial & Bot de Telegram**:
-   - Webhook serverless en `api_controllers/telegramWebhook.js`.
-   - Motor de lenguaje natural con **Google Gemini** para clasificación de intenciones, extracción de entidades y asesoramiento financiero cuantitativo.
-   - Historial de diálogo multi-turn persistente en la tabla `bot_sessions`.
+Requiere Chrome/Edge local o `BROWSER_PATH`. Las capturas quedan en `.audit.local/`, ignorado por Git.
 
----
+La verificación PostgreSQL requiere un token administrativo en `.env.supabase`, como `SUPABASE_ACCESS_TOKEN=...`, y el esquema migrado:
 
-## 📂 Estructura de Directorios
-
-```plaintext
-Fluxo/
-├── api/                           # Punto de entrada serverless para Vercel
-│   └── index.js
-├── api_controllers/               # Controladores de backend Node.js (Microservicios)
-│   ├── getDashboardData.js        # KPIs, lista de movimientos y serie histórica de 6 meses
-│   ├── getConsumosTC.js           # Consulta y acotamiento estricto de consumos de tarjetas
-│   ├── togglePago.js              # Marcación de pagos saldados y liquidación de resúmenes
-│   ├── telegramWebhook.js         # FluxoBot: procesamiento de mensajes, PDF y asesoramiento Gemini
-│   └── ...                        # ABM de cuentas, categorías, ahorros, inversiones y clearing
-├── api_lib/                       # Librerías auxiliares compartidas (Supabase, Auth)
-├── src/                           # Código fuente del Frontend
-│   ├── index.html                 # Shell de la SPA
-│   ├── app.js                     # Inicializador, enrutador y Store reactivo global
-│   ├── modules/                   # Módulos de vista independientes
-│   │   ├── BaseModule.js          # Clase base con ciclo de vida (init, cargar, render)
-│   │   ├── MovimientosModule.js   # Libro contable + analítica side-by-side (Dona + Evolución)
-│   │   ├── TarjetasModule.js      # Bento cards plásticas + grilla + dona por categoría
-│   │   ├── CuentasCorrientesModule.js # Clearing de gastos compartidos
-│   │   ├── AhorroModule.js        # Bóvedas / Chanchitos ARS y USD
-│   │   ├── InversionesModule.js   # Portfolio y cotizaciones bursátiles en tiempo real
-│   │   └── PresupuestoModule.js   # Planificación mensual de gastos
-│   ├── components/                # Componentes UI (DataTable, Modal, KpiCard, Toast)
-│   └── styles/
-│       └── main.css               # Sistema de diseño, layout side-by-side y componentes fintech
-├── manual_de_usuario.md           # Manual exhaustivo de todas las funciones de la app
-├── Manual_de_Usuario_Fluxo_For_Dummies.pdf # Manual imprimible ilustrado para usuarios
-├── package.json                   # Dependencias y scripts de construcción
-├── vercel.json                    # Configuración de despliegue serverless y CORS
-└── README.md                      # Esta documentación técnica y guía de desarrollo
+```powershell
+npm run test:integration
 ```
 
----
+Crea una identidad CLI temporal y fixtures dentro de una transacción que revierte al terminar, incluso ante fallos. No ejecutarla de forma automática en CI ni contra otro proyecto sin revisar `scripts/supabase-management.js`.
 
-## ⚖️ Reglas de Negocio y Criterios Contables Fundamentales
+## Variables del servidor
 
-Cualquier cambio de código o interacción con FluxoBot debe respetar estas directrices contables:
+| Variable | Uso |
+| --- | --- |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Auth y configuración pública del cliente |
+| `DATABASE_URL` | Pooler y login restringido `fluxo_runtime`; obligatorio para escrituras |
+| `SUPABASE_SERVICE_ROLE_KEY` | Sesiones del bot y recordatorios; exclusivamente servidor |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | IA; modelo opcional |
+| `FMP_API_KEY` | Búsqueda de activos cuando corresponde |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_SECRET_TOKEN` | Bot y validación del webhook |
+| `TELEGRAM_USER_LINKS` | JSON: ID numérico Telegram → UUID Supabase; sin vínculo no procesa operaciones |
+| `CRON_SECRET` | Autoriza `/api/sendReminders` con Bearer |
 
-1. **Imputación de Consumos de Tarjeta de Crédito**:
-   - Todo consumo de tarjeta de crédito se imputa contablemente al **mes de vencimiento del resumen** (no al mes en que se efectuó la compra). Esto se debe a que el pago está diferido y el impacto de flujo de caja ocurre en el vencimiento.
-2. **Liquidación de Resumen de Tarjeta (Individual vs Consolidado)**:
-   - Si se selecciona una tarjeta específica (ej. *Santander Visa*), el botón `💳 Pagar Resumen (Santander Visa)` liquida **únicamente** la deuda de esa tarjeta ($1.196.675,09 para Santander Visa en sep 2026).
-   - Si se selecciona la vista *Consolidado*, liquida en lote todas las tarjetas con deuda del período.
-   - El débito bancario por pago de resumen es un movimiento financiero de compensación; no debe duplicar los gastos en los gráficos de categorías.
-3. **Pólizas de Seguro "La Segunda"**:
-   - Si el gasto se imputa a la cuenta **Hogar** (familiar), la categoría obligatoria es **Vivienda** (póliza seguro de casa).
-   - Si se imputa a la cuenta **Personal**, la categoría obligatoria es **Transporte** (póliza seguro automotor).
-4. **Presupuesto Dinámico en Porcentajes**:
-   - **Supermercado**: Se estima como el **25%** de los ingresos totales percibidos en la cuenta.
-   - **Verdulería**: Se estima dividiendo el presupuesto de Supermercado por **5,5**.
-5. **Control de Pagos (Saldados vs Pendientes)**:
-   - Todo egreso posee un estado de pago (`pagado: true/false`). Los saldados representan erogaciones ya canceladas; los pendientes representan cuentas a pagar antes de fin de mes.
-6. **FluxoBot en Telegram (Tono y Ejecución)**:
-   - **Ultra-conciso**: Máximo 2 párrafos (menos de 90 palabras). Respuestas al grano, sin rellenos teóricos.
-   - **Veredicto primero**: Ante consultas de compra ($90.000 contado vs $120.000 en 3 cuotas), responder en la primera línea con el veredicto y respaldarlo con la tasa implícita y la liquidez/compromisos del mes objetivo (*"el mes que viene"* $\rightarrow$ octubre).
+`.env.example` contiene placeholders. Tokens de acceso a Supabase/Vercel son herramientas locales de administración, no variables públicas ni credenciales a incluir en el bundle. Todos los archivos `.env.*` reales están ignorados por Git.
 
----
+## Migraciones y despliegue
 
-## 📜 Historial Completo de Versiones y Changelog Detallado
+La migración de esta revisión está en `supabase/migrations/20261005192629_fluxo_isolation_transactions_20261005.sql`. Fue instalada mediante Supabase Management y registrada en su historial. No borra los registros financieros existentes.
 
-### [v6.2.0] — 11 de Septiembre de 2026
-#### 🤖 FluxoBot: Reingeniería de Inteligencia Artificial & Asesor Financiero
-- **Memoria Conversacional Persistente Multi-Turn**:
-  - Se eliminó el borrado accidental y prematuro de la tabla `bot_sessions` en consultas y registros.
-  - Se implementó una ventana deslizante de los últimos 12 mensajes con timeout de 4 horas.
-  - La llamada a Gemini para responder consultas ahora incluye el historial previo de conversación, eliminando la pérdida de contexto en preguntas de seguimiento.
-- **Nuevo Intent de Consulta Cuantitativa (`consejo_financiero`)**:
-  - Detección de decisiones de compra (ej: contado vs cuotas).
-  - **Inteligencia temporal**: Si el usuario pregunta por *"el mes que viene"*, el bot analiza automáticamente el mes objetivo siguiente (octubre) en lugar del mes actual (septiembre).
-  - Extracción y cotejo contra base de datos en tiempo real:
-    - Liquidez actual y balance neto acumulado.
-    - Compromisos fijos ya agendados para el mes de la compra (cuotas de tarjetas de crédito fijadas + egresos recurrentes).
-    - Cálculo matemático de la tasa de recargo implícita (ej: +33,3% total, ~10% mensual) contrastada contra tasas de referencia de mercado (~3% mensual).
-- **Protocolo de Concisión Estricta**:
-  - Respuestas limitadas a menos de 90 palabras, veredicto en la primera línea y eliminación total de introducciones o discursos teóricos.
-  - Saludos breves de una línea sin catálogos automáticos a menos que se invoque `/ayuda`.
-- **Reglas de Negocio Automatizadas**:
-  - Incorporación en el prompt de sistema del seguro "La Segunda" (Hogar $\rightarrow$ Vivienda, Personal $\rightarrow$ Transporte), presupuesto dinámico de Supermercado y Verdulería, y vencimiento de tarjetas.
+Los bootstrap SQL antiguos y `run_migration.js` están retirados y fallan explícitamente. La migración nueva presupone el esquema existente: todavía no constituye una instalación completa de una base vacía.
 
----
+El login restringido tiene una contraseña local en `.env.db`. **Antes de promover código a producción**, cargar su `DATABASE_URL` en Vercel junto con `CRON_SECRET` y las credenciales de integraciones. No usar un login administrador como runtime de la aplicación.
 
-### [v6.1.0] — 11 de Septiembre de 2026
-#### 💳 Auditoría Contable y Liquidación Exacta de Tarjetas de Crédito
-- **Acotamiento Temporal Estricto en Consumos TC**:
-  - En [`api_controllers/getConsumosTC.js`](file:///c:/Users/gpozzo/node.js/Fluxo/api_controllers/getConsumosTC.js), se corrigió una consulta sin cota inferior que traía 7 consumos históricos de 2025 al período de septiembre 2026, corrigiendo la deuda de $1.542.273,62 (38 consumos erróneos) al valor contable real de **$1.196.675,09** (31 consumos válidos para Santander Visa).
-- **Liquidación Individual vs Consolidada**:
-  - Refactorización de `pagar_resumen` en [`api_controllers/togglePago.js`](file:///c:/Users/gpozzo/node.js/Fluxo/api_controllers/togglePago.js):
-    - Al seleccionar una tarjeta individual, se liquida únicamente esa tarjeta por su monto exacto (`total_resumen_ars`).
-    - Al seleccionar consolidado, liquida todas las tarjetas activas con deuda en lote.
-- **Botón y Modal Dinámico en Frontend**:
-  - Actualización del botón de acción: `💳 Pagar Resumen (Santander Visa)` o `💳 Pagar Resumen (Consolidado)`.
-  - El modal de confirmación desglosa con exactitud el total a debitar y la cantidad de consumos afectados.
+Vercel compila `dist`, redirige `/api/*` al router y ejecuta el cron a las **09:00 UTC / 06:00 Argentina**. Confirmar estado READY, SHA desplegado, login y un flujo financiero tras publicar. Volver a un commit anterior no deshace una migración.
 
-### [v6.1.0] — 14 de Septiembre de 2026
-#### 🧠 Descubrimiento Dinámico de Gemini Flash & Arquitectura de IA Auto-Actualizable
-- **Descubrimiento Dinámico de Versiones (`api_lib/gemini.js`)**:
-  - Consulta automática a la API de Google (`/v1beta/models`) filtrando y ordenando los modelos Flash disponibles por versión numérica descendente.
-  - La aplicación siempre selecciona de forma 100% autónoma el modelo Flash más reciente disponible para la API Key, eliminando la necesidad de actualizar el código cuando Google publique nuevas versiones (ej. 3.9, 4.0, etc.).
-- **Caché en Memoria con TTL**:
-  - Almacena en memoria el listado descubierto durante 1 hora para eliminar latencia en invocaciones serverless.
-- **Cadena de Fallback Moderna (Serie 3.x Flash)**:
-  - Redundancia garantizada: `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3.0-flash`.
-  - Deprecación definitiva de series 2.x y 1.x dadas de baja por Google.
-- **Resiliencia ante Picos de Demanda y Latencia Serverless**:
-  - Reintentos optimizados y límites de ejecución estrictos para garantizar respuestas en < 3 segundos, evitando timeouts HTTP 504 en Vercel.
+## Límites documentados
 
----
+Los resúmenes aún usan totales actuales de la tarjeta; los históricos usan los consumos del período. Los días hábiles excluyen fines de semana, sin calendario de feriados. Las valuaciones sin precio/moneda/tasa confiable se muestran como no disponibles. Los timeouts de Telegram dejan entregas pendientes para conciliación; no se repiten ciegamente.
 
-### [v6.0.0] — 11 de Septiembre de 2026
-#### 📊 Rediseño Analítico Fintech Side-by-Side
-- **Arquitectura de 2 Columnas Side-by-Side**:
-  - Layout permanente: grilla de datos a la izquierda (~65%) y panel de analítica continua a la derecha (~35%) en `.analytics-side-layout`.
-- **Módulo Movimientos**:
-  - **Top Categorías**: Gráfico Donut de 72% cutout con paleta vibrante (`#06b6d4`, `#10b981`, `#3b82f6`, etc.), switch pill `[ % Gastos | % Ingresos ]` y leyenda vertical con indicadores de color, importe y porcentaje.
-  - **Evolución Mensual**: Gráfico de serie temporal de 6 meses provisto por [`api_controllers/getDashboardData.js`](file:///c:/Users/gpozzo/node.js/Fluxo/api_controllers/getDashboardData.js), con switch `[ Ingresos vs Gastos | Balance ]`.
-- **Módulo Tarjetas de Crédito**:
-  - Eliminación del botón toggle de vista y adopción del layout side-by-side continuo.
-  - El gráfico de dona se recalcula en tiempo real al alternar entre tarjetas o filtros de imputación.
-
----
-
-### [v5.2.0] — 10 de Septiembre de 2026
-#### ✅ Control de Pagos & Asistente Telegram PDF
-- **Gestor de Pagos Saldados vs Pendientes**:
-  - Marcación individual de movimientos y consumos como Saldados (`✓`) o Pendientes (`⏳`).
-  - Barra de control financiero en el encabezado de Movimientos con porcentaje de avance y montos pendientes.
-- **Importación Inteligente de Resúmenes PDF**:
-  - Asistente guiado paso a paso por Telegram para subir el resumen bancario en PDF, extraer consumos con Gemini y conciliar imputaciones.
-
----
-
-### [v5.1.0] — 09 de Septiembre de 2026
-#### ⚖️ Presupuestos Dinámicos & Normalización de UI
-- Implementación de presupuestos dinámicos calculados como porcentaje sobre los ingresos de la cuenta (25% Supermercado, Verdulería / 5.5).
-- Normalización tipográfica con la fuente Inter y resolución de lints visuales.
-
----
-
-### [v5.0.0] — Agosto / Septiembre de 2026
-#### ⚡ Migración Arquitectónica: De Google Apps Script a Supabase & Vercel
-- Reemplazo absoluto del backend de Google Apps Script por Supabase PostgreSQL 15 nativo y Edge Functions en Vercel.
-- Adopción de políticas RLS para aislamiento multi-tenant y eliminación de demoras de ejecución de hojas de cálculo.
-
----
-
-### [v4.0.0] — 2026
-#### 🌐 Módulos Avanzados Fintech
-- **Tarjetas Bento**: Visualización de tarjetas plásticas con chip, contactless, marca y cálculo de percepciones impositivas (Sellos, IVA Digital, Ganancias RG 5617, IIBB).
-- **Clearing de Gastos Compartidos (CC)**: Gestión de saldos deudores/acreedores con contactos.
-- **Chanchitos de Ahorro**: Bóvedas bimonetarias ARS/USD en bancos o brokers.
-- **Monitor Global de Inversiones**: Seguimiento en tiempo real de bonos soberanos (AL30), CEDEARs, ONs y cotizaciones de Dólar MEP, CCL y Blue.
-
----
-
-### [v3.0.0] — 2026
-#### 💵 Motor Bimonetario Global
-- Soporte para transacciones en pesos argentinos (ARS) y dólares estadounidenses (USD).
-- Conversión bimonetaria global en tiempo real mediante consumo de APIs de cambio oficial y financiero.
-
----
-
-### [v2.0.0] — 2026
-#### 🖥️ Transición a Aplicación Web (SPA)
-- Migración de planillas electrónicas a una Single Page Application moderna con diseño fintech, tabla dinámica con ordenamiento, filtrado y paginación.
-
----
-
-### [v1.0.0] — 2025
-#### 🌱 Fundación del Proyecto
-- Creación de la solución original de control financiero personal y familiar basada en Google Sheets y Google Apps Script.
+Las pruebas no equivalen a un pentest, una certificación bancaria ni una restauración de backups verificada. Consultar la documentación maestra antes de extender reglas contables o adoptar Fluxo para operación regulada.

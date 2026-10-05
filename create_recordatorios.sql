@@ -27,7 +27,7 @@ DROP POLICY IF EXISTS "Enable ALL for authenticated users" ON public.recordatori
 
 -- Create policies for access
 CREATE POLICY "Enable ALL for service role" ON public.recordatorios
-    FOR ALL USING (true) WITH CHECK (true);
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- Index for cron lookups
 CREATE INDEX IF NOT EXISTS idx_recordatorios_fecha_proxima ON public.recordatorios(fecha_proxima) WHERE activa = true;

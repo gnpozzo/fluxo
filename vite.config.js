@@ -12,7 +12,10 @@ function localApiPlugin() {
 
             if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
               const buffers = [];
+              let bytes = 0;
               for await (const chunk of req) {
+                bytes += chunk.length;
+                if (bytes > 4500000) { res.statusCode = 413; res.end(JSON.stringify({success:false,error:'Archivo demasiado grande.'})); return; }
                 buffers.push(chunk);
               }
               const rawBody = Buffer.concat(buffers).toString('utf-8');
@@ -59,18 +62,18 @@ function localApiPlugin() {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  Object.assign(process.env, env);
+  Object.assign(process.env, loadEnv('service', process.cwd(), ''), loadEnv('db', process.cwd(), ''), env);
 
   return {
     plugins: [localApiPlugin()],
-    envPrefix: ['VITE_', 'SUPABASE_'],
+    envPrefix: ['VITE_'],
     server: {
       port: 3000,
-      open: true
+      open: false
     },
     build: {
       outDir: 'dist',
-      sourcemap: true,
+      sourcemap: false,
       minify: 'esbuild',
       rollupOptions: {
         output: {

@@ -1,3 +1,5 @@
+import { botContext, botWrite, scopedBotClient } from '../api_lib/bot-context.js';
+import { getPool } from '../api_lib/transaction.js';
 import { createClient } from '@supabase/supabase-js';
 import { callGemini } from '../api_lib/gemini.js';
 import createMovimiento from './createMovimiento.js';
@@ -42,7 +44,7 @@ async function registerConsumo(supabaseKey, consumoData) {
     }
   };
 
-  await createConsumoTC(mockReq, mockRes);
+  await botWrite(createConsumoTC, consumoData, mockRes, 'createConsumoTC');
   if (responseStatus !== 200 || !responseData?.success) {
     throw new Error(responseData?.error || 'Error al guardar consumo con tarjeta.');
   }
@@ -550,9 +552,9 @@ function getWorkingDayDate(year, month, targetWorkingDay) {
   return null;
 }
 
-export default async function handler(req, res) {
+async function handleMessage(req, res) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const webhookSecret = process.env.TELEGRAM_SECRET_TOKEN;
   
   // 1. Setup endpoint (GET) to automatically configure Telegram webhook
   if (req.method === 'GET' && req.query?.setup === 'true') {
@@ -582,7 +584,7 @@ export default async function handler(req, res) {
       const telegramData = await telegramRes.json();
       return res.status(200).json({ success: true, telegram: telegramData, url: webhookUrl });
     } catch (err) {
-      return res.status(500).json({ success: false, error: err.message });
+      return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
     }
   }
 
@@ -617,12 +619,12 @@ export default async function handler(req, res) {
 
     // Authenticate Sender
     const allowedUsersStr = process.env.TELEGRAM_ALLOWED_USERS || '';
-    const allowedUsers = allowedUsersStr.split(',').map(s => s.trim().toLowerCase());
+    const allowedUsers = allowedUsersStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     
     const senderId = message.from?.id ? String(message.from.id) : '';
     const senderUsername = message.from?.username ? message.from.username.toLowerCase() : '';
     
-    const isAllowed = allowedUsers.includes(senderId) || allowedUsers.includes(senderUsername);
+    const isAllowed = !!req.user?.id;
     if (!isAllowed) {
       console.warn(`[telegramWebhook] Blocked unauthorized user: ID=${senderId}, Username=${senderUsername}`);
       await sendTelegramMessage(botToken, chatId, '⚠️ No tienes permiso para interactuar con este bot.', messageId);
@@ -639,7 +641,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: false, error: 'Configs missing' });
     }
 
-    const supabase = createClient(supabaseUrl, serviceKey);
+    const supabase = scopedBotClient(createClient(supabaseUrl, serviceKey), req.user.id);
 
     // Support canceling or restarting session explicitly
     const isResetCommand = messageText && ['cancelar', 'reiniciar', '/cancel', '/reset', '/limpiar', '/start'].includes(messageText.toLowerCase().trim());
@@ -803,9 +805,9 @@ INSTRUCCIONES DE PROCESAMIENTO:
    - Total en Dólares (total_usd)
 3. **Extraer Transacciones**: Extrae todas las compras, consumos, impuestos, percepciones o intereses del resumen. Ignora pagos o créditos (por ejemplo, "SU PAGO EN PESOS").
    - Para transacciones en cuotas, busca formatos como "C.03/09" o "Cuota 3 de 9" y extrae cuota_actual (3) y cuota_total (9).
-   - Determina la fecha de la transacción (YYYY-MM-DD). Usa el año correspondiente al cierre del resumen (2026).
+   - Determina la fecha de la transacción (YYYY-MM-DD). Conservá los años explícitos y usá el año del cierre solo para fechas sin año.
 4. **Comparar con la Base de Datos**:
-   - Compara las transacciones del resumen con los "Consumos ya registrados" para la tarjeta seleccionada en el mes de facturación (mayo 2026, dado que el cierre es 28 de Mayo de 2026).
+   - Compara las transacciones del resumen con los "Consumos ya registrados" para la tarjeta seleccionada en el mes de facturación extraído del documento.
    - **Coincidencia Exacta (exact_matches)**: Si una transacción en el resumen coincide en descripción (concepto similar), importe, cuotas y moneda con un registro en la base de datos, clasifícala como coincidencia exacta.
    - **Similares con Diferencias (similar_different)**: Si el comercio/concepto coincide pero el importe o el plan de cuotas difiere (por ejemplo, en la DB figura como simple por $80.000 pero en el resumen es cuota 9/12 por $73.721), clasifícalo aquí. Debes incluir el "db_record" completo y el "statement_record" con la información correcta.
    - **Nuevos Consumos (new_consumptions)**: Si la transacción en el resumen no tiene un registro similar en la base de datos, clasifícala como nuevo consumo.
@@ -1949,7 +1951,7 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
                    `📄 Detalle: ${payload.descripcion}\n` +
                    `📅 Fecha: ${payload.fecha}`;
                    
-      await createMovimiento(mockReq, mockRes);
+      await botWrite(createMovimiento, payload, mockRes, 'createMovimiento');
     } else if (parsedResult.tipo_registro === 'tarjeta') {
       const cardName = tarjetas.find(t => t.id_tarjeta === payload.idTarjeta)?.nombre || 'Desconocida';
       const isCuotas = payload.tipoConsumo === 'CUOTAS';
@@ -1963,7 +1965,7 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
                    `📄 Detalle: ${payload.descripcion}\n` +
                    `📅 Fecha: ${payload.fecha}`;
                    
-      await createConsumoTC(mockReq, mockRes);
+      await botWrite(createConsumoTC, payload, mockRes, 'createConsumoTC');
     } else if (parsedResult.tipo_registro === 'cc') {
       const contactName = contactos.find(u => u.id_usuario === payload.idUsuario)?.nombre || 'Desconocido';
       const catName = categorias.find(c => c.id_categoria === payload.idCategoria)?.nombre || 'Desconocida';
@@ -1977,7 +1979,7 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
                    `📄 Detalle: ${payload.descripcion}\n` +
                    `📅 Fecha: ${payload.fecha}`;
                    
-      await createConsumoCC(mockReq, mockRes);
+      await botWrite(createConsumoCC, payload, mockRes, 'createConsumoCC');
     } else if (parsedResult.tipo_registro === 'ahorro') {
       const scName = subcuentas.find(s => s.id_subcuenta === payload.idSubcuenta)?.nombre || 'Desconocida';
       const ctaName = cuentas.find(c => c.id_cuenta_principal === payload.idCuenta)?.nombre || 'Desconocida';
@@ -1990,7 +1992,7 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
                    `📄 Detalle: ${payload.descripcion || ''}\n` +
                    `📅 Fecha: ${payload.fecha}`;
                    
-      await createAhorro(mockReq, mockRes);
+      await botWrite(createAhorro, payload, mockRes, 'createAhorro');
     } else if (parsedResult.tipo_registro === 'inversion') {
       const ctaName = cuentas.find(c => c.id_cuenta_principal === payload.idCuenta)?.nombre || 'Desconocida';
       
@@ -2002,7 +2004,7 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
                    `🔄 Operación: ${payload.tipoOp === 'COMPRA' ? 'Compra' : 'Venta'}\n` +
                    `📅 Fecha: ${payload.fecha}`;
                    
-      await createInversion(mockReq, mockRes);
+      await botWrite(createInversion, payload, mockRes, 'createInversion');
     } else {
       await sendTelegramMessage(botToken, chatId, '⚠️ Tipo de registro no soportado.', messageId);
       return res.status(200).json({ success: false, error: 'Unsupported register type' });
@@ -2033,4 +2035,24 @@ ${JSON.stringify((movs || []).map(m => ({ fecha: m.fecha, desc: m.descripcion, m
     }
     return res.status(200).json({ success: false, error: err.message });
   }
+}
+
+export default async function handler(req,res) {
+  const secret=process.env.TELEGRAM_SECRET_TOKEN || process.env.TELEGRAM_WEBHOOK_SECRET;
+  if(req.method!=='POST' || !secret || req.headers['x-telegram-bot-api-secret-token']!==secret) return res.status(401).json({success:false,error:'Unauthorized'});
+  const sender=String(req.body?.message?.from?.id || '');
+  let links; try {links=JSON.parse(process.env.TELEGRAM_USER_LINKS || '{}')}catch {return res.status(503).json({success:false,error:'Telegram linking configuration invalid'});}
+  const id=links[sender];
+  if(!id || !/^[0-9a-f-]{36}$/i.test(id)) return res.status(200).json({success:false,error:'Usuario de Telegram sin vínculo con Fluxo.'});
+  const updateId=String(req.body?.update_id ?? '');
+  if(!/^\d+$/.test(updateId)) return res.status(400).json({success:false,error:'Invalid update'});
+  const pool=getPool();
+  const client=await pool.connect();
+  try {
+    const {rows}=await client.query('INSERT INTO fluxo_private.telegram_updates(update_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING update_id',[updateId,id]);
+    if(!rows.length) return res.status(200).json({success:true,message:'Duplicate update ignored'});
+  }finally {client.release();}
+  req.user={id};
+  try {return await botContext.run({user:req.user,updateId,writeIndex:0},()=>handleMessage(req,res));}
+  catch(error){console.error('[Telegram]',error.message);return res.status(500).json({success:false,error:'No se pudo procesar el mensaje.'});}
 }

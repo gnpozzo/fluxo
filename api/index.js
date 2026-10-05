@@ -1,3 +1,4 @@
+import createMovimientosBatch from '../api_controllers/createMovimientosBatch.js';
 import admin_deleteAhorroSubcuenta from '../api_controllers/admin_deleteAhorroSubcuenta.js';
 import admin_deleteCategoria from '../api_controllers/admin_deleteCategoria.js';
 import admin_deleteCtaCorrienteUsuario from '../api_controllers/admin_deleteCtaCorrienteUsuario.js';
@@ -50,18 +51,13 @@ import togglePago from '../api_controllers/togglePago.js';
 import searchTickers from '../api_controllers/searchTickers.js';
 import admin_saveUserPreferences from '../api_controllers/admin_saveUserPreferences.js';
 import { authenticateUser } from '../api_lib/auth.js';
+import { atomicRequest } from '../api_lib/transaction.js';
+import { validateFinancialInput, inputError } from '../api_lib/validation.js';
 
 
-export default async function handler(req, res) {
+async function dispatch(req, res) {
   try {
     const endpoint = req.query?.endpoint || req.url.split('?')[0].split('/').pop();
-    
-    // Public endpoints exempt from user JWT check
-    const publicEndpoints = ['getConfig', 'telegramWebhook', 'sendReminders', 'searchTickers', 'api_searchTickers'];
-    if (!publicEndpoints.includes(endpoint)) {
-      const user = await authenticateUser(req, res);
-      if (!user) return; // 401 response already handled by authenticateUser
-    }
     
     switch(endpoint) {
       case 'admin_deleteAhorroSubcuenta': return await admin_deleteAhorroSubcuenta(req, res);
@@ -83,6 +79,7 @@ export default async function handler(req, res) {
       case 'createConsumoCC': return await createConsumoCC(req, res);
       case 'createConsumoTC': return await createConsumoTC(req, res);
       case 'createInversion': return await createInversion(req, res);
+      case 'createMovimientosBatch': return await createMovimientosBatch(req,res);
       case 'createMovimiento': return await createMovimiento(req, res);
       case 'deleteAhorro': return await deleteAhorro(req, res);
       case 'deleteConsumoCC': return await deleteConsumoCC(req, res);
@@ -125,6 +122,37 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error('[API Router Error]', err);
-    return res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
+  }
+}
+
+export default async function handler(req,res) {
+  const endpoint=(req.query?.endpoint || req.url.split('?')[0].split('/').pop()).replace(/^api_/,'');
+  req.query={...req.query,endpoint};
+  try {
+    const publicEndpoints=['getConfig','telegramWebhook','sendReminders'];
+    if (!publicEndpoints.includes(endpoint) && !await authenticateUser(req,res)) return;
+    const writes=/^(create|update|delete|admin_save|admin_delete)/.test(endpoint) || endpoint==='togglePago';
+    if(writes) {
+      if(req.method!=='POST') return res.status(405).json({success:false,error:'Method Not Allowed'});
+      let body=req.body; if(typeof body==='string') { try { body=JSON.parse(body); } catch { return res.status(400).json({success:false,error:'JSON inválido.'}); } }
+      req.body=body;
+      const args=Array.isArray(body)?body:(body?.args || [body]);
+      for(const item of args) if(item && typeof item==='object') { try{validateFinancialInput(item)}catch(error){error.status ||=400; throw error;} }
+      if(/^create(Movimiento|Ahorro|ConsumoCC|ConsumoTC|Inversion)$/.test(endpoint)) {
+        const input=args[0];
+        const rows=input?.batch ? input.consumos : [input];
+        if(!Array.isArray(rows)||!rows.length) throw inputError('Faltan los datos de la operación.');
+        for(const row of rows) {
+          if(!row?.fecha || (endpoint!=='createInversion' && row.importe===undefined)) throw inputError('Fecha e importe son obligatorios.');
+        }
+      }
+      return await atomicRequest(req,res,dispatch,endpoint);
+    }
+    if(Array.isArray(req.body) && req.body.length===1 && Array.isArray(req.body[0])) req.body=req.body[0];
+    return await dispatch(req,res);
+  } catch(error) {
+    console.error('[API]',endpoint,error.message);
+    return res.status(error.status || 500).json({success:false,error:error.status ? error.message : 'No se pudo completar la operación.'});
   }
 }

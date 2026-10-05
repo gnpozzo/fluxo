@@ -1,3 +1,4 @@
+import { readAll, readInBatches } from '../api_lib/read-all.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 
@@ -30,106 +31,6 @@ export default async function handler(req, res) {
     let consumos = [];
     let error = null;
 
-    // Remediation: Self-heal any recently misdated imports from 2024-06 or purchase dates prior to 2026-09 to the statement due date 2026-09-17
-    try {
-      const recentThreshold = new Date(Date.now() - 72 * 3600 * 1000).toISOString();
-      const { data: misdatedConsumos } = await supabase
-        .from('consumos_tc')
-        .select('id_consumo_tarjeta, fecha')
-        .eq('user_id', userId)
-        .lt('fecha', '2026-09-01')
-        .gte('created_at', recentThreshold);
-
-      if (misdatedConsumos && misdatedConsumos.length > 0) {
-        for (const row of misdatedConsumos) {
-          const correctedFecha = '2026-09-17';
-          await supabase.from('consumos_tc').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta', row.id_consumo_tarjeta).eq('user_id', userId);
-          await supabase.from('movimientos').update({ fecha: correctedFecha }).eq('id_consumo_tarjeta_origen', row.id_consumo_tarjeta).eq('user_id', userId);
-        }
-      }
-
-      const { data: badTc } = await supabase
-        .from('tarjetas')
-        .select('id_tarjeta, fecha_vencimiento_actual, fecha_cierre_actual')
-        .eq('user_id', userId)
-        .lt('fecha_vencimiento_actual', '2026-09-01');
-
-      if (badTc && badTc.length > 0) {
-        for (const tc of badTc) {
-          await supabase.from('tarjetas').update({
-            fecha_vencimiento_actual: '2026-09-17',
-            fecha_cierre_actual: '2026-09-12'
-          }).eq('id_tarjeta', tc.id_tarjeta).eq('user_id', userId);
-        }
-      }
-      // Remediation 2: Strip fake cuota_total = 12 / cuota_actual = 1 mistakenly saved on recurring consumptions
-      await supabase
-        .from('consumos_tc')
-        .update({ cuota_actual: null, cuota_total: null })
-        .eq('user_id', userId)
-        .like('recur_group_id', 'REC_TC_%')
-        .not('cuota_total', 'is', null);
-
-      // Remediation 3: Self-heal duplicate October 2026 recurrent records (pre-existing projections coexisting with statement imports)
-      const { data: octConsumos } = await supabase
-        .from('consumos_tc')
-        .select('id_consumo_tarjeta, id_tarjeta, descripcion, importe, recur_group_id, created_at, fecha')
-        .eq('user_id', userId)
-        .gte('fecha', '2026-10-01')
-        .lte('fecha', '2026-10-31')
-        .order('created_at', { ascending: false });
-
-      if (octConsumos && octConsumos.length > 0) {
-        function normRecurDesc(str) {
-          if (!str) return '';
-          return String(str).toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/\b(deb\s*aut|debito\s*automatico|merpago\*|payu\*ar\*|db\.rg|cr\.rg)\b/gi, ' ')
-            .replace(/\b(s\.?a\.?|s\.?r\.?l\.?|coop|cooperativa|sociedad\s*anonima)\b/gi, ' ')
-            .replace(/\b\d{5,}\b/g, ' ')
-            .replace(/[^a-z0-9]/g, ' ')
-            .trim().replace(/\s+/g, ' ');
-        }
-
-        const toDeleteIds = [];
-        const seenConcepts = new Map();
-
-        octConsumos.forEach(row => {
-          const cName = normRecurDesc(row.descripcion);
-          const isRecurConcept = (row.recur_group_id && row.recur_group_id.startsWith('REC_TC_')) ||
-            ['litoral gas', 'epe', 'claro', 'adt', 'max', 'la segunda', 'youtube', 'mutual socios'].some(k => cName.includes(k));
-
-          if (isRecurConcept && cName.length >= 3) {
-            let key = row.id_tarjeta + '_';
-            if (cName.includes('gas')) key += 'gas';
-            else if (cName.includes('epe')) key += 'epe';
-            else if (cName.includes('claro')) key += 'claro';
-            else if (cName.includes('adt')) key += 'adt';
-            else if (cName.includes('max')) key += 'max';
-            else if (cName.includes('youtube')) key += 'youtube';
-            else if (cName.includes('mutual')) key += 'mutual';
-            else if (cName.includes('segunda') && (cName.includes('auto') || cName.includes('8758204') || cName.includes('03'))) key += 'segunda_auto';
-            else if (cName.includes('segunda') && (cName.includes('vivienda') || cName.includes('hogar') || cName.includes('1028363') || cName.includes('06'))) key += 'segunda_vivienda';
-            else if (row.recur_group_id) key += row.recur_group_id;
-            else key += cName.split(' ').slice(0, 2).join('_');
-
-            if (seenConcepts.has(key)) {
-              toDeleteIds.push(row.id_consumo_tarjeta);
-            } else {
-              seenConcepts.set(key, row);
-            }
-          }
-        });
-
-        if (toDeleteIds.length > 0) {
-          await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', toDeleteIds).eq('user_id', userId);
-          await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', toDeleteIds).eq('user_id', userId);
-        }
-      }
-    } catch (e) {
-      console.warn('[getConsumosTC Remediation]', e.message);
-    }
-
     // 1. First get all cards for this account
     const { data: tarjetas, error: tErr } = await supabase
       .from('tarjetas')
@@ -146,42 +47,10 @@ export default async function handler(req, res) {
 
     const consumosMap = new Map();
 
-    // Try RPC first for date range
-    try {
-      const rpcRes = await supabase.rpc('get_consumos_tc_list', {
-        p_id_cuenta: cuenta,
-        p_fecha_inicio: fechaInicio,
-        p_fecha_fin: fechaFin
-      });
-      if (!rpcRes.error && Array.isArray(rpcRes.data)) {
-        rpcRes.data.forEach(c => {
-          if (c.id_consumo_tarjeta) consumosMap.set(c.id_consumo_tarjeta, c);
-        });
-      }
-    } catch (e) {
-      console.warn('[getConsumosTC] RPC notice:', e.message);
+    if(tarjetaIds.length) {
+      const rows=await readAll(()=>supabase.from('consumos_tc').select('*, categorias(nombre)').in('id_tarjeta',tarjetaIds).eq('user_id',userId).gte('fecha',fechaInicio).lte('fecha',fechaFin).order('fecha').order('id_consumo_tarjeta'));
+      for(const row of rows) consumosMap.set(row.id_consumo_tarjeta,{...row,tarjeta_nombre:tarjetaMap[row.id_tarjeta]||'—',categoria_nombre:row.categorias?.nombre||'General'});
     }
-
-    // Direct query to ensure all consumptions from consumos_tc belonging to this account's cards are included
-    if (tarjetaIds.length > 0) {
-      let query = supabase.from('consumos_tc').select('*, categorias (nombre)').in('id_tarjeta', tarjetaIds).eq('user_id', userId);
-      if (fechaInicio) query = query.gte('fecha', fechaInicio);
-      if (fechaFin) query = query.lte('fecha', fechaFin);
-      const { data: dDirect, error: dirErr } = await query;
-      if (!dirErr && Array.isArray(dDirect)) {
-        dDirect.forEach(c => {
-          if (!consumosMap.has(c.id_consumo_tarjeta)) {
-            consumosMap.set(c.id_consumo_tarjeta, {
-              ...c,
-              tarjeta_nombre: tarjetaMap[c.id_tarjeta] || '—',
-              categoria_nombre: c.categorias?.nombre || 'General'
-            });
-          }
-        });
-      }
-    }
-
-
 
     consumos = Array.from(consumosMap.values());
 
@@ -199,14 +68,7 @@ export default async function handler(req, res) {
     const consumoIds = (consumos || []).map(c => c.id_consumo_tarjeta);
     let movimientos = [];
     if (consumoIds.length > 0) {
-      const { data: movsRes, error: movsErr } = await supabase
-        .from('movimientos')
-        .select('id_consumo_tarjeta_origen, id_cuenta_principal, tipo_mov')
-        .in('id_consumo_tarjeta_origen', consumoIds)
-        .eq('user_id', userId);
-      if (!movsErr) {
-        movimientos = movsRes || [];
-      }
+      movimientos=await readInBatches(consumoIds,batch=>supabase.from('movimientos').select('id_consumo_tarjeta_origen,id_cuenta_principal,tipo_mov').in('id_consumo_tarjeta_origen',batch).eq('user_id',userId).order('id_movimiento'));
     }
 
     const { data: allUserCuentas } = await supabase
@@ -258,6 +120,7 @@ export default async function handler(req, res) {
       .select('contexto')
       .eq('funcion', 'ESTADO_PAGOS')
       .eq('mensaje', userId)
+      .order('id', {ascending:false})
       .limit(1);
     const pagosMap = logRows?.[0]?.contexto || {};
 
@@ -296,6 +159,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('[API -> getConsumosTC Error]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

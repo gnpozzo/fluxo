@@ -254,11 +254,15 @@ export class DashboardModule extends BaseModule {
 
     const saldoValEl = document.getElementById('dash-saldo-val');
     const convValEl = document.getElementById('dash-conversion-val');
+    if(data.kpisPorMoneda?.USD && convValEl) {
+      const usd=data.kpisPorMoneda.USD;
+      convValEl.dataset.saldoUsd='USD '+Number(usd.resultado).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    }
     const breakdownIngresosEl = document.getElementById('dash-breakdown-ingresos');
     const breakdownEgresosEl = document.getElementById('dash-breakdown-egresos');
 
     const curr = App.Store.globalCurrency || 'ARS';
-    const rate = App.Store.exchangeRate || 1540;
+    const rate = App.Store.exchangeRate || null;
 
     if (saldoValEl) {
       saldoValEl.textContent = App.Utils.formatearMoneda(kpis.resultado);
@@ -267,12 +271,13 @@ export class DashboardModule extends BaseModule {
 
     if (convValEl) {
       if (curr === 'ARS') {
-        const usdEquiv = (kpis.resultado || 0) / (rate || 1540);
-        convValEl.textContent = `≈ US$ ${Math.abs(usdEquiv).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const usdEquiv = rate>0 ? (kpis.resultado || 0) / rate : null;
+        convValEl.textContent = usdEquiv===null?'Sin cotización':`≈ US$ ${Math.abs(usdEquiv).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       } else {
-        const arsEquiv = (kpis.resultado || 0) * (rate || 1540);
+        const arsEquiv = kpis.resultado || 0;
         convValEl.textContent = `≈ $ ${Math.abs(arsEquiv).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ARS`;
       }
+      if(convValEl.dataset.saldoUsd) convValEl.textContent+=' · Saldo nativo: '+convValEl.dataset.saldoUsd;
     }
 
     if (breakdownIngresosEl) {
@@ -1230,7 +1235,7 @@ export class DashboardModule extends BaseModule {
   #getMetaAhorro() {
     if (!this.#metaAhorro) {
       try {
-        const stored = localStorage.getItem('fluxo_meta_ahorro');
+        const stored = localStorage.getItem('fluxo_meta_ahorro:' + (App.Auth?.user?.id || 'anonymous'));
         if (stored) this.#metaAhorro = JSON.parse(stored);
       } catch (_) {}
     }
@@ -1244,7 +1249,7 @@ export class DashboardModule extends BaseModule {
   #saveMetaAhorro(meta) {
     this.#metaAhorro = meta;
     try {
-      localStorage.setItem('fluxo_meta_ahorro', JSON.stringify(meta));
+      localStorage.setItem('fluxo_meta_ahorro:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(meta));
     } catch (_) {}
     this.#updateMetaKpi();
     App.Events.emit('meta:updated', meta);
@@ -1377,7 +1382,7 @@ export class DashboardModule extends BaseModule {
   #getTopeTC() {
     if (!this.#topeTC) {
       try {
-        const stored = localStorage.getItem('fluxo_tope_tc');
+        const stored = localStorage.getItem('fluxo_tope_tc:' + (App.Auth?.user?.id || 'anonymous'));
         if (stored) this.#topeTC = JSON.parse(stored);
       } catch (_) {}
     }
@@ -1390,7 +1395,7 @@ export class DashboardModule extends BaseModule {
   #saveTopeTC(tope) {
     this.#topeTC = tope;
     try {
-      localStorage.setItem('fluxo_tope_tc', JSON.stringify(tope));
+      localStorage.setItem('fluxo_tope_tc:' + (App.Auth?.user?.id || 'anonymous'), JSON.stringify(tope));
     } catch (_) {}
     this.#updateTcLimitKpi();
     App.Events.emit('tope_tc:updated', tope);

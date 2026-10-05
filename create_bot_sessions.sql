@@ -18,6 +18,6 @@ DROP POLICY IF EXISTS "Enable ALL for service role" ON public.bot_sessions;
 
 -- Create policy to allow full access for bot webhook queries (bypassing RLS)
 CREATE POLICY "Enable ALL for service role" ON public.bot_sessions
-    FOR ALL USING (true) WITH CHECK (true);
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- END OF SCRIPT

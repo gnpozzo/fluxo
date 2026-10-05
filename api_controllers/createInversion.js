@@ -1,3 +1,5 @@
+import { holdings } from '../shared/finance.js';
+import { bookingRate } from '../api_lib/exchange.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
@@ -37,15 +39,7 @@ export default async function handler(req, res) {
     let importe_total_ars = cantidad * precio;
     
     if (moneda === 'USD') {
-      let venta = 1400;
-      try {
-        const { data: cotizData } = await supabase.from('cotizaciones_dolar').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-        if (cotizData) {
-          venta = Number(cotizData.valor || cotizData.venta || 1400) || 1400;
-        }
-      } catch (_) {
-        venta = 1400;
-      }
+      const venta = await bookingRate(supabase, operacionData);
       importe_total_ars = importe_total_ars * venta;
     }
 
@@ -87,12 +81,14 @@ export default async function handler(req, res) {
       importe_total_ars: importe_total_ars
     };
     
+    const {data:existing}=await supabase.from('inversiones_movimientos').select('*').eq('id_cuenta_principal',idCuenta).eq('user_id',userId);
+    try { holdings([...existing,invRow]); }catch(e){e.status=400;throw e;}
     const invResult = await supabase.from('inversiones_movimientos').insert(invRow);
     if (invResult.error) throw invResult.error;
     
     return res.status(200).json({ success: true, data: { id_operacion: idInversion } });
   } catch (err) {
     console.error('[API -> createInversion]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

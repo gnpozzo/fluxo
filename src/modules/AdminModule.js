@@ -49,6 +49,11 @@ export class AdminModule extends BaseModule {
     this.#modalCategoria = new App.Modal('modal-adm-cat');
     this.#modalSubcuenta = new App.Modal('modal-adm-sub');
     this.#modalUsuarioCC = new App.Modal('modal-adm-usr');
+    this.#modal.el.addEventListener('click',event=>{
+      const button=event.target.closest('[data-admin-action]');
+      const allowed=['_setDefaultCuenta','_editCuenta','_deleteCuenta','_setDefaultTarjeta','_editTarjeta','_deleteTarjeta','_editCategoria','_deleteCategoria','_setDefaultSubcuenta','_editSubcuenta','_deleteSubcuenta','_editUsuarioCC','_deleteUsuarioCC'];
+      if(button && allowed.includes(button.dataset.adminAction)) this[button.dataset.adminAction](button.dataset.adminId);
+    });
     this._bindListeners();
     App.log('AdminModule', 'init', 'Módulo admin iniciado');
   }
@@ -167,13 +172,13 @@ export class AdminModule extends BaseModule {
                     ? '<span class="badge tipo-ingreso">Activa</span>'
                     : '<span class="badge badge-neutro">Inactiva</span>'}</td>
                   <td class="text-right">
-                    <button class="btn-accion ${isDefault ? 'is-fav' : ''}" style="${isDefault ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" onclick="App.Modules.admin._setDefaultCuenta('${c.id_cuenta_principal}')" title="${isDefault ? 'Cuenta predeterminada' : 'Fijar como predeterminada'}">
+                    <button class="btn-accion ${isDefault ? 'is-fav' : ''}" style="${isDefault ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" data-admin-action="_setDefaultCuenta" data-admin-id="${App.Utils.escapeHtml(c.id_cuenta_principal)}" title="${isDefault ? 'Cuenta predeterminada' : 'Fijar como predeterminada'}">
                       ${isDefault ? '★' : '☆'}
                     </button>
-                    <button class="btn-accion" onclick="App.Modules.admin._editCuenta('${c.id_cuenta_principal}')" title="Editar">
+                    <button class="btn-accion" data-admin-action="_editCuenta" data-admin-id="${App.Utils.escapeHtml(c.id_cuenta_principal)}" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
                     </button>
-                    <button class="btn-accion btn-danger" onclick="App.Modules.admin._deleteCuenta('${c.id_cuenta_principal}')" title="Eliminar">
+                    <button class="btn-accion btn-danger" data-admin-action="_deleteCuenta" data-admin-id="${App.Utils.escapeHtml(c.id_cuenta_principal)}" title="Eliminar">
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>
@@ -222,13 +227,13 @@ export class AdminModule extends BaseModule {
                     ? '<span class="badge tipo-ingreso">Activa</span>'
                     : '<span class="badge badge-neutro">Inactiva</span>'}</td>
                   <td class="text-right">
-                    <button class="btn-accion ${isFav ? 'is-fav' : ''}" style="${isFav ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" onclick="App.Modules.admin._setDefaultTarjeta('${t.id_tarjeta}')" title="${isFav ? 'Tarjeta favorita' : 'Fijar como favorita'}">
+                    <button class="btn-accion ${isFav ? 'is-fav' : ''}" style="${isFav ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" data-admin-action="_setDefaultTarjeta" data-admin-id="${App.Utils.escapeHtml(t.id_tarjeta)}" title="${isFav ? 'Tarjeta favorita' : 'Fijar como favorita'}">
                       ${isFav ? '★' : '☆'}
                     </button>
-                    <button class="btn-accion" onclick="App.Modules.admin._editTarjeta('${t.id_tarjeta}')" title="Editar">
+                    <button class="btn-accion" data-admin-action="_editTarjeta" data-admin-id="${App.Utils.escapeHtml(t.id_tarjeta)}" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
                     </button>
-                    <button class="btn-accion btn-danger" onclick="App.Modules.admin._deleteTarjeta('${t.id_tarjeta}')" title="Eliminar">
+                    <button class="btn-accion btn-danger" data-admin-action="_deleteTarjeta" data-admin-id="${App.Utils.escapeHtml(t.id_tarjeta)}" title="Eliminar">
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>
@@ -290,10 +295,10 @@ export class AdminModule extends BaseModule {
             <td><span class="tipo-mov tipo-${c.tipo_mov?.toLowerCase()}">${App.Utils.escapeHtml(c.tipo_mov)}</span></td>
             <td>${c.activa ? '✓' : '—'}</td>
             <td class="text-right">
-              <button class="btn-accion" onclick="App.Modules.admin._editCategoria('${c.id_categoria}')" title="Editar">
+              <button class="btn-accion" data-admin-action="_editCategoria" data-admin-id="${App.Utils.escapeHtml(c.id_categoria)}" title="Editar">
                 ${App.Icons.get('edit', 'icon-sm')}
               </button>
-              <button class="btn-accion btn-danger" onclick="App.Modules.admin._deleteCategoria('${c.id_categoria}')" title="Eliminar">
+              <button class="btn-accion btn-danger" data-admin-action="_deleteCategoria" data-admin-id="${App.Utils.escapeHtml(c.id_categoria)}" title="Eliminar">
                 ${App.Icons.get('delete', 'icon-sm')}
               </button>
             </td>
@@ -356,13 +361,13 @@ export class AdminModule extends BaseModule {
                   <td>${App.Utils.escapeHtml(cuentaNombre)}</td>
                   <td>${App.Utils.escapeHtml(s.moneda || 'ARS')}</td>
                   <td class="text-right">
-                    <button class="btn-accion ${isFav ? 'is-fav' : ''}" style="${isFav ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" onclick="App.Modules.admin._setDefaultSubcuenta('${s.id_subcuenta}')" title="${isFav ? 'Alcancía favorita' : 'Fijar como favorita'}">
+                    <button class="btn-accion ${isFav ? 'is-fav' : ''}" style="${isFav ? 'color:#eab308;font-size:1.15rem;' : 'color:var(--texto-3);font-size:1.15rem;'}" data-admin-action="_setDefaultSubcuenta" data-admin-id="${App.Utils.escapeHtml(s.id_subcuenta)}" title="${isFav ? 'Alcancía favorita' : 'Fijar como favorita'}">
                       ${isFav ? '★' : '☆'}
                     </button>
-                    <button class="btn-accion" onclick="App.Modules.admin._editSubcuenta('${s.id_subcuenta}')" title="Editar">
+                    <button class="btn-accion" data-admin-action="_editSubcuenta" data-admin-id="${App.Utils.escapeHtml(s.id_subcuenta)}" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
                     </button>
-                    <button class="btn-accion btn-danger" onclick="App.Modules.admin._deleteSubcuenta('${s.id_subcuenta}')" title="Eliminar">
+                    <button class="btn-accion btn-danger" data-admin-action="_deleteSubcuenta" data-admin-id="${App.Utils.escapeHtml(s.id_subcuenta)}" title="Eliminar">
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>
@@ -405,10 +410,10 @@ export class AdminModule extends BaseModule {
                   <td>${App.Utils.escapeHtml(u.nombre)}${u.es_yo ? ' <strong style="color:var(--primary)">(Yo)</strong>' : ''}</td>
                   <td>${App.Utils.escapeHtml(cuentaNombre)}</td>
                   <td class="text-right">
-                    <button class="btn-accion" onclick="App.Modules.admin._editUsuarioCC('${u.id_usuario}')" title="Editar">
+                    <button class="btn-accion" data-admin-action="_editUsuarioCC" data-admin-id="${App.Utils.escapeHtml(u.id_usuario)}" title="Editar">
                       ${App.Icons.get('edit', 'icon-sm')}
                     </button>
-                    <button class="btn-accion btn-danger" onclick="App.Modules.admin._deleteUsuarioCC('${u.id_usuario}')" title="Eliminar">
+                    <button class="btn-accion btn-danger" data-admin-action="_deleteUsuarioCC" data-admin-id="${App.Utils.escapeHtml(u.id_usuario)}" title="Eliminar">
                       ${App.Icons.get('delete', 'icon-sm')}
                     </button>
                   </td>

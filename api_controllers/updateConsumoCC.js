@@ -1,3 +1,4 @@
+import { addMonthsSafe, money } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 import crypto from 'crypto';
@@ -7,11 +8,7 @@ import crypto from 'crypto';
 // Pero como es un serverless function, simplemente importaremos deleteConsumoCC.js 
 // o haremos las queries directamente. Por simplicidad, haré las queries.
 
-function addMonthsSafe(date, months) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
-}
+
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
@@ -136,6 +133,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: {} });
   } catch (err) {
     console.error('[API -> updateConsumoCC]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

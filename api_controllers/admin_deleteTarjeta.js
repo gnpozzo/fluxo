@@ -33,6 +33,6 @@ export default async function handler(req, res) {
         error: 'No puedes eliminar esta tarjeta porque tiene consumos registrados asociados. Debes eliminarlos primero.'
       });
     }
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

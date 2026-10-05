@@ -53,82 +53,6 @@ export default async function handler(req, res) {
     let subcuentas = subcuentasRes.data || [];
     let usuariosCc = usuariosCcRes.data || [];
 
-    // Auto-provision default environment for this user if no account exists yet
-    if (cuentas.length === 0) {
-      const insertCuenta = await supabase.from('cuentas_principales').insert([{
-        nombre: 'Personal',
-        moneda_principal: 'ARS',
-        es_predeterminada: true,
-        activa: true,
-        user_id: userId,
-        modulo_tarjetas_activo: true,
-        modulo_cc_activo: true,
-        modulo_ahorro_activo: true,
-        modulo_inversiones_activo: true
-      }]).select();
-
-      if (!insertCuenta.error && insertCuenta.data?.length > 0) {
-        cuentas = insertCuenta.data;
-        const newAccountId = cuentas[0].id_cuenta_principal;
-
-        const userName = req.user.user_metadata?.full_name || req.user.email?.split('@')[0] || 'Yo (Principal)';
-        const insertCc = await supabase.from('cta_corriente_usuarios').insert([{
-          nombre: userName,
-          es_yo: true,
-          id_cuenta_principal: newAccountId,
-          user_id: userId
-        }]).select();
-        if (insertCc.data) usuariosCc = insertCc.data;
-
-        const insertSub = await supabase.from('ahorro_subcuentas').insert([
-          { id_cuenta_principal: newAccountId, nombre: 'Fondo de Emergencia', user_id: userId },
-          { id_cuenta_principal: newAccountId, nombre: 'Ahorro General', user_id: userId }
-        ]).select();
-        if (insertSub.data) subcuentas = insertSub.data;
-      }
-    }
-
-    // Auto-corrección resiliente: si existe movimiento de 'Alquiler mensual' asignado a la cuenta Personal (o no Hogar)
-    // habiendo una cuenta 'Hogar' del usuario, reasignarlo automáticamente a la cuenta 'Hogar'
-    try {
-      const cuentaHogar = cuentas.find(c => c.nombre && c.nombre.trim().toLowerCase() === 'hogar');
-      if (cuentaHogar) {
-        const { data: wrongMovs } = await supabase
-          .from('movimientos')
-          .select('id_movimiento, descripcion, id_cuenta_principal')
-          .eq('user_id', userId)
-          .neq('id_cuenta_principal', cuentaHogar.id_cuenta_principal)
-          .ilike('descripcion', '%alquiler%');
-
-        if (wrongMovs && wrongMovs.length > 0) {
-          const idsToFix = wrongMovs.map(m => m.id_movimiento);
-          await supabase
-            .from('movimientos')
-            .update({ id_cuenta_principal: cuentaHogar.id_cuenta_principal })
-            .in('id_movimiento', idsToFix)
-            .eq('user_id', userId);
-          console.log(`[Auto-Fix] Reasignados ${idsToFix.length} movimiento(s) de Alquiler a cuenta Hogar.`);
-        }
-
-        // Si provino de un consumo TC
-        const { data: wrongTc } = await supabase
-          .from('consumos_tc')
-          .select('id_consumo_tarjeta')
-          .eq('user_id', userId)
-          .ilike('descripcion', '%alquiler%');
-        if (wrongTc && wrongTc.length > 0) {
-          const tcIds = wrongTc.map(t => t.id_consumo_tarjeta);
-          await supabase
-            .from('movimientos')
-            .update({ id_cuenta_principal: cuentaHogar.id_cuenta_principal })
-            .in('id_consumo_tarjeta_origen', tcIds)
-            .eq('user_id', userId);
-        }
-      }
-    } catch (autoFixErr) {
-      console.warn('[Auto-Fix Alquiler]', autoFixErr.message);
-    }
-
     // Generate dynamic list of months (-12 to +6 months from now)
     const meses = [];
     const today = new Date();
@@ -162,6 +86,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[API -> getInitialData Error]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

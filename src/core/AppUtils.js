@@ -25,7 +25,8 @@ App.Utils = (() => {
 
     // Soporte bimonetario global
     if (App.Store && App.Store.globalCurrency === 'USD') {
-      const rate = App.Store.exchangeRate || 1;
+      const rate = App.Store.exchangeRate;
+      if(!(rate>0)) return 'Sin cotización';
       num = num / rate;
       sim = 'u$s ';
       cssClass = 'currency-converted';
@@ -54,7 +55,8 @@ App.Utils = (() => {
 
     // Soporte bimonetario global
     if (App.Store && App.Store.globalCurrency === 'ARS') {
-      const rate = App.Store.exchangeRate || 1;
+      const rate = App.Store.exchangeRate;
+      if(!(rate>0)) return 'Sin cotización';
       num = num * rate;
       sim = '$ ';
     }

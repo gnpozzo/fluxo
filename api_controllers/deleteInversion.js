@@ -1,3 +1,4 @@
+import { holdings } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 
 export default async function handler(req, res) {
@@ -15,20 +16,14 @@ export default async function handler(req, res) {
     
     if (!idOperacion) throw new Error('idOperacion requerido');
     
-    // Delete from movimientos first (FK) scoped to user_id
-    const movResult = await supabase.from('movimientos').delete().eq('id_transfer_inversion', idOperacion).eq('user_id', userId);
-    if (movResult.error) throw movResult.error;
-    
-    // Delete from inversiones_movimientos scoped to user_id
-    const invResult = await supabase.from('inversiones_movimientos').delete().eq('id_inversion_mov', idOperacion).eq('user_id', userId).select();
-    if (invResult.error) throw invResult.error;
-    if (!invResult.data || invResult.data.length === 0) {
-      return res.status(404).json({ success: false, error: 'No se encontró el movimiento de inversión para eliminar.' });
-    }
-    
+    const {data:deleted}=await supabase.from('inversiones_movimientos').delete().eq('id_inversion_mov',idOperacion).eq('user_id',userId).select();
+    if(!deleted.length) return res.status(404).json({success:false,error:'No se encontró la operación.'});
+    await supabase.from('movimientos').delete().eq('id_transfer_inversion',idOperacion).eq('user_id',userId);
+    const {data:remaining}=await supabase.from('inversiones_movimientos').select('*').eq('id_cuenta_principal',deleted[0].id_cuenta_principal).eq('user_id',userId);
+    try{holdings(remaining)}catch(e){e.status=400;throw e;}
     return res.status(200).json({ success: true, data: { id_operacion: idOperacion } });
   } catch (err) {
     console.error('[API -> deleteInversion]', err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.status ? err.message : 'No se pudo completar la operación.' });
   }
 }

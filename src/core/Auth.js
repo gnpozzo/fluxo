@@ -25,7 +25,11 @@ class AuthService {
     
     // 1. Obtener la configuración dinámica de lado del servidor y storage según 'recordar sesión'
     const rememberMe = localStorage.getItem('fluxo_remember_me') !== 'false';
-    const storageEngine = rememberMe ? window.localStorage : window.sessionStorage;
+    const storageEngine = {
+      getItem(key) { return (localStorage.getItem('fluxo_remember_me') !== 'false' ? localStorage : sessionStorage).getItem(key); },
+      setItem(key,value) { const remember=localStorage.getItem('fluxo_remember_me') !== 'false'; (remember?sessionStorage:localStorage).removeItem(key); (remember?localStorage:sessionStorage).setItem(key,value); },
+      removeItem(key) { localStorage.removeItem(key); sessionStorage.removeItem(key); }
+    };
     const clientOptions = {
       auth: {
         persistSession: true,
@@ -37,17 +41,38 @@ class AuthService {
     try {
       const res = await fetch('/api/getConfig');
       const config = await res.json();
-      const url = config.url || import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL || 'https://mock.supabase.co';
-      const anonKey = config.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || 'mock_key';
+      const url = config.url || import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = config.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!res.ok || !url || !anonKey) throw new Error('Falta configurar Supabase en el servidor.');
       
       supabase = createClient(url, anonKey, clientOptions);
     } catch (err) {
       console.error('Error fetching Supabase Config:', err);
       // Fallback a build-time estático
-      const url = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL || 'https://mock.supabase.co';
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || 'mock_key';
+      const url = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!url || !anonKey) throw new Error('No se pudo obtener la configuración de acceso.');
       supabase = createClient(url, anonKey, clientOptions);
     }
+
+    // Listener permanente en background
+    if (supabase?.auth) {
+      supabase.auth.onAuthStateChange((event, session) => {
+        const previousUser=this.user?.id;
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          this.session = session;
+          this.user = session?.user;
+        } else if (event === 'SIGNED_OUT') {
+          this.session = null;
+          this.user = null;
+        }
+        if (previousUser !== this.user?.id) {
+          window.App?.API?.invalidateAll();
+          window.App?.Gemini?.onUserChange?.();
+        }
+      });
+    }
+
 
     // 2. Extraer sesión usando SDK inicializado
     try {
@@ -96,19 +121,6 @@ class AuthService {
           return false;
         }
       }
-    }
-
-    // Listener permanente en background
-    if (supabase?.auth) {
-      supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          this.session = session;
-          this.user = session?.user;
-        } else if (event === 'SIGNED_OUT') {
-          this.session = null;
-          this.user = null;
-        }
-      });
     }
 
     return !!this.session;
@@ -160,7 +172,10 @@ class AuthService {
     if (error) throw error;
     this.session = null;
     this.user = null;
-    localStorage.removeItem('fluxo_remember_me');
+    for(const storage of [localStorage,sessionStorage]) {
+      for(const key of Object.keys(storage)) if(key.startsWith('fluxo_')) storage.removeItem(key);
+    }
+    window.App?.API?.invalidateAll?.();
   }
 
   getToken() {
