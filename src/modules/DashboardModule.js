@@ -2541,7 +2541,10 @@ export class DashboardModule extends BaseModule {
           medioPago: fd.get('medio_pago')
         };
 
-        const esSerio = !!row.recur_group_id || !!row.split_group_id;
+        const isCuotaDesc = (row.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (row.descripcion || '').match(/\((\d+)\/(\d+)\)/);
+        const esSerio = !!row.recur_group_id || !!row.split_group_id || (row.cuota_total && Number(row.cuota_total) > 1) || !!isCuotaDesc;
+        const isSplitGroup = !row.recur_group_id && !!row.split_group_id;
+
         const doUpdate = async (scope) => {
           m.setLoading(true);
           try {
@@ -2570,13 +2573,27 @@ export class DashboardModule extends BaseModule {
         if (esSerio) {
           const scopeModal = new App.Modal('modal-dash-scope');
           scopeModal.open({
-            titulo: 'Editar serie',
-            body: '<p>¿Deseas editar solo este movimiento o toda la serie?</p>',
-            confirmLabel: 'Toda la serie',
-            cancelLabel: 'Solo este',
-            onConfirm: () => { scopeModal.close(); doUpdate('SERIES'); }
+            titulo: isSplitGroup ? 'Editar distribución (Split)' : 'Editar serie',
+            body: `
+              <p>${isSplitGroup ? 'Este movimiento forma parte de una distribución entre cuentas (Split). ¿Qué deseas actualizar?' : 'Este movimiento pertenece a una serie. ¿Qué deseas actualizar?'}</p>
+              <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
+                <button type="button" class="btn btn-ghost" id="dash-edit-single">Solo este movimiento</button>
+                <button type="button" class="btn btn-primary" id="dash-edit-series">${isSplitGroup ? 'Toda la distribución (Split)' : 'Este y los futuros (Serie)'}</button>
+              </div>`,
+            confirmLabel: '',
+            cancelLabel: 'Cancelar',
+            onCancel: () => {
+              m.setLoading(false);
+            }
           });
-          scopeModal.el.querySelector('.modal-cancel').onclick = () => { scopeModal.close(); doUpdate('SINGLE'); };
+          document.getElementById('dash-edit-single')?.addEventListener('click', () => {
+            scopeModal.close();
+            doUpdate('SINGLE');
+          });
+          document.getElementById('dash-edit-series')?.addEventListener('click', () => {
+            scopeModal.close();
+            doUpdate(isSplitGroup ? 'GROUP' : 'SERIES');
+          });
         } else {
           await doUpdate('SINGLE');
         }
@@ -2585,7 +2602,10 @@ export class DashboardModule extends BaseModule {
   }
 
   async #eliminarMov(row) {
-    const esSerio = !!row.recur_group_id || !!row.split_group_id;
+    const isCuotaDesc = (row.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (row.descripcion || '').match(/\((\d+)\/(\d+)\)/);
+    const esSerio = !!row.recur_group_id || !!row.split_group_id || (row.cuota_total && Number(row.cuota_total) > 1) || !!isCuotaDesc;
+    const isSplitGroup = !row.recur_group_id && !!row.split_group_id;
+
     const doDelete = async (scope) => {
       try {
         const req = {
@@ -2606,18 +2626,39 @@ export class DashboardModule extends BaseModule {
     };
 
     if (!esSerio) {
-      if (confirm(`¿Eliminar ${row.descripcion}?`)) await doDelete('SINGLE');
+      const confirmModal = new App.Modal('modal-dash-del-single');
+      confirmModal.open({
+        titulo      : 'Confirmar eliminación',
+        body        : `<p>¿Eliminar el movimiento <strong>${App.Utils.escapeHtml(row.descripcion)}</strong>?</p>`,
+        confirmLabel: 'Eliminar',
+        danger      : true,
+        onConfirm   : async () => {
+          confirmModal.close();
+          await doDelete('SINGLE');
+        }
+      });
     } else {
       const scopeModal = new App.Modal('modal-dash-del-scope');
       scopeModal.open({
-        titulo: 'Eliminar serie',
-        body: '<p>¿Deseas eliminar solo este movimiento o toda la serie?</p>',
-        confirmLabel: 'Toda la serie',
-        cancelLabel: 'Solo este',
-        danger: true,
-        onConfirm: () => { scopeModal.close(); doDelete('SERIES'); }
+        titulo: isSplitGroup ? 'Eliminar distribución (Split)' : 'Eliminar serie',
+        body: `
+          <p>${isSplitGroup ? 'Este movimiento forma parte de una distribución entre cuentas (Split). ¿Qué deseas eliminar?' : 'Este movimiento pertenece a una serie. ¿Qué deseas eliminar?'}</p>
+          <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
+            <button type="button" class="btn btn-ghost" id="dash-del-single">Solo este movimiento</button>
+            <button type="button" class="btn btn-danger" id="dash-del-series">${isSplitGroup ? 'Toda la distribución (Split)' : 'Toda la serie'}</button>
+          </div>`,
+        confirmLabel: '',
+        cancelLabel : 'Cancelar',
+        onConfirm   : null
       });
-      scopeModal.el.querySelector('.modal-cancel').onclick = () => { scopeModal.close(); doDelete('SINGLE'); };
+      document.getElementById('dash-del-single')?.addEventListener('click', () => {
+        scopeModal.close();
+        doDelete('SINGLE');
+      });
+      document.getElementById('dash-del-series')?.addEventListener('click', () => {
+        scopeModal.close();
+        doDelete(isSplitGroup ? 'GROUP' : 'SERIES');
+      });
     }
   }
 

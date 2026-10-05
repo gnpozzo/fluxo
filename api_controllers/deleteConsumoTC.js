@@ -151,17 +151,38 @@ export default async function handler(req, res) {
         return res.status(404).json({ success: false, error: 'No se encontró el consumo de tarjeta para eliminar.' });
       }
     } else if (scope === 'SERIES') {
-      if (!request.recurGroupId || !request.fecha) throw new Error('Faltan recurGroupId o fecha');
-      
-      const { data: tcs } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
-        .eq('recur_group_id', request.recurGroupId)
-        .eq('user_id', userId)
-        .gte('fecha', request.fecha);
-        
-      if (tcs && tcs.length > 0) {
-        const ids = tcs.map(r => r.id_consumo_tarjeta);
-        await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', ids).eq('user_id', userId);
-        await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', ids).eq('user_id', userId);
+      let recurGrp = request.recurGroupId;
+      if (!recurGrp && consumoId) {
+        const { data: origTC } = await supabase.from('consumos_tc')
+          .select('recur_group_id, fecha')
+          .eq('id_consumo_tarjeta', consumoId)
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (origTC) {
+          recurGrp = origTC.recur_group_id;
+        }
+      }
+
+      if (!recurGrp) {
+        // Fallback: eliminar solo este consumo si no pertenece a una serie identificable
+        await supabase.from('movimientos').delete().eq('id_consumo_tarjeta_origen', consumoId).eq('user_id', userId);
+        const { error: delSingleErr } = await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', consumoId).eq('user_id', userId);
+        if (delSingleErr) throw delSingleErr;
+      } else {
+        const { data: tcs, error: qErr } = await supabase.from('consumos_tc').select('id_consumo_tarjeta')
+          .eq('recur_group_id', recurGrp)
+          .eq('user_id', userId);
+          
+        if (qErr) throw qErr;
+
+        if (tcs && tcs.length > 0) {
+          const ids = tcs.map(r => r.id_consumo_tarjeta);
+          for (let i = 0; i < ids.length; i += 200) {
+            const chunk = ids.slice(i, i + 200);
+            await supabase.from('movimientos').delete().in('id_consumo_tarjeta_origen', chunk).eq('user_id', userId);
+            await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', chunk).eq('user_id', userId);
+          }
+        }
       }
     } else {
       throw new Error('Scope inválido');

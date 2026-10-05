@@ -743,19 +743,6 @@ export class TarjetasModule extends BaseModule {
            <label>Mi porcentaje asumido (%)</label>
            <input class="input" type="number" name="compartir_porcentaje" min="1" max="99" value="50">
         </div>` : ''}
-
-        ${data && (data.recur_group_id || tipoConsumo === 'CUOTAS' || tipoConsumo === 'RECURRENTE') ? `
-        <div class="form-group full-width" style="background:var(--bg-2);padding:10px 14px;border-radius:var(--radius-md);margin-top:6px;border:1px solid var(--borde-1);">
-          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:6px;color:var(--texto-1)">Alcance de la modificación</label>
-          <div style="display:flex;gap:16px;font-size:0.85rem;">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="radio" name="update_scope" value="SERIES" checked> A esta y cuotas/meses futuros
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="radio" name="update_scope" value="SINGLE"> Solo a este mes
-            </label>
-          </div>
-        </div>` : ''}
       </form>
     `;
   }
@@ -900,23 +887,68 @@ export class TarjetasModule extends BaseModule {
         }
         await this._handleCreate(payload, modal);
       } else {
-        const reqScope = d.update_scope || (this.#editData.recur_group_id ? 'SERIES' : 'SINGLE');
-        const req = {
-          data    : payload,
-          original: {
-            consumoId   : this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta,
-            recurGroupId: this.#editData.recur_group_id || null,
-            fecha       : App.Utils.toInputDate(this.#editData.fecha?.value || this.#editData.fecha),
-            moneda      : d.moneda || this.#editData.moneda || 'ARS'
-          },
-          scope: reqScope
+        const editData = this.#editData;
+        const isCuotaDesc = (editData.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (editData.descripcion || '').match(/\((\d+)\/(\d+)\)/);
+        const esSerie = !!editData.recur_group_id ||
+                        editData.tipo_consumo === 'CUOTAS' ||
+                        editData.tipo_consumo === 'RECURRENTE' ||
+                        (Number(editData.cuota_total) > 1) ||
+                        !!isCuotaDesc;
+
+        const editId = editData.id_consumo_tc || editData.id_consumo_tarjeta;
+        const doUpdate = async (scope) => {
+          modal.setLoading(true);
+          try {
+            const req = {
+              data    : payload,
+              original: {
+                consumoId   : editId,
+                recurGroupId: editData.recur_group_id || null,
+                fecha       : App.Utils.toInputDate(editData.fecha?.value || editData.fecha),
+                moneda      : d.moneda || editData.moneda || 'ARS'
+              },
+              scope: scope
+            };
+            await this._handleUpdate(editId, req, modal, scope);
+          } catch (err) {
+            modal.setLoading(false);
+            App.Toast.error(err.message || 'Error al actualizar.');
+          } finally {
+            this.#editData = null;
+          }
         };
-        const editId = this.#editData.id_consumo_tc || this.#editData.id_consumo_tarjeta;
-        await this._handleUpdate(editId, req, modal, reqScope);
+
+        if (esSerie) {
+          modal.setLoading(false);
+          const scopeModal = new App.Modal('modal-tc-scope-edit');
+          scopeModal.open({
+            titulo      : 'Editar serie',
+            body        : `
+              <p>Este consumo pertenece a una serie (cuotas o recurrente). ¿Qué deseas actualizar?</p>
+              <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
+                <button type="button" class="btn btn-ghost" id="tc-edit-single">Solo este consumo</button>
+                <button type="button" class="btn btn-primary" id="tc-edit-series">Este y los futuros (Serie)</button>
+              </div>`,
+            confirmLabel: '',
+            cancelLabel : 'Cancelar',
+            onCancel    : () => {
+              modal.setLoading(false);
+            }
+          });
+          document.getElementById('tc-edit-single')?.addEventListener('click', () => {
+            scopeModal.close();
+            doUpdate('SINGLE');
+          });
+          document.getElementById('tc-edit-series')?.addEventListener('click', () => {
+            scopeModal.close();
+            doUpdate('SERIES');
+          });
+        } else {
+          await doUpdate('SINGLE');
+        }
       }
     } catch (_) {
       modal.setLoading(false);
-    } finally {
       this.#editData = null;
     }
   }
@@ -928,21 +960,106 @@ export class TarjetasModule extends BaseModule {
       page: this.#table?.page || 1,
       rowId: null
     };
-    const confirmModal = new App.Modal('modal-tc-del-confirm');
-    confirmModal.open({
-      titulo      : 'Eliminar consumo',
-      body        : `<p>¿Eliminar <strong>${App.Utils.escapeHtml(row.descripcion)}</strong>?</p>`,
-      confirmLabel: 'Eliminar',
-      danger      : true,
-      onConfirm   : async () => {
-        try {
-          const id = row.id_consumo_tc || row.id_consumo_tarjeta || row.id || row.id_consumo;
-          await this._handleDelete(id);
-        } catch (_) {} finally {
-          confirmModal.close();
-        }
+
+    const isCuotaDesc = (row.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (row.descripcion || '').match(/\((\d+)\/(\d+)\)/);
+    const esSerie = !!row.recur_group_id ||
+                    row.tipo_consumo === 'CUOTAS' ||
+                    row.tipo_consumo === 'RECURRENTE' ||
+                    (Number(row.cuota_total) > 1) ||
+                    !!isCuotaDesc;
+
+    const id = row.id_consumo_tc || row.id_consumo_tarjeta || row.id || row.id_consumo;
+
+    const doDelete = async (scope) => {
+      try {
+        const req = {
+          consumoId   : id,
+          recurGroupId: row.recur_group_id || null,
+          fecha       : App.Utils.toInputDate(row.fecha?.value || row.fecha),
+          scope
+        };
+        await this._handleDeleteTC(id, scope, req, row);
+      } catch (err) {
+        App.Toast.error(err.message || 'Error al eliminar el consumo.');
       }
-    });
+    };
+
+    if (!esSerie) {
+      const confirmModal = new App.Modal('modal-tc-del-confirm');
+      confirmModal.open({
+        titulo      : 'Confirmar eliminación',
+        body        : `<p>¿Eliminar el consumo <strong>${App.Utils.escapeHtml(row.descripcion)}</strong>?</p>`,
+        confirmLabel: 'Eliminar',
+        danger      : true,
+        onConfirm   : async () => {
+          confirmModal.close();
+          await doDelete('SINGLE');
+        }
+      });
+    } else {
+      const confirmModal = new App.Modal('modal-tc-scope-delete');
+      confirmModal.open({
+        titulo      : 'Eliminar serie',
+        body        : `
+          <p>Este consumo pertenece a una serie. ¿Qué deseas eliminar?</p>
+          <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
+            <button type="button" class="btn btn-ghost" id="tc-del-single">Solo este consumo</button>
+            <button type="button" class="btn btn-danger" id="tc-del-series">Toda la serie</button>
+          </div>`,
+        confirmLabel: '',
+        cancelLabel : 'Cancelar',
+        onConfirm   : null
+      });
+
+      document.getElementById('tc-del-single')?.addEventListener('click', () => {
+        confirmModal.close();
+        doDelete('SINGLE');
+      });
+      document.getElementById('tc-del-series')?.addEventListener('click', () => {
+        confirmModal.close();
+        doDelete('SERIES');
+      });
+    }
+  }
+
+  async _handleDeleteTC(id, scope = 'SINGLE', req = null, row = null) {
+    if (!this._deleteEndpoint) return;
+    try {
+      const scrollEl = document.querySelector('.main-content');
+      const savedScroll = {
+        mainTop: scrollEl ? scrollEl.scrollTop : 0,
+        winY: window.scrollY || document.documentElement.scrollTop || 0
+      };
+
+      if (typeof this.preserveViewOnUpdate === 'function') {
+        this.preserveViewOnUpdate(id);
+      }
+
+      const payload = req || {
+        consumoId   : id,
+        recurGroupId: row?.recur_group_id || null,
+        fecha       : App.Utils.toInputDate(row?.fecha?.value || row?.fecha),
+        scope
+      };
+
+      await App.API.call(this._deleteEndpoint, payload);
+      App.Toast.success('Consumo eliminado.');
+      App.API.invalidateAll();
+      if (App.Events) App.Events.emit('data:changed');
+      this.destruir();
+      await this.cargar();
+
+      const restoreScroll = () => {
+        if (scrollEl && savedScroll.mainTop > 0) scrollEl.scrollTop = savedScroll.mainTop;
+        if (savedScroll.winY > 0) window.scrollTo(0, savedScroll.winY);
+      };
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+      setTimeout(restoreScroll, 50);
+      setTimeout(restoreScroll, 150);
+    } catch (err) {
+      App.Toast.error(err.message || 'Error al eliminar el consumo.');
+    }
   }
 
   // --- SECCIÓN 6: LISTENERS ---

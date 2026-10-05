@@ -1067,7 +1067,8 @@ export class MovimientosModule extends BaseModule {
           App.Store.setCuenta(payload.idCuenta);
         }
       } else {
-        const esSerio = !!this.#editData.recur_group_id || !!this.#editData.split_group_id;
+        const isCuotaDesc = (this.#editData.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (this.#editData.descripcion || '').match(/\((\d+)\/(\d+)\)/);
+        const esSerio = !!this.#editData.recur_group_id || !!this.#editData.split_group_id || (this.#editData.cuota_total && Number(this.#editData.cuota_total) > 1) || !!isCuotaDesc;
         
         const doUpdate = async (scope) => {
           const req = {
@@ -1094,12 +1095,12 @@ export class MovimientosModule extends BaseModule {
           const isSplitGroup = !this.#editData.recur_group_id && !!this.#editData.split_group_id;
           const confirmModal = new App.Modal('modal-mov-scope-edit');
           confirmModal.open({
-            titulo      : isSplitGroup ? 'Editar distribución (Split)' : 'Editar movimiento de serie',
+            titulo      : isSplitGroup ? 'Editar distribución (Split)' : 'Editar serie',
             body        : `
               <p>${isSplitGroup ? 'Este movimiento forma parte de una distribución entre cuentas (Split). ¿Qué deseas actualizar?' : 'Este movimiento pertenece a una serie. ¿Qué deseas actualizar?'}</p>
               <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
-                <button class="btn btn-ghost" id="edit-single">Solo este movimiento</button>
-                <button class="btn btn-primary" id="edit-series">${isSplitGroup ? 'Toda la distribución (Split)' : 'Este y los futuros (Serie)'}</button>
+                <button type="button" class="btn btn-ghost" id="edit-single">Solo este movimiento</button>
+                <button type="button" class="btn btn-primary" id="edit-series">${isSplitGroup ? 'Toda la distribución (Split)' : 'Este y los futuros (Serie)'}</button>
               </div>`,
             confirmLabel: '',
             cancelLabel : 'Cancelar'
@@ -1131,7 +1132,8 @@ export class MovimientosModule extends BaseModule {
       page: this.#table?.page || 1,
       rowId: null
     };
-    const esSerio = !!row.recur_group_id || !!row.split_group_id;
+    const isCuotaDesc = (row.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (row.descripcion || '').match(/\((\d+)\/(\d+)\)/);
+    const esSerio = !!row.recur_group_id || !!row.split_group_id || (row.cuota_total && Number(row.cuota_total) > 1) || !!isCuotaDesc;
     if (!esSerio) {
       const confirmModal = new App.Modal('modal-mov-confirm-delete');
       confirmModal.open({
@@ -1145,14 +1147,15 @@ export class MovimientosModule extends BaseModule {
         }
       });
     } else {
+      const isSplitGroup = !row.recur_group_id && !!row.split_group_id;
       const confirmModal = new App.Modal('modal-mov-scope-delete');
       confirmModal.open({
-        titulo      : 'Eliminar movimiento de serie',
+        titulo      : isSplitGroup ? 'Eliminar distribución (Split)' : 'Eliminar serie',
         body        : `
-          <p>Este movimiento pertenece a una serie. ¿Qué deseas hacer?</p>
+          <p>${isSplitGroup ? 'Este movimiento forma parte de una distribución entre cuentas (Split). ¿Qué deseas eliminar?' : 'Este movimiento pertenece a una serie. ¿Qué deseas eliminar?'}</p>
           <div style="display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)">
-            <button class="btn btn-ghost" id="del-single">Solo este movimiento</button>
-            <button class="btn btn-danger" id="del-series">Toda la serie</button>
+            <button type="button" class="btn btn-ghost" id="del-single">Solo este movimiento</button>
+            <button type="button" class="btn btn-danger" id="del-series">${isSplitGroup ? 'Toda la distribución (Split)' : 'Toda la serie'}</button>
           </div>`,
         confirmLabel: '',
         cancelLabel : 'Cancelar',
@@ -1165,7 +1168,7 @@ export class MovimientosModule extends BaseModule {
       };
 
       document.getElementById('del-single')?.addEventListener('click', () => doDelete('SINGLE'));
-      document.getElementById('del-series')?.addEventListener('click', () => doDelete('SERIES'));
+      document.getElementById('del-series')?.addEventListener('click', () => doDelete(isSplitGroup ? 'GROUP' : 'SERIES'));
     }
   }
 

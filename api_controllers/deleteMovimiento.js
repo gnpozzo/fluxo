@@ -48,13 +48,44 @@ export default async function handler(req, res) {
         break;
       }
       case 'SERIES': {
-        if (!request.recurGroupId || !request.fecha) throw new Error('recurGroupId y fecha requeridos');
-        const { data: seriesMovs } = await supabase.from('movimientos').select('id_consumo_tarjeta_origen').eq('recur_group_id', request.recurGroupId).gte('fecha', request.fecha).eq('user_id', userId);
-        if (seriesMovs) {
-          const tcIds = seriesMovs.filter(r => r.id_consumo_tarjeta_origen).map(r => r.id_consumo_tarjeta_origen);
-          if (tcIds.length > 0) await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', tcIds).eq('user_id', userId);
+        let recurGroupId = request.recurGroupId;
+        if (!recurGroupId && request.id) {
+          const { data: origM } = await supabase.from('movimientos')
+            .select('recur_group_id, fecha')
+            .eq('id_movimiento', request.id)
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (origM) {
+            recurGroupId = origM.recur_group_id;
+          }
         }
-        await supabase.from('movimientos').delete().eq('recur_group_id', request.recurGroupId).gte('fecha', request.fecha).eq('user_id', userId);
+
+        if (!recurGroupId) {
+          // Fallback a eliminar solo este movimiento
+          const { data: linkedTC } = await supabase.from('movimientos').select('id_consumo_tarjeta_origen').eq('id_movimiento', request.id).eq('user_id', userId).maybeSingle();
+          if (linkedTC && linkedTC.id_consumo_tarjeta_origen) {
+            await supabase.from('consumos_tc').delete().eq('id_consumo_tarjeta', linkedTC.id_consumo_tarjeta_origen).eq('user_id', userId);
+          }
+          await supabase.from('movimientos').delete().eq('id_movimiento', request.id).eq('user_id', userId);
+          break;
+        }
+
+        // Eliminar toda la serie del grupo recurrente
+        const { data: seriesMovs } = await supabase.from('movimientos')
+          .select('id_movimiento, id_consumo_tarjeta_origen')
+          .eq('recur_group_id', recurGroupId)
+          .eq('user_id', userId);
+
+        if (seriesMovs && seriesMovs.length > 0) {
+          const tcIds = seriesMovs.filter(r => r.id_consumo_tarjeta_origen).map(r => r.id_consumo_tarjeta_origen);
+          if (tcIds.length > 0) {
+            await supabase.from('consumos_tc').delete().in('id_consumo_tarjeta', tcIds).eq('user_id', userId);
+          }
+          for (let i = 0; i < seriesMovs.length; i += 200) {
+            const chunk = seriesMovs.slice(i, i + 200).map(r => r.id_movimiento);
+            await supabase.from('movimientos').delete().in('id_movimiento', chunk).eq('user_id', userId);
+          }
+        }
         break;
       }
       default:
