@@ -554,7 +554,7 @@ function getWorkingDayDate(year, month, targetWorkingDay) {
 
 async function handleMessage(req, res) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const webhookSecret = process.env.TELEGRAM_SECRET_TOKEN;
+  const webhookSecret = process.env.TELEGRAM_SECRET_TOKEN || process.env.TELEGRAM_WEBHOOK_SECRET;
   
   // 1. Setup endpoint (GET) to automatically configure Telegram webhook
   if (req.method === 'GET' && req.query?.setup === 'true') {
