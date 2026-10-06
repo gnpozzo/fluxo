@@ -160,3 +160,11 @@ Accesible desde el ícono de engranaje:
 4. **Subcuentas de Ahorro**: Gestión de bolsas del chanchito.
 5. **Contactos**: Directorio para cuentas corrientes compartidas.
 6. **Recordatorios**: Configuración de alertas automáticas para Telegram y Web.
+
+## Consistencia visual — 6.6.0, 6 de octubre de 2026
+
+Resumen, Tarjetas, Gastos compartidos, Ahorro e Inversiones comparten el mismo componente de distribución: indicadores arriba, operaciones a la izquierda y Top Categorías y evolución a la derecha. Los paneles específicos, como el carrusel de tarjetas, continúan debajo. En escritorio (más de 1200 px), el alto del listado coincide con la columna de gráficos y las operaciones tienen scroll propio. En tablet y celular el contenido recupera el flujo de página; los gráficos pasan a dos columnas o una según el ancho.
+
+Los importes de grupos, categorías y filas comparten el borde derecho; los indicadores y resúmenes usan cifras tabulares y alineación derecha. La tipografía se centraliza en Inter con respaldo del sistema, escala de 12/14/16/20/28 px para anotaciones, cuerpo, títulos, encabezados e indicadores. Los gráficos usan la misma familia y escala; se conservan los estilos de marca de los plásticos. Espaciado, radios, controles y tarjetas usan variables compartidas.
+
+Se mantienen filtros cruzados, Ctrl/Cmd+clic, estados de pago, detalle de filas y habilitación por cuenta. Pruebas de navegador cubren las cinco secciones a cuatro anchos, coherencia de fuentes, igualdad de alturas, scroll de un listado de 40 gastos y alineación de importes. Esta actualización no cambia datos ni requiere migraciones.

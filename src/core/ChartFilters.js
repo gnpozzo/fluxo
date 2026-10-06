@@ -1,3 +1,8 @@
+import Chart from 'chart.js/auto';
+import { chartFont } from './DesignSystem.js';
+Chart.defaults.font.family = chartFont.family;
+Chart.defaults.font.size = chartFont.size;
+
 export const monthKey = row => String(row.fecha?.value || row.fecha || '').slice(0, 7);
 
 // OR within a dimension, AND across dimensions. State never modifies source rows.

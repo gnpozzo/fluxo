@@ -4,7 +4,7 @@ Fluxo organiza movimientos, tarjetas, gastos compartidos, ahorro e inversiones e
 
 ## Estado de esta versión
 
-Versión **6.5.0**, revisión UX/UI y responsive del 6 de octubre de 2026, posterior a `c99402f`.
+Versión **6.6.0**, revisión UX/UI y responsive del 6 de octubre de 2026, posterior a `0fd0177`.
 
 - Corregidos aislamiento por usuario, referencias cruzadas y permisos/RPC de Supabase.
 - Escrituras web transaccionales, rollback e idempotencia; cuotas y pagos separados por moneda.
@@ -14,8 +14,8 @@ Versión **6.5.0**, revisión UX/UI y responsive del 6 de octubre de 2026, poste
 - 25 pruebas automatizadas y 28 verificaciones PostgreSQL aprobadas. Fixtures descartadas por rollback.
 - 10 comprobaciones HTTP en producción aprobadas: autenticación, alta, replay, conflicto, consulta y borrado. Cuenta QA y registros eliminados.
 - Navegador: login, siete módulos y CSP; cinco secciones a 1440, 1024, 768 y 390 px; cinco formularios móviles; monedas y cálculo por porcentaje con API simulada.
-- Build correcto; JavaScript principal **153 kB**, antes 585 kB. Vendors y módulos se descargan por separado.
-- `npm audit`: **0 vulnerabilidades reportadas**. CI configurado para sintaxis, pruebas, build y audit; los runs de GitHub estaban en cola al verificar la entrega. Esos checks locales y el build Vercel aprobaron.
+- Build correcto; JavaScript principal **156 kB**, antes 585 kB. Vendors y módulos se descargan por separado.
+- `npm audit`: **0 vulnerabilidades reportadas**. CI configurado para sintaxis, pruebas, build y audit; los checks locales y el build Vercel de la versión anterior aprobaron; verificar los runs del commit actual al publicar.
 
 La conexión restringida, CRON_SECRET y SUPABASE_URL están configurados como secretos en Vercel para producción y previews. GitHub está integrado: main publica en https://fluxo-delta.vercel.app. Verificar READY y el commit desplegado después de cada push. El bot tiene configurado el vínculo numérico del usuario; recepción y conversación básica confirmadas por las capturas aportadas.
 

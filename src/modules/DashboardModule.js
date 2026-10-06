@@ -1,3 +1,4 @@
+import { chartFont } from '../core/DesignSystem.js';
 import { operationInfo, operationBadge, paymentStatus, togglePayment } from '../core/OperationPresentation.js';
 import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
@@ -1636,7 +1637,7 @@ export class DashboardModule extends BaseModule {
               boxHeight: 8,
               usePointStyle: true,
               pointStyle: 'circle',
-              font: { size: 11, family: 'Inter, sans-serif', weight: '600' },
+              font: chartFont,
               color: '#4B5563'
             }
           },
@@ -1653,12 +1654,12 @@ export class DashboardModule extends BaseModule {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: '#9CA3AF' }
+            ticks: { font: chartFont, color: '#9CA3AF' }
           },
           y: {
             grid: { color: 'rgba(0,0,0,0.04)' },
             ticks: {
-              font: { size: 10, family: 'Inter, sans-serif' },
+              font: chartFont,
               color: '#9CA3AF',
               callback: (v) => '$ ' + (Math.abs(v) >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : (v / 1000).toFixed(0) + 'k')
             }

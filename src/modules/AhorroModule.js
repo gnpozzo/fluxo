@@ -1,3 +1,4 @@
+import { chartFont } from '../core/DesignSystem.js';
 import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 /* ============================================================
@@ -441,7 +442,7 @@ export class AhorroModule extends BaseModule {
               usePointStyle: true,
               pointStyle: 'circle',
               color: 'var(--texto-2)',
-              font: { family: 'inherit', size: 11, weight: '600' }
+              font: chartFont
             }
           },
           tooltip: {
@@ -458,13 +459,13 @@ export class AhorroModule extends BaseModule {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { color: 'var(--texto-3)', font: { size: 11 } }
+            ticks: { color: 'var(--texto-3)', font: chartFont }
           },
           y: {
             grid: { color: 'rgba(128, 128, 128, 0.1)' },
             ticks: {
               color: 'var(--texto-3)',
-              font: { size: 10 },
+              font: chartFont,
               callback: (v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v
             }
           }

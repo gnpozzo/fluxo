@@ -1,4 +1,6 @@
 // Presentation only: existing elements keep their IDs and operation listeners.
+import { mountAnalyticsLayout } from './AnalyticsLayout.js';
+import { normalizeTypography } from './DesignSystem.js';
 let fieldSequence = 0;
 const filterModals = new Map();
 
@@ -77,19 +79,10 @@ function filters(root, ids) {
 export function enhanceView(root, moduleId) {
   if (!root) return;
   root.classList.add('ux-view');
+  mountAnalyticsLayout(root, moduleId);
   if (moduleId === 'dashboard') {
     const movements = root.querySelector('#dash-widget-movimientos');
-    const categories = root.querySelector('#dash-widget-categories');
-    const evolution = root.querySelector('#dash-widget-moneyflow');
-    if (movements && categories && evolution && !movements.closest('.ux-summary-operations')) {
-      const chartsParent = evolution.parentElement;
-      const modulesParent = movements.parentElement;
-      const layout = document.createElement('div'); layout.className = 'ux-summary-operations';
-      const aside = document.createElement('div'); aside.className = 'ux-summary-charts';
-      chartsParent.before(layout);
-      layout.append(movements, aside); aside.append(categories, evolution);
-      chartsParent.remove();
-      modulesParent.classList.add('ux-summary-modules');
+    if (movements && !root.querySelector('#dash-btn-nuevo-movimiento')) {
       const create = document.createElement('button');
       create.id = 'dash-btn-nuevo-movimiento'; create.type = 'button'; create.className = 'btn btn-primary btn-sm';
       create.textContent = 'Nuevo movimiento';
@@ -117,6 +110,7 @@ export function enhanceView(root, moduleId) {
   if (localCurrency) localCurrency.hidden = true;
   keyboardButtons(root);
   labelFields(root);
+  normalizeTypography(root);
 }
 
 function keyboardButtons(root) {
@@ -135,7 +129,7 @@ export function installPresentation() {
   // Modal content is created after the module's initial build.
   const observer = new MutationObserver(records => {
     for (const record of records) for (const added of record.addedNodes) {
-      if (added.nodeType === Node.ELEMENT_NODE) { labelFields(added); keyboardButtons(added); }
+      if (added.nodeType === Node.ELEMENT_NODE) { labelFields(added); keyboardButtons(added); normalizeTypography(added); }
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });

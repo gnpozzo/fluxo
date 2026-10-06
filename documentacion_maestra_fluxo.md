@@ -1,6 +1,6 @@
 # Documentación maestra de Fluxo
 
-Actualizada el **6 de octubre de 2026**, Argentina. Versión **6.5.0**. Base de auditoría: `62007ea`. Esta edición registra las correcciones implementadas y conserva al final el diagnóstico original para trazabilidad.
+Actualizada el **6 de octubre de 2026**, Argentina. Versión **6.6.0**. Base de auditoría: `62007ea`. Esta edición registra las correcciones implementadas y conserva al final el diagnóstico original para trazabilidad.
 
 ## Estado y alcance actuales
 
@@ -557,3 +557,11 @@ Cada operación muestra Simple, Recurrente, Cuota x/y o Última cuota. shared/op
 Clic o Enter/Espacio sobre las filas abre el detalle, sin chevrons redundantes. Se preservan acciones específicas de edición y borrado. Débito, transferencia y efectivo muestran un botón Pendiente/Pagado; el clic no abre detalle y la escritura invalida la caché. TC presenta el estado de sólo lectura: pagar_resumen salda sus consumos y movimientos enlazados por id_consumo_tarjeta_origen. togglePago rechaza cambios manuales de consumos TC. No se modifican otros gastos del mismo mes/cuenta. Agrupación de TC por categorías con subtotales nativos separados ARS/USD.
 
 Verificación: 25 pruebas Node, 28 aserciones PostgreSQL con rollback incondicional, sintaxis, build y navegador con API simulada. Cobertura de pagos mixtos, lote rechazado sin cambios parciales, cuotas con descripción limpia y edición de series; navegación de cinco secciones a 1440/1024/768/390, filtros cruzados, cinco formularios móviles, detalle en cinco secciones, alternancia manual de pago y disposición de las celdas sin solapamiento. Las pruebas no envían pagos bancarios ni alteran movimientos reales.
+
+## Consistencia visual — 6.6.0, 6 de octubre de 2026
+
+Resumen, Tarjetas, Gastos compartidos, Ahorro e Inversiones comparten el mismo componente de distribución: indicadores arriba, operaciones a la izquierda y Top Categorías y evolución a la derecha. Los paneles específicos, como el carrusel de tarjetas, continúan debajo. En escritorio (más de 1200 px), el alto del listado coincide con la columna de gráficos y las operaciones tienen scroll propio. En tablet y celular el contenido recupera el flujo de página; los gráficos pasan a dos columnas o una según el ancho.
+
+Los importes de grupos, categorías y filas comparten el borde derecho; los indicadores y resúmenes usan cifras tabulares y alineación derecha. La tipografía se centraliza en Inter con respaldo del sistema, escala de 12/14/16/20/28 px para anotaciones, cuerpo, títulos, encabezados e indicadores. Los gráficos usan la misma familia y escala; se conservan los estilos de marca de los plásticos. Espaciado, radios, controles y tarjetas usan variables compartidas.
+
+Se mantienen filtros cruzados, Ctrl/Cmd+clic, estados de pago, detalle de filas y habilitación por cuenta. Pruebas de navegador cubren las cinco secciones a cuatro anchos, coherencia de fuentes, igualdad de alturas, scroll de un listado de 40 gastos y alineación de importes. Esta actualización no cambia datos ni requiere migraciones.

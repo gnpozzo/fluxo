@@ -1,0 +1,71 @@
+/* Shared visual roles: one family and scale, with deliberate hierarchy. */
+:root {
+  --font-ui: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-caption: 12px;
+  --text-body: 14px;
+  --text-title: 16px;
+  --text-heading: 20px;
+  --text-metric: 28px;
+  --panel-gap: 20px;
+  --panel-padding: 20px;
+  --panel-radius: 16px;
+}
+body { font-family: var(--font-ui); font-size: var(--text-body); }
+.ux-view .finset-kpi-card { padding: var(--panel-padding); border-radius: var(--panel-radius); }
+.btn:not(.ux-filter-trigger) { border-radius: var(--r-full); }
+.ux-view .btn:not(.ux-filter-trigger) { min-height: 36px; }
+@media (max-width: 700px) { .ux-view .btn:not(.ux-filter-trigger), .ux-view .dh-drill-row button.btn-toggle-pago { min-height: 44px; } }
+button, input, select, textarea { font-family: var(--font-ui); font-size: var(--text-body); }
+.ux-view, .modal-body, .admin-content-area, .gemini-panel { font-size: var(--text-body); line-height: 1.5; }
+.ux-view .dh-drill-row { font-size: var(--text-body) !important; }
+.ux-view .finset-card-header > *, .ux-view .finset-card-title-wrap { min-width: 0; max-width: 100%; }
+.ux-view .finset-chart-summary { flex-wrap: wrap; gap: 8px; }
+.ux-view .tc-toolbar-row { flex-wrap: wrap !important; overflow: visible; }
+.ux-view .tc-filter-controls { min-width: 0; flex: 1 1 260px; flex-wrap: wrap !important; }
+.ux-view .tc-filter-controls .dh-search-box { flex: 1 1 120px; min-width: 0; }
+.ux-view .finset-card, .ux-view .table-card { padding: var(--panel-padding); border-radius: var(--panel-radius); border: 1px solid var(--borde); background: var(--superficie); box-shadow: none; }
+.finset-card-title, .dh-badge-title, .modal-title, .section-title { font-size: var(--text-title) !important; font-weight: 600; }
+.topbar-greeting-title, h1 { font-size: var(--text-heading); }
+.finset-card-subtitle, .dh-drilldown-summary, .dh-row-date, .finset-kpi-subtext, .fintech-legend-pct, .detail-label, .chart-filter-status { font-size: var(--text-caption) !important; }
+.ux-view .btn, .ux-view .input, .ux-view .dh-tab-btn, .fintech-pill-btn, .nav-item, .dt-table, .detail-value, .fca-title, .dh-row-desc { font-size: var(--text-body) !important; }
+.badge, .operation-badge, .dh-pill-medio, .btn-toggle-pago, .fca-count, .fca-badge-jerarquia { font-size: var(--text-caption) !important; }
+.finset-kpi-title, .kpi-label { font-size: var(--text-body) !important; font-weight: 500; }
+.finset-kpi-value, .kpi-value { font-size: var(--text-metric) !important; font-weight: 700; }
+.fca-subtotal, .dh-col-amount, .fintech-legend-amount, .fsc-value, .detail-amount { font-size: var(--text-body) !important; font-weight: 600; }
+.finset-kpi-value, .kpi-value, .fca-subtotal, .dh-col-amount, .fintech-legend-amount, .fsc-value, .detail-amount, .tc-category-heading { font-variant-numeric: tabular-nums; }
+.finset-kpi-value, .kpi-value, .dh-col-amount, .fsc-value { text-align: right; }
+
+.ux-analytics-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: var(--panel-gap); align-items: start; margin-bottom: var(--panel-gap); }
+.ux-analytics-layout > *, .ux-analytics-charts > * { min-width: 0; }
+.ux-analytics-charts { display: grid; gap: var(--panel-gap); }
+.ux-analytics-charts canvas { max-width: 100%; }
+.ux-analytics-charts .finset-categories-side-wrap { display: flex; flex-direction: column-reverse; gap: 14px; }
+.ux-analytics-charts .fintech-legend-list, .ux-analytics-charts .fintech-donut-wrapper { width: 100%; }
+.ux-analytics-charts .fintech-legend-list { max-height: 240px; overflow-y: auto; scrollbar-gutter: stable; }
+.ux-operations-card { display: flex; flex-direction: column; min-height: 0 !important; overflow: hidden; box-sizing: border-box; }
+.ux-operations-card > :not(.ux-operations-scroll) { flex-shrink: 0; }
+.ux-view .ux-operations-scroll { min-height: 0 !important; flex: 1 1 auto; max-height: none !important; overflow-y: auto !important; padding-right: 0 !important; scrollbar-gutter: stable; overscroll-behavior-y: contain; }
+.ux-operations-scroll, .ux-analytics-charts .fintech-legend-list { scrollbar-width: thin; scrollbar-color: var(--borde-fuerte) transparent; }
+.ux-operations-scroll .dh-accordions-wrap { max-height: none !important; overflow: visible !important; padding-right: 0 !important; }
+.ux-view .ux-auxiliary-panels { grid-template-columns: minmax(0, 1fr) !important; }
+.ux-auxiliary-panels .finset-modules-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+/* Totals share the rows' right edge, including nested category groups. */
+.ux-view .finset-cat-accordion .fca-header-right { padding-right: 0; }
+.ux-view .finset-cat-accordion > .fca-header { padding-right: 14px; }
+.ux-view .finset-cat-accordion .fca-body-nested .finset-cat-accordion > .fca-header { padding-right: 14px; }
+.ux-view .finset-cat-accordion > .fca-body-nested { padding-right: 0; }
+.ux-view .fca-body-nested .finset-cat-accordion { border-right: 0; }
+.ux-view .finset-cat-accordion .dh-drill-row { padding-right: 14px; }
+.tc-category-heading { padding-right: 14px; border: 1px solid transparent; }
+.dh-col-amount, .fca-subtotal, .fintech-legend-amount { white-space: nowrap; }
+
+@media (max-width: 1200px) {
+  .ux-analytics-layout { grid-template-columns: minmax(0, 1fr); }
+  .ux-analytics-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ux-view .ux-operations-scroll { overflow-y: visible !important; scrollbar-gutter: auto; }
+}
+@media (max-width: 700px) {
+  :root { --panel-padding: 16px; --panel-gap: 16px; }
+  .ux-analytics-charts, .ux-auxiliary-panels .finset-modules-stack { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,3 +1,4 @@
+import { chartFont } from '../core/DesignSystem.js';
 import { operationInfo, operationBadge, paymentStatus } from '../core/OperationPresentation.js';
 import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
@@ -1669,7 +1670,7 @@ export class MovimientosModule extends BaseModule {
               boxHeight: 8,
               usePointStyle: true,
               pointStyle: 'circle',
-              font: { size: 10, family: 'Inter, sans-serif' },
+              font: chartFont,
               color: 'var(--texto-2)'
             }
           },
@@ -1685,12 +1686,12 @@ export class MovimientosModule extends BaseModule {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { size: 10, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
+            ticks: { font: chartFont, color: 'var(--texto-3)' }
           },
           y: {
             grid: { color: 'rgba(255,255,255,0.05)', borderDash: [3, 3] },
             ticks: {
-              font: { size: 9, family: 'Inter, sans-serif' },
+              font: chartFont,
               color: 'var(--texto-3)',
               callback: (val) => {
                 if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';

@@ -118,6 +118,8 @@ try {
   if(width<=900) await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
   await page.screenshot({path:'.audit.local/ux-tarjetas-'+width+'.png',fullPage:true});
   if(width===390){
+   await page.$eval('#vista-tarjetas .ux-filter-trigger',el=>el.scrollIntoView({block:'center'}));
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
    await page.click('#vista-tarjetas .ux-filter-trigger');
    await page.waitForSelector('#modal-filtros-vista-tarjetas.modal-open');
    await page.waitForFunction(()=>getComputedStyle(document.querySelector('#modal-filtros-vista-tarjetas')).opacity==='1');
@@ -324,6 +326,7 @@ try {
   await page.screenshot({path:'.audit.local/ux-summary-'+width+'.png',fullPage:true});
  }
  await page.setViewport({width:1440,height:960});
+ await openNavigation(1440);
  await page.click('#tab-btn-tarjetas');
  await page.evaluate(async data=>{const mod=await App.Modules.tarjetas.load();mod._render(data);},{...tcData,consumos:tcData.consumos.map((r,i)=>({...r,descripcion:i===0?'Compra (3/3)':r.descripcion,cuota_actual:i===0?3:null,cuota_total:i===0?3:null}))});
  assert.equal(await page.$$eval('#tc-consumos-list button[data-toggle-pago-tc]',els=>els.length),0);
@@ -337,8 +340,45 @@ try {
  await page.click('#aho-movimientos-list .dh-drill-row');await page.waitForSelector('#modal-aho-detalle.modal-open');await page.click('.modal-open .modal-x');
  await page.click('#tab-btn-inversiones');await page.evaluate(async data=>{const mod=await App.Modules.inversiones.load();mod._render(data);},investment);
  await page.click('#inv-operaciones-list .dh-drill-row');await page.waitForSelector('#modal-inv-detalle.modal-open');await page.click('.modal-open .modal-x');
+ // Shared layout, bounded scrolling and aligned hierarchical amounts with a long ledger.
+ const many=Array.from({length:40},(_,i)=>({...manual,id_movimiento:'LONG-'+i,descripcion:'Movimiento '+i,cuota_actual:null,cuota_total:null}));
+ const longData={...operationData,movimientos:[current[2],...many],movimientosHistoricos:[current[2],...many]};
+ for(const [nav,name,mainId,data] of [
+  ['nav-btn-dashboard','dashboard','dash-widget-movimientos',longData],
+  ['tab-btn-tarjetas','tarjetas','tc-widget-consumos',tcData],
+  ['tab-btn-cc','cc','cc-widget-consumos',ccData],
+  ['tab-btn-ahorro','ahorro','aho-widget-movimientos',savings],
+  ['tab-btn-inversiones','inversiones','inv-widget-operaciones',investment]
+ ]) {
+  await page.click('#'+nav);await page.evaluate(async({name,data})=>{const mod=await App.Modules[name].load();mod._render(data);},{name,data});
+  await page.waitForFunction(mainId=>{
+   const main=document.getElementById(mainId),charts=main.closest('.ux-analytics-layout').querySelector('.ux-analytics-charts');
+   return Math.abs(main.getBoundingClientRect().height-charts.getBoundingClientRect().height)<2;
+  },{},mainId);
+  const style=await page.$eval('#'+mainId,el=>{
+   const a=el.getBoundingClientRect(),b=el.parentElement.querySelector('.ux-analytics-charts').getBoundingClientRect();
+   const title=el.querySelector('.dh-badge-title');
+   return {left:a.left< b.left, title:getComputedStyle(title).fontSize,family:getComputedStyle(title).fontFamily};
+  });assert.ok(style.left);assert.equal(style.title,'16px');assert.ok(style.family.includes('Inter'));
+ }
+ await page.click('#nav-btn-dashboard');await page.evaluate(async data=>{const mod=await App.Modules.dashboard.load();mod._render(data);},longData);
+ await page.waitForFunction(()=>document.getElementById('dash-mov-list').scrollHeight>document.getElementById('dash-mov-list').clientHeight);
+ const edges=await page.$eval('#dash-mov-list',el=>{
+  const master=el.querySelector('[data-cat-group="Gastos"] > .fca-header .fca-subtotal').getBoundingClientRect().right;
+  const category=el.querySelector('[data-cat-group="Vivienda"] > .fca-header .fca-subtotal').getBoundingClientRect().right;
+  const row=el.querySelector('[data-id="LONG-0"] .dh-col-amount').getBoundingClientRect().right;
+  return [master,category,row];
+ });assert.ok(Math.max(...edges)-Math.min(...edges)<2,'macro, category and row amounts share right edge: '+edges.join(', '));
+ await page.focus('#dash-mov-list');await page.keyboard.press('End');
+ await page.waitForFunction(()=>document.getElementById('dash-mov-list').scrollTop>0);
+ await page.screenshot({path:'.audit.local/ux-standard-desktop.png'});
+ await page.setViewport({width:390,height:844});
+ await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
+ await page.waitForFunction(()=>document.getElementById('dash-widget-movimientos').style.height==='');
+ await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth+2);
+ await page.screenshot({path:'.audit.local/ux-standard-mobile.png'});
  await page.evaluate(()=>window.toggleAppTheme());
  assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark');
  assert.deepEqual(errors,[]);
- console.log('PASS: login, seven modules, five responsive views with visible charts, account module gating, card carousel, crossed chart filters in five visible modules; grouped Resumen, badges, row detail and payment toggles, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
-}catch(error){if(browser){const pages=await browser.pages();await pages.at(-1).screenshot({path:'.audit.local/ux-failure.png'});}throw error;}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
+ console.log('PASS: login, seven modules, five responsive views, shared analytics layout and typography, aligned totals and bounded ledger scrolling; account module gating, card carousel, crossed chart filters, grouped Resumen, badges, row details and payment toggles, five mobile forms, currency percentages, theme and CSP (mocked API).');
+}catch(error){if(browser){const pages=await browser.pages();console.log(await pages.at(-1).evaluate(()=>[...document.querySelectorAll('.vista-container.active *')].filter(el=>el.scrollWidth>el.clientWidth+3&&el.getBoundingClientRect().width>0).map(el=>({tag:el.tagName,id:el.id,classes:el.className,width:el.clientWidth,scroll:el.scrollWidth})).slice(0,20)));await pages.at(-1).screenshot({path:'.audit.local/ux-failure.png'});}throw error;}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}

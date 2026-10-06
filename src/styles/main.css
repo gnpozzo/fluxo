@@ -7755,19 +7755,11 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
 .ux-filter-modal-fields { display: grid; gap: 16px; }
 .ux-filter-modal-fields select { width: 100%; min-height: 44px; }
 .ux-filter-modal-fields > .btn { justify-self: start; }
-.ux-summary-operations { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-.ux-summary-operations > *, .ux-summary-charts > * { min-width: 0; }
-.ux-summary-charts { display: grid; gap: 20px; }
 .ux-view .ux-summary-mov-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .ux-summary-mov-header > .dh-drilldown-left { grid-column: 1; grid-row: 1; }
 .ux-summary-mov-header > #dash-btn-nuevo-movimiento { grid-column: 2; grid-row: 1; }
 .ux-summary-mov-header > .finset-card-actions { grid-column: 1 / -1; grid-row: 2; margin-left: 0 !important; justify-content: space-between; width: 100%; }
 @media (max-width: 600px) { .ux-view .ux-summary-mov-header { grid-template-columns: minmax(0, 1fr); } .ux-summary-mov-header > #dash-btn-nuevo-movimiento { grid-column: 1; grid-row: 2; justify-self: start; } .ux-summary-mov-header > .finset-card-actions { grid-row: 3; } }
-.ux-summary-charts .finset-categories-side-wrap { display: flex; flex-direction: column-reverse; gap: 14px; }
-.ux-summary-charts .fintech-legend-list, .ux-summary-charts .fintech-donut-wrapper { width: 100%; }
-.ux-view .ux-summary-modules { grid-template-columns: minmax(0, 1fr); }
-.ux-summary-modules .finset-modules-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.ux-summary-operations .dh-accordions-wrap { max-height: none !important; overflow: visible !important; }
 .operation-badge { font-size: .68rem; border-radius: 6px; padding: 2px 7px; background: rgba(100,116,139,.09); color: var(--texto-2); }
 .operation-badge.operation-last { background: rgba(234,88,12,.1); color: #b9470b; }
 .payment-readonly { display: inline-flex; align-items: center; justify-content: center; cursor: default; }
@@ -7779,8 +7771,6 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
 .ux-view .dh-drill-row.no-cat, .ux-view .finset-cat-accordion .fca-body .dh-drill-row { grid-template-columns: minmax(0, 1fr) auto minmax(90px, auto) !important; }
 .tc-category-group .dh-col-cat { display: none; }
 .ux-view .tc-category-group .dh-drill-row { grid-template-columns: minmax(0, 1fr) auto minmax(90px, auto); }
-@media (max-width: 1200px) { .ux-summary-operations { grid-template-columns: minmax(0, 1fr); } .ux-summary-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 700px) { .ux-summary-charts, .ux-summary-modules .finset-modules-stack { grid-template-columns: minmax(0, 1fr); } .ux-view .dh-drill-row button.btn-toggle-pago { min-height: 44px; } }
 @media (max-width: 900px) {
   .ux-view .dh-drill-row:has(.dh-col-main), .ux-view .finset-cat-accordion .fca-body .dh-drill-row { grid-template-columns: minmax(0, 1fr) auto !important; grid-template-areas: "main main" "medio amount"; gap: 8px !important; }
   .ux-view .dh-drill-row .dh-col-main { grid-area: main; }

@@ -3,6 +3,7 @@
 // QA Passed: Bootstrap and Dependency Injection completely wired.
 
 import './styles/main.css';
+import './styles/design-system.css';
 import './core/Shell.js';
 
 // 1. Initialize namespace and BaseModule

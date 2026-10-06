@@ -1,3 +1,4 @@
+import { chartFont } from '../core/DesignSystem.js';
 import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
@@ -1057,7 +1058,7 @@ export class CCModule extends BaseModule {
           legend: {
             display: true,
             position: 'top',
-            labels: { boxWidth: 10, font: { size: 10, family: 'Inter, sans-serif' } }
+            labels: { boxWidth: 10, font: chartFont }
           },
           tooltip: {
             callbacks: {
@@ -1068,12 +1069,12 @@ export class CCModule extends BaseModule {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { size: 11, family: 'Inter, sans-serif' }, color: 'var(--texto-3)' }
+            ticks: { font: chartFont, color: 'var(--texto-3)' }
           },
           y: {
             grid: { color: 'rgba(0,0,0,0.04)' },
             ticks: {
-              font: { size: 10, family: 'Inter, sans-serif' },
+              font: chartFont,
               color: 'var(--texto-3)',
               callback: (v) => '$ ' + (v >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : (v / 1000).toFixed(0) + 'k')
             }
