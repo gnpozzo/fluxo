@@ -1,3 +1,4 @@
+import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 /* ============================================================
    module-inversiones.js — v6.0.0 (FinSet 3-Row Architecture)
@@ -12,6 +13,7 @@ import Chart from 'chart.js/auto';
 export class InversionesModule extends BaseModule {
   #tickerTimer = null;
 
+  #cross = new ChartFilters(() => { this.#renderMoneyFlowChart(); this.#renderDonutChart(); this.#renderEstrategiaCartera(); this.#filterAndRenderOperaciones(); this.#cross.status(document.getElementById(this.vistaId)); });
   get moduleId() { return 'inversiones'; }
   get vistaId()  { return 'vista-inversiones'; }
 
@@ -79,6 +81,8 @@ export class InversionesModule extends BaseModule {
   // --- SECCIÓN 2: RENDER ---
 
   _render(data) {
+    this.#cross.resetContext([App.Store.cuenta, App.Store.mes, App.Store.globalCurrency].join(':'));
+    this.#cross.status(document.getElementById(this.vistaId));
     if (!data || !data.success) {
       App.Toast.error(data?.error || 'Error al obtener portfolio.');
       return;
@@ -707,18 +711,18 @@ export class InversionesModule extends BaseModule {
       this.#chartInstance = null;
     }
 
-    const portfolio = this.#portfolioData?.portfolio || [];
+    const portfolio = this.#cross.apply(this.#portfolioData?.portfolio, {activo:p=>this.#clasificarInstrumento(p.ticker), mes:monthKey, tipo:p=>p.tipo_op}, ['mes']);
 
     let count = 6;
     if (this.#flowPeriod === '12M') count = 12;
     else if (this.#flowPeriod === 'YTD') {
-      const currentMonthNum = new Date().getMonth() + 1;
+      const currentMonthNum = Number(App.Store.mes?.slice(5,7)) || new Date().getMonth()+1;
       count = Math.max(1, currentMonthNum);
     }
 
     const labels = [];
     const keys = [];
-    const dateCursor = new Date();
+    const dateCursor = App.Store.mes ? new Date(App.Store.mes+'-01T12:00:00Z') : new Date();
 
     for (let i = count - 1; i >= 0; i--) {
       const d = new Date(dateCursor.getFullYear(), dateCursor.getMonth() - i, 1);
@@ -822,6 +826,7 @@ export class InversionesModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#chartInstance, {dimension:'mes', values:keys, types:['COMPRA','VENTA']});
   }
 
   #clasificarInstrumento(ticker) {
@@ -871,7 +876,9 @@ export class InversionesModule extends BaseModule {
       this.#donutChartInstance = null;
     }
 
-    const activos = this.#calcularTenenciasActivas();
+    const operations = this.#cross.apply(this.#portfolioData?.portfolio,{activo:p=>this.#clasificarInstrumento(p.ticker),mes:monthKey,tipo:p=>p.tipo_op}, ['activo']);
+    const contextTickers = new Set(operations.map(p=>p.ticker));
+    const activos = this.#calcularTenenciasActivas().filter(a=>!(this.#cross.has('mes') || this.#cross.has('tipo')) || contextTickers.has(a.ticker));
     const mapTipos = {};
 
     activos.forEach(a => {
@@ -885,7 +892,7 @@ export class InversionesModule extends BaseModule {
     const total = dataVals.reduce((a, b) => a + b, 0);
 
     const centerValEl = document.getElementById('inv-donut-center-val');
-    if (centerValEl) centerValEl.textContent = App.Utils.formatearMoneda(total);
+    if (centerValEl) centerValEl.textContent = App.Utils.formatearMoneda(dataVals.reduce((sum,value,i)=>sum+(!this.#cross.has('activo') || this.#cross.selected('activo',labels[i]) ? value : 0),0));
 
     const legendEl = document.getElementById('inv-categories-legend');
     const PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#6366F1'];
@@ -961,6 +968,8 @@ export class InversionesModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#donutChartInstance, {dimension:'activo', values:labels});
+    this.#cross.legend(legendEl, labels, 'activo');
   }
 
   #renderEstrategiaCartera() {
@@ -968,7 +977,7 @@ export class InversionesModule extends BaseModule {
     const countPill = document.getElementById('inv-cartera-count-pill');
     if (!container) return;
 
-    let activos = this.#calcularTenenciasActivas();
+    let activos = this.#cross.apply(this.#calcularTenenciasActivas(), {activo:a=>a.tipoInstrumento});
 
     if (this.#selectedAssetClass) {
       activos = activos.filter(a => a.tipoInstrumento === this.#selectedAssetClass);
@@ -1077,7 +1086,7 @@ export class InversionesModule extends BaseModule {
   // --- SECCIÓN 5: FILTRADO Y LISTA DE OPERACIONES ---
 
   #filterAndRenderOperaciones() {
-    const portfolio = this.#portfolioData?.portfolio || [];
+    const portfolio = this.#cross.apply(this.#portfolioData?.portfolio, {activo:p=>this.#clasificarInstrumento(p.ticker), mes:monthKey, tipo:p=>p.tipo_op});
 
     const filtered = portfolio.filter(p => {
       if (this.#tipoFiltro !== 'ALL' && p.tipo_op !== this.#tipoFiltro) return false;

@@ -40,6 +40,7 @@ test('savings reads work without an optional subaccount FK and keep historical c
   assert.equal(res.code, 200);
   assert.deepEqual(res.body.kpis, { arsTotal: 80, usdTotal: 5, consolidadoArs: null });
   assert.equal(res.body.transferencias.length, 2);
+  assert.equal(res.body.transferenciasHistoricas.length, 3);
   assert.equal(res.body.transferencias[0].subcuenta_nombre, 'Reserva');
   assert.equal(res.body.transferencias[1].subcuenta_nombre, 'General');
 });

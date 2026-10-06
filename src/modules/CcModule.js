@@ -1,3 +1,4 @@
+import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
 /* ============================================================
@@ -10,6 +11,7 @@ import Chart from 'chart.js/auto';
 
 export class CCModule extends BaseModule {
 
+  #cross = new ChartFilters(() => { this.#filterConsumos(); this.#renderMoneyFlowChart(); this.#renderGraficos(); this.#cross.status(document.getElementById(this.vistaId)); });
   get moduleId() { return 'cc'; }
   get vistaId()  { return 'vista-cc'; }
 
@@ -23,6 +25,7 @@ export class CCModule extends BaseModule {
   #editData   = null;
   #allConsumos = [];
   #moneyFlowPeriod = '6M';
+  #historicos = [];
   #consumosFilter = 'ALL'; // 'ALL' | 'YO' | 'OTRO'
   #consumosSearch = '';
   #categoriesChartInstance = null;
@@ -81,6 +84,8 @@ export class CCModule extends BaseModule {
   // --- SECCIÓN 2: RENDER ---
 
   _render(data) {
+    this.#cross.resetContext([App.Store.cuenta, App.Store.mes, App.Store.globalCurrency].join(':'));
+    this.#cross.status(document.getElementById(this.vistaId));
     if (!data || !data.success) {
       App.Toast.error(data?.error || 'Error al obtener datos.');
       return;
@@ -92,6 +97,7 @@ export class CCModule extends BaseModule {
     this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : this.#categorias;
     this.#usuarios = window._appUsuariosCC || [];
     this.#allConsumos = consumos || [];
+    this.#historicos = data.consumosHistoricos || consumos || [];
 
     // Scorecards FinSet
     const gastoYo = Number(kpis?.gastoYo || 0);
@@ -832,7 +838,7 @@ export class CCModule extends BaseModule {
   // --- SECCIÓN 8: FILTRO Y RENDER DE GRILLA ---
 
   #filterConsumos() {
-    let filtered = this.#allConsumos || [];
+    let filtered = this.#cross.apply(this.#cross.has('mes') ? this.#historicos : this.#allConsumos, {categoria:c=>c.categoria_nombre || 'General', mes:monthKey, tipo:c=>c.pagador==='YO'?'YO':'OTRO'});
 
     if (this.#contactoFiltro) {
       filtered = filtered.filter(c => c.id_usuario === this.#contactoFiltro.id || c.contacto_nombre === this.#contactoFiltro.nombre || c.usuario_nombre === this.#contactoFiltro.nombre);
@@ -989,7 +995,7 @@ export class CCModule extends BaseModule {
 
     // Group monthly evolution of shared expenses from current dataset
     const monthMap = {};
-    (this.#allConsumos || []).forEach(c => {
+    this.#cross.apply(this.#historicos, {categoria:c=>c.categoria_nombre || 'General', mes:monthKey, tipo:c=>c.pagador==='YO'?'YO':'OTRO'}, ['mes']).forEach(c => {
       const rawDate = c.fecha?.value || c.fecha || '';
       const m = rawDate.substring(0, 7) || currentMes;
       if (!monthMap[m]) monthMap[m] = { yo: 0, otro: 0, total: 0 };
@@ -1011,7 +1017,7 @@ export class CCModule extends BaseModule {
         mes: ym,
         yo: monthMap[ym]?.yo || 0,
         otro: monthMap[ym]?.otro || 0,
-        total: monthMap[ym]?.total || (ym === currentMes ? (this.#allConsumos.reduce((a,b)=>a+Number(b.importe_total||b.importe||0),0)) : 0)
+        total: monthMap[ym]?.total || 0
       });
     }
 
@@ -1080,6 +1086,7 @@ export class CCModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#moneyFlowChartInstance, {dimension:'mes', values:months.map(m=>m.mes), types:['YO','OTRO']});
 
     const sumEl = document.getElementById('cc-moneyflow-summary');
     if (sumEl) {
@@ -1108,10 +1115,10 @@ export class CCModule extends BaseModule {
     const legendEl = document.getElementById('cc-categories-legend');
     const centerValEl = document.getElementById('cc-donut-center-val');
 
-    const pool = this.#allConsumos || [];
+    const pool = this.#cross.apply(this.#cross.has('mes') ? this.#historicos : this.#allConsumos, {categoria:c=>c.categoria_nombre || 'General', mes:monthKey, tipo:c=>c.pagador==='YO'?'YO':'OTRO'}, ['categoria']);
     const totalMetric = pool.reduce((acc, c) => acc + Number(c.importe_total || c.importe || 0), 0);
 
-    if (centerValEl) centerValEl.textContent = App.Utils.formatearMoneda(totalMetric);
+    if (centerValEl) centerValEl.textContent = App.Utils.formatearMoneda(this.#cross.apply(pool,{categoria:c=>c.categoria_nombre || 'General',mes:monthKey,tipo:c=>c.pagador==='YO'?'YO':'OTRO'}).reduce((sum,c)=>sum+Number(c.importe_total||c.importe||0),0));
 
     if (!pool.length || totalMetric <= 0) {
       this.#categoriesChartInstance?.destroy();
@@ -1145,7 +1152,7 @@ export class CCModule extends BaseModule {
     ];
 
     if (legendEl) {
-      const top5 = sortedCats.slice(0, 5);
+      const top5 = sortedCats;
       legendEl.innerHTML = top5.map((cat, idx) => {
         const color = palette[idx % palette.length];
         return `
@@ -1196,6 +1203,8 @@ export class CCModule extends BaseModule {
           }
         }
       });
+      this.#cross.chart(this.#categoriesChartInstance, {dimension:'categoria', values:sortedCats.map(c=>c.name)});
+      this.#cross.legend(legendEl, sortedCats.map(c=>c.name), 'categoria');
     }
   }
 

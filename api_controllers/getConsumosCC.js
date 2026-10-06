@@ -29,7 +29,12 @@ export default async function handler(req, res) {
     }
     cuenta = resolvedCuenta;
 
-    const consumos=await readAll(()=>supabase.rpc('get_consumos_cc_list',{p_id_cuenta:cuenta,p_fecha_inicio:fechaInicio,p_fecha_fin:fechaFin}));
+    const start = new Date(fechaInicio + 'T12:00:00Z'); start.setUTCMonth(start.getUTCMonth()-11);
+    const historyStart = start.toISOString().slice(0,7)+'-01';
+    const [consumos, historicos] = await Promise.all([
+      readAll(()=>supabase.rpc('get_consumos_cc_list',{p_id_cuenta:cuenta,p_fecha_inicio:fechaInicio,p_fecha_fin:fechaFin})),
+      readAll(()=>supabase.rpc('get_consumos_cc_list',{p_id_cuenta:cuenta,p_fecha_inicio:historyStart,p_fecha_fin:fechaFin}))
+    ]);
 
     let gastoYo = 0;
     let gastoOtro = 0;
@@ -55,7 +60,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       kpis: { saldoNeto, gastoYo, gastoOtro },
-      consumos: mappedConsumos
+      consumos: mappedConsumos,
+      consumosHistoricos: historicos.map(c=>({...c,id_consumo_cc:c.id_cc_consumo,importe_total:Number(c.importe||0),mi_parte:sharedBalance(c.importe||0,c.porcentaje_imputado,c.pagador).own}))
     });
 
   } catch (err) {

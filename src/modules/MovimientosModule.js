@@ -1,3 +1,4 @@
+import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
 /* ============================================================
@@ -11,6 +12,7 @@ import Chart from 'chart.js/auto';
 export class MovimientosModule extends BaseModule {
 
   // ── Identidad ─────────────────────────────────────────────
+  #cross = new ChartFilters(() => { if (this.#currentData) this._render(this.#currentData); this.#cross.status(document.getElementById(this.vistaId)); });
   get moduleId() { return 'movimientos'; }
   get vistaId()  { return 'vista-movimientos'; }
 
@@ -101,13 +103,17 @@ export class MovimientosModule extends BaseModule {
   // --- SECCIÓN 2: RENDER ---
 
   _render(data) {
+    this.#cross.resetContext([App.Store.cuenta, App.Store.mes, App.Store.globalCurrency].join(':'));
+    this.#cross.status(document.getElementById(this.vistaId));
     if (!data || !data.success) {
       App.Toast.error(data?.error || 'Error al obtener datos.');
       return;
     }
 
     const currency=App.Store.globalCurrency || 'ARS';
-    const movimientos=(data.movimientos || []).filter(m=>(m.moneda||'ARS')===currency);
+    const source = this.#cross.has('mes') ? data.movimientosHistoricos || data.movimientos || [] : data.movimientos || [];
+    const currencyRows = source.filter(m=>(m.moneda||'ARS')===currency);
+    const movimientos = this.#cross.apply(currencyRows, movementDimensions);
     const native=data.kpisPorMoneda?.[currency];
     const kpis={...data.kpis,...native};
     kpis.egresosSaldados=movimientos.filter(m=>m.tipo_mov==='EGRESO'&&m.pagado).reduce((n,m)=>n+Number(m.importe||0),0);
@@ -138,8 +144,10 @@ export class MovimientosModule extends BaseModule {
     }
 
     // Renderizado de analítica lateral continua (side-by-side)
-    this.#renderDonutChart(movimientos || [], kpis);
-    this.#renderEvolucionChart(data.evolucionPorMoneda?.[currency] || (currency==='ARS'?data.evolucionMensual || []:[]));
+    this.#renderDonutChart(this.#cross.apply(currencyRows, movementDimensions, ['categoria']), kpis);
+    const history = data.evolucionPorMoneda?.[currency] || (currency==='ARS'?data.evolucionMensual || []:[]);
+    const filteredHistory = this.#cross.active ? filteredEvolution(this.#cross.apply((data.movimientosHistoricos || data.movimientos || []).filter(m=>(m.moneda||'ARS')===currency), movementDimensions, ['mes']), history) : history;
+    this.#renderEvolucionChart(filteredHistory);
 
     App.log('MovimientosModule', '_render', `${(movimientos || []).length} movimientos`);
 
@@ -1559,6 +1567,8 @@ export class MovimientosModule extends BaseModule {
           }
         }
       });
+      this.#cross.chart(this.#donutChartInstance, {dimension:'categoria', values:sortedCats.map(c=>c.name)});
+      this.#cross.legend(wrap.querySelector('.fintech-legend-list'), sortedCats.map(c=>c.name), 'categoria');
     }
   }
 
@@ -1693,6 +1703,7 @@ export class MovimientosModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#evolucionChartInstance, {dimension:'mes', values:evolucionMensual.map(m=>m.mes), types:isIngVsGas ? ['INGRESO','EGRESO'] : null});
   }
 
   // --- SECCIÓN 6: LISTENERS ---

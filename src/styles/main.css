@@ -7756,3 +7756,9 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
 .ux-filter-modal-fields select { width: 100%; min-height: 44px; }
 .ux-filter-modal-fields > .btn { justify-self: start; }
 @media (max-width: 600px) { .ux-view button.ux-filter-trigger { min-height: 44px; height: 44px; } }
+
+.chart-filter-status { display:flex; flex-wrap:wrap; align-items:center; gap:8px; color:var(--texto-2); font-size:.78rem; }
+.chart-filter-status > span { margin-right:auto; }
+.chart-filter-chip { max-width:100%; white-space:normal; overflow-wrap:anywhere; border:1px solid var(--primary); background:var(--primary-tint); color:var(--primary); border-radius:20px; padding:6px 12px; cursor:pointer; }
+.fintech-legend-item[role=button] { cursor:pointer; border-radius:8px; padding:6px; }
+.fintech-legend-item.chart-filter-selected { background:var(--primary-tint); outline:1px solid var(--primary); }

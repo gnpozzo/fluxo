@@ -1,3 +1,4 @@
+import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
 /* ============================================================
@@ -10,6 +11,7 @@ import Chart from 'chart.js/auto';
 
 export class TarjetasModule extends BaseModule {
 
+  #cross = new ChartFilters(() => { this.#filterConsumos(); this.#cross.status(document.getElementById(this.vistaId)); });
   get moduleId() { return 'tarjetas'; }
   get vistaId()  { return 'vista-tarjetas'; }
 
@@ -122,6 +124,8 @@ export class TarjetasModule extends BaseModule {
   // --- SECCIÓN 2: RENDER ---
 
   _render(data) {
+    this.#cross.resetContext([App.Store.cuenta, App.Store.mes, App.Store.globalCurrency].join(':'));
+    this.#cross.status(document.getElementById(this.vistaId));
     if (!data || !data.success) {
       App.Toast.error(data?.error || 'Error al obtener datos.');
       return;
@@ -1642,8 +1646,20 @@ export class TarjetasModule extends BaseModule {
     );
   }
 
+  #chartDimensions() {
+    return {categoria:c=>c.categoria_nombre || 'General', tarjeta:c=>c.tarjeta_nombre || this.#tarjetas.find(t=>t.id_tarjeta===c.id_tarjeta)?.nombre || 'Otras', mes:c=>{
+      const start = monthKey(c); const current = App.Store.mes;
+      const [y,m] = (start || current).split('-').map(Number);
+      if (c.tipo_consumo === 'RECURRENTE' || c.recur_group_id?.startsWith('REC_TC_')) {
+        return Array.from({length:12},(_,i)=>{const date=new Date(current+'-01T12:00:00Z');date.setUTCMonth(date.getUTCMonth()+i);return date.toISOString().slice(0,7);});
+      }
+      const count = c.tipo_consumo === 'CUOTAS' ? Math.max(1,Number(c.cuota_total||1)-Number(c.cuota_actual||1)+1) : 1;
+      return Array.from({length:count},(_,i)=>new Date(Date.UTC(y,m-1+i,1)).toISOString().slice(0,7));
+    }};
+  }
+
   #filterConsumos() {
-    let filtered = this.#allConsumos || [];
+    let filtered = this.#cross.apply(this.#allConsumos, this.#chartDimensions());
     if (this.#selectedTcId) {
       filtered = filtered.filter(c => c.id_tarjeta === this.#selectedTcId);
     }
@@ -2076,7 +2092,7 @@ export class TarjetasModule extends BaseModule {
     let dataList = [];
 
     // 1. Pool de consumos para la proyección mensual (filtrado por tarjeta y/o categorías)
-    let poolConsumos = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c) && c.moneda !== 'USD');
+    let poolConsumos = this.#cross.apply(this.#allConsumos, this.#chartDimensions(), ['mes']).filter(c => !this.#isTaxConsumo(c) && c.moneda !== 'USD');
     if (this.#selectedTcId) {
       poolConsumos = poolConsumos.filter(c => c.id_tarjeta === this.#selectedTcId);
     }
@@ -2135,7 +2151,7 @@ export class TarjetasModule extends BaseModule {
     });
 
     // Usar proyecciones consolidadas de backend si están disponibles y no hay filtros activos
-    if (this.#proyeccionesData && this.#proyeccionesData.length > 0 && !this.#selectedTcId && this.#selectedCategorias.size === 0) {
+    if (this.#proyeccionesData && this.#proyeccionesData.length > 0 && !this.#selectedTcId && this.#selectedCategorias.size === 0 && !this.#cross.active) {
       dataList = this.#proyeccionesData.map(p => ({
         mes: p.mes,
         total: Number(p.total || p.subtotal_consumos || 0),
@@ -2158,7 +2174,7 @@ export class TarjetasModule extends BaseModule {
       }
     });
 
-    if (officialStatementArs > 0 && this.#selectedCategorias.size === 0) {
+    if (officialStatementArs > 0 && this.#selectedCategorias.size === 0 && !this.#cross.active) {
       const m0 = dataList.find(d => d.mes === currentMes);
       if (m0) {
         m0.total = officialStatementArs;
@@ -2235,6 +2251,7 @@ export class TarjetasModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#evolucionChartInstance, {dimension:'mes', values:filtered.map(m=>m.mes)});
 
     // Summary under chart
     const sumEl = document.getElementById('tc-moneyflow-summary');
@@ -2267,7 +2284,7 @@ export class TarjetasModule extends BaseModule {
     const centerLblEl = document.getElementById('tc-donut-center-label');
     const subEl = document.getElementById('tc-categories-subtitle');
 
-    let pool = (this.#allConsumos || []).filter(c => !this.#isTaxConsumo(c));
+    let pool = this.#cross.apply(this.#allConsumos, this.#chartDimensions(), [this.#catMetric === 'tarjeta' ? 'tarjeta' : 'categoria']).filter(c => !this.#isTaxConsumo(c));
     if (this.#selectedTcId) {
       pool = pool.filter(c => c.id_tarjeta === this.#selectedTcId);
     }
@@ -2281,7 +2298,8 @@ export class TarjetasModule extends BaseModule {
 
     const totalMetric = pool.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
     if (centerValEl) {
-      centerValEl.textContent = App.Utils.formatearMoneda(totalMetric);
+      centerValEl.textContent = App.Utils.formatearMoneda(this.#cross.apply(pool,this.#chartDimensions()).reduce((sum,c)=>sum+(c.moneda==='USD'?0:Number(c.importe||0)),0));
+      if(this.#cross.active && centerLblEl) centerLblEl.textContent='Total filtrado';
     }
 
     if (!pool.length || totalMetric <= 0) {
@@ -2295,7 +2313,7 @@ export class TarjetasModule extends BaseModule {
     const groupMap = {};
     pool.forEach(c => {
       if (c.moneda === 'USD') return;
-      const key = isByCard ? (c.tarjeta_nombre || 'Otras') : (c.categoria_nombre || 'General');
+      const key = isByCard ? this.#chartDimensions().tarjeta(c) : (c.categoria_nombre || 'General');
       const imp = Number(c.importe || 0);
       if (!groupMap[key]) groupMap[key] = { total: 0, count: 0 };
       groupMap[key].total += imp;
@@ -2317,7 +2335,7 @@ export class TarjetasModule extends BaseModule {
     ];
 
     if (legendEl) {
-      const top5 = sorted.slice(0, 5);
+      const top5 = sorted;
       legendEl.innerHTML = top5.map((item, idx) => {
         const color = palette[idx % palette.length];
         return `
@@ -2368,6 +2386,8 @@ export class TarjetasModule extends BaseModule {
           }
         }
       });
+      this.#cross.chart(this.#chartInstance, {dimension:isByCard ? 'tarjeta' : 'categoria', values:sorted.map(c=>c.name)});
+      this.#cross.legend(legendEl, sorted.map(c=>c.name), isByCard ? 'tarjeta' : 'categoria');
     }
   }
 

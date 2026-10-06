@@ -34,8 +34,9 @@ export default async function handler(req, res) {
     let arsTotal=0,usdTotal=0;
     for(const row of rows){const value=Number(row.importe)*(row.tipo_transfer==='DEPOSITO'?1:-1);if(row.moneda==='USD')usdTotal+=value;else arsTotal+=value;}
     const subcuentaNames=new Map((subcuentas || []).map(subcuenta=>[subcuenta.id_subcuenta,subcuenta.nombre]));
-    const transferencias=rows.filter(a=>a.fecha>=fechaInicio).map(a=>({...a,subcuenta_nombre:subcuentaNames.get(a.id_subcuenta)||'General',tipo_mov:a.tipo_transfer}));
-    return res.status(200).json({success:true,kpis:{arsTotal,usdTotal,consolidadoArs:usdTotal===0?arsTotal:null},subcuentas:subcuentas||[],transferencias});
+    const transferenciasHistoricas=rows.map(a=>({...a,subcuenta_nombre:subcuentaNames.get(a.id_subcuenta)||'General',tipo_mov:a.tipo_transfer}));
+    const transferencias=transferenciasHistoricas.filter(a=>a.fecha>=fechaInicio);
+    return res.status(200).json({success:true,kpis:{arsTotal,usdTotal,consolidadoArs:usdTotal===0?arsTotal:null},subcuentas:subcuentas||[],transferencias,transferenciasHistoricas});
 
   } catch (err) {
     console.error('[API -> getAhorros Error]', err.message);

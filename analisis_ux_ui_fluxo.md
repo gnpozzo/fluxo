@@ -195,3 +195,14 @@ Las preferencias confirmadas por el usuario reemplazan la propuesta de gráficos
 - Cambiar a una cuenta que deshabilita el módulo abierto regresa a Resumen. Los filtros compactos en modal y la corrección de getAhorros se mantienen.
 
 Validación: 18 pruebas unitarias, sintaxis de 99 archivos JavaScript, build de producción y navegador con API simulada: seis vistas a 1440/1024/768/390 px, gráficos visibles, carrusel, módulos deshabilitados, filtros y cinco formularios móviles. Sin escrituras ni cambios de configuración en Supabase en esta revisión.
+
+
+## Filtros cruzados de gráficos — 6.4.0, 6 de octubre de 2026
+
+Selección compartida en Resumen, Movimientos, Tarjetas, Gastos compartidos, Ahorro e Inversiones. Clic selecciona una categoría, alcancía, clase de activo o mes; repetir clic sobre la misma selección la quita. Ctrl+clic (Cmd en Mac) agrega/quita valores. Las leyendas y etiquetas de meses aplican el mismo estado. Las leyendas nativas de barras seleccionan tipos de operación. Valores de una dimensión se combinan con OR; dimensiones diferentes con AND. Chips visibles permiten quitar una dimensión o limpiar todo. Se reinician al cambiar cuenta, mes base o moneda.
+
+Las donas mantienen alternativas de su propia dimensión para permitir ampliar una selección con Ctrl; muestran las seleccionadas resaltadas y el subtotal correspondiente. Los demás filtros acotan su contexto. Las barras mantienen el eje temporal para seguir seleccionando meses. Los montos y resúmenes analíticos se recalculan desde registros coincidentes, sin modificar las colecciones usadas para editar, pagar o liquidar. KPIs de patrimonio y saldos bancarios conservan su significado acumulado: no se recalcula una posición de inversión usando sólo compras de un mes.
+
+getDashboardData agrega movimientosHistoricos con categoría; getConsumosCC agrega consumosHistoricos para 12 meses; getAhorros agrega transferenciasHistoricas ya leídas para calcular los saldos. Todas las consultas conservan autenticación y alcance de cuenta/usuario. No se cambiaron datos ni permisos en Supabase.
+
+Verificación: 23 pruebas unitarias, sintaxis de 102 archivos, build y navegador con API simulada. Clics reales en donas, barras, ejes y leyendas; Vivienda/Comida en meses históricos; Ctrl para sumar; cascada hacia listas y barras en los seis módulos. Consultas de los tres controladores contra producción devolvieron HTTP 200 (lectura con cliente de servicio acotado al usuario para esta verificación).

@@ -1,3 +1,4 @@
+import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 /* ============================================================
    module-ahorro.js — v6.0.0 (FinSet 3-Row Architecture)
@@ -11,6 +12,7 @@ import Chart from 'chart.js/auto';
 
 export class AhorroModule extends BaseModule {
 
+  #cross = new ChartFilters(() => { this.#renderMoneyFlowChart(); this.#renderDonutChart(); this.#filterAndRenderMovimientos(); this.#cross.status(document.getElementById(this.vistaId)); });
   get moduleId() { return 'ahorro'; }
   get vistaId()  { return 'vista-ahorro'; }
 
@@ -78,6 +80,8 @@ export class AhorroModule extends BaseModule {
   // --- SECCIÓN 2: RENDER ---
 
   _render(data) {
+    this.#cross.resetContext([App.Store.cuenta, App.Store.mes, App.Store.globalCurrency].join(':'));
+    this.#cross.status(document.getElementById(this.vistaId));
     if (!data || !data.success) {
       App.Toast.error(data?.error || 'Error al obtener datos de ahorro.');
       return;
@@ -349,7 +353,7 @@ export class AhorroModule extends BaseModule {
       this.#chartInstance = null;
     }
 
-    const transferencias = this.#dataCompleta?.transferencias || [];
+    const transferencias = this.#cross.apply(this.#dataCompleta?.transferenciasHistoricas || this.#dataCompleta?.transferencias, {alcancia:t=>t.subcuenta_nombre || 'General', mes:monthKey, tipo:t=>t.tipo_mov}, ['mes']);
     const isUSD = this.#vistaActual === 'USD';
     const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
 
@@ -357,13 +361,13 @@ export class AhorroModule extends BaseModule {
     let count = 6;
     if (this.#flowPeriod === '12M') count = 12;
     else if (this.#flowPeriod === 'YTD') {
-      const currentMonthNum = new Date().getMonth() + 1;
+      const currentMonthNum = Number(App.Store.mes?.slice(5,7)) || new Date().getMonth()+1;
       count = Math.max(1, currentMonthNum);
     }
 
     const labels = [];
     const keys = [];
-    const dateCursor = new Date();
+    const dateCursor = App.Store.mes ? new Date(App.Store.mes+'-01T12:00:00Z') : new Date();
 
     for (let i = count - 1; i >= 0; i--) {
       const d = new Date(dateCursor.getFullYear(), dateCursor.getMonth() - i, 1);
@@ -467,6 +471,7 @@ export class AhorroModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#chartInstance, {dimension:'mes', values:keys, types:['DEPOSITO','RETIRO']});
   }
 
   #renderDonutChart() {
@@ -478,7 +483,7 @@ export class AhorroModule extends BaseModule {
       this.#donutChartInstance = null;
     }
 
-    const transferencias = this.#dataCompleta?.transferencias || [];
+    const transferencias = this.#dataCompleta?.transferenciasHistoricas || this.#dataCompleta?.transferencias || [];
     const subcuentas = this.#dataCompleta?.subcuentas || [];
     const isUSD = this.#vistaActual === 'USD';
     const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
@@ -504,13 +509,14 @@ export class AhorroModule extends BaseModule {
       });
 
     // Filtrar subcuentas con saldo > 0
-    const activeEntries = Object.entries(mapSubcuentas).filter(([_, val]) => val > 0);
+    const contextNames = new Set(this.#cross.apply(transferencias,{alcancia:t=>t.subcuenta_nombre || 'General',mes:monthKey,tipo:t=>t.tipo_mov}, ['alcancia']).map(t=>t.subcuenta_nombre || 'General'));
+    const activeEntries = Object.entries(mapSubcuentas).filter(([name,val]) => val > 0 && (!(this.#cross.has('mes') || this.#cross.has('tipo')) || contextNames.has(name)));
     const labels = activeEntries.map(([k]) => k);
     const dataVals = activeEntries.map(([_, v]) => v);
     const total = dataVals.reduce((a, b) => a + b, 0);
 
     const centerValEl = document.getElementById('aho-donut-center-val');
-    if (centerValEl) centerValEl.textContent = fmt(total);
+    if (centerValEl) centerValEl.textContent = fmt(dataVals.reduce((sum,value,i)=>sum+(!this.#cross.has('alcancia') || this.#cross.selected('alcancia',labels[i]) ? value : 0),0));
 
     const legendEl = document.getElementById('aho-categories-legend');
     const PALETTE = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
@@ -585,6 +591,8 @@ export class AhorroModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#donutChartInstance, {dimension:'alcancia', values:labels});
+    this.#cross.legend(legendEl, labels, 'alcancia');
   }
 
   #renderMisAlcancias() {
@@ -716,7 +724,7 @@ export class AhorroModule extends BaseModule {
   // --- SECCIÓN 5: FILTRADO Y GRILLA DE MOVIMIENTOS ---
 
   #filterAndRenderMovimientos() {
-    const transferencias = this.#dataCompleta?.transferencias || [];
+    const transferencias = this.#cross.apply(this.#cross.has('mes') ? this.#dataCompleta?.transferenciasHistoricas || this.#dataCompleta?.transferencias : this.#dataCompleta?.transferencias, {alcancia:t=>t.subcuenta_nombre || 'General', mes:monthKey, tipo:t=>t.tipo_mov});
     const isUSD = this.#vistaActual === 'USD';
     const fmt = isUSD ? App.Utils.formatearMonedaUSD : App.Utils.formatearMoneda;
 

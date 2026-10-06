@@ -199,8 +199,86 @@ try {
   await page.screenshot({path:'.audit.local/ux-form-'+button+'-390.png'});
   await page.click('.modal-open .modal-x');
  }
+
+ // Cross-filtering uses real canvas clicks and keyboard modifiers, with historical category detail.
+ await page.setViewport({width:1440,height:960});
+ await page.click('#pill-ars');
+ const movement=(id,cat,mes,importe,tipo='EGRESO')=>({id_movimiento:id,id_cuenta_principal:'QA',categoria_nombre:cat,fecha:mes+'-05',importe,tipo_mov:tipo,moneda:'ARS',descripcion:id});
+ const current=[movement('VIVIENDA-OCT','Vivienda','2026-10',100),movement('COMIDA-OCT','Comida','2026-10',50),movement('SUELDO-OCT','Sueldo','2026-10',500,'INGRESO')];
+ const historical=[movement('VIVIENDA-SEP','Vivienda','2026-09',40),movement('COMIDA-SEP','Comida','2026-09',10),...current];
+ const evolution=[{mes:'2026-09',ingresos:0,egresos:50,balance:-50},{mes:'2026-10',ingresos:500,egresos:150,balance:350}];
+ const crossData={success:true,kpis:{ingresos:500,egresos:150,resultado:350},movimientos:current,movimientosHistoricos:historical,evolucionMensual:evolution,evolucionPorMoneda:{ARS:evolution},kpisPorMoneda:{ARS:{ingresos:500,egresos:150,resultado:350}}};
+ fixtures.getDashboardData=crossData;
+ const chartAsset=loaded.find(url=>url.includes('vendor_ui-'));
+ const readChart=async id=>page.evaluate(async ({id,asset})=>{const module=await import(asset);const Chart=Object.values(module).find(value=>typeof value?.getChart==='function');const chart=Chart.getChart(document.getElementById(id));return chart ? {labels:chart.data.labels,datasets:chart.data.datasets.map(d=>d.data)} : null;},{id,asset:chartAsset});
+ const canvasClick=async(id,index,dataset=0,mode='element',ctrl=false)=>{
+  await page.$eval('#'+id,el=>el.scrollIntoView({block:'center'}));
+  await page.waitForFunction(async({id,asset})=>{const module=await import(asset);const Chart=Object.values(module).find(value=>typeof value?.getChart==='function');return !Chart.getChart(document.getElementById(id))?.animating;},{},{id,asset:chartAsset});
+  const point=await page.evaluate(async({id,asset,index,dataset,mode})=>{
+   const module=await import(asset);const Chart=Object.values(module).find(value=>typeof value?.getChart==='function');const chart=Chart.getChart(document.getElementById(id));const bounds=chart.canvas.getBoundingClientRect();let p;
+   if(mode==='legend'){const box=chart.legend.legendHitBoxes[index];p={x:chart.legend.left+box.left+box.width/2,y:chart.legend.top+box.top+box.height/2};}
+   else if(mode==='axis')p={x:chart.scales.x.getPixelForValue(index),y:chart.chartArea.bottom+12};
+   else p=chart.getDatasetMeta(dataset).data[index].getCenterPoint();
+   return {x:bounds.x+p.x,y:bounds.y+p.y};
+  },{id,asset:chartAsset,index,dataset,mode});
+  if(ctrl)await page.keyboard.down('Control');await page.mouse.click(point.x,point.y);if(ctrl)await page.keyboard.up('Control');
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ };
+ for(const [name,nav,legend,bar,list] of [
+  ['dashboard','nav-btn-dashboard','dash-categories-legend','dash-moneyflow-canvas','dash-mov-list'],
+  ['movimientos','tab-btn-movimientos','mov-donut-wrap .fintech-legend-list','mov-evolucion-canvas','mov-tabla-wrap']
+ ]){
+  await page.click('#'+nav);await page.evaluate(async({name,data})=>{const mod=await App.Modules[name].load();await mod.cargar();mod._render(data);},{name,data:crossData});
+  await page.waitForFunction(name=>document.querySelector('.vista-container.active')?.id==='vista-'+name && getComputedStyle(document.querySelector('.vista-container.active')).opacity==='1',{},name);
+  await page.click('#'+legend+' [aria-label="Filtrar: Vivienda"]');
+  let text=await page.$eval('#'+list,el=>el.textContent);assert.ok(text.includes('VIVIENDA-OCT')&&!text.includes('COMIDA-OCT'),name+' category filters list');
+  assert.deepEqual((await readChart(bar)).datasets[1],[40,100],name+' category filters monthly bars');
+  await page.keyboard.down('Control');await page.click('#'+legend+' [aria-label="Filtrar: Comida"]');await page.keyboard.up('Control');
+  assert.deepEqual((await readChart(bar)).datasets[1],[50,150],name+' Ctrl adds category');
+  await canvasClick(bar,0,1);text=await page.$eval('#'+list,el=>el.textContent);assert.ok(text.includes('VIVIENDA-SEP')&&!text.includes('VIVIENDA-OCT'),name+' month cascades');
+  await canvasClick(bar,1,1,'axis',true);text=await page.$eval('#'+list,el=>el.textContent);assert.ok(text.includes('VIVIENDA-OCT')&&text.includes('VIVIENDA-SEP'),name+' Ctrl axis label adds month');
+  await page.click('#vista-'+name+' .chart-filter-status button:last-child');
+  await canvasClick(bar,0,0,'legend');assert.ok(!(await page.$eval('#'+list,el=>el.textContent)).includes('COMIDA-OCT'),name+' native legend filters list');
+  await page.click('#vista-'+name+' .chart-filter-status button:last-child');
+ }
+ await page.click('#tab-btn-tarjetas');
+ const tcData={success:true,kpis:{},consumos:current.filter(m=>m.tipo_mov==='EGRESO').map(m=>({...m,id_consumo_tarjeta:m.id_movimiento,id_tarjeta:'QA-CARD',tarjeta_nombre:'Visa QA',tipo_consumo:'COMUN'}))};
+ await page.evaluate(async data=>{const mod=await App.Modules.tarjetas.load();mod._render(data);},tcData);
+ await page.click('#tc-categories-legend [aria-label="Filtrar: Vivienda"]');
+ assert.equal((await readChart('tc-moneyflow-canvas')).datasets[0][0],100);
+ assert.ok(!(await page.$eval('#tc-consumos-list',el=>el.textContent)).includes('COMIDA-OCT'));
+ await canvasClick('tc-categories-donut-canvas',1,0,'element',true);
+ assert.equal((await readChart('tc-moneyflow-canvas')).datasets[0][0],150,'Ctrl donut adds another category');
+ await page.click('#vista-tarjetas .chart-filter-status button:last-child');
+ await page.click('#tab-btn-cc');
+ const ccData={success:true,kpis:{},consumos:tcData.consumos.map(m=>({...m,id_consumo_cc:m.id_movimiento,importe_total:m.importe,pagador:'YO',mi_parte:m.importe/2}))};
+ await page.evaluate(async data=>{const mod=await App.Modules.cc.load();mod._render(data);},ccData);
+ await page.click('#cc-categories-legend [aria-label="Filtrar: Vivienda"]');
+ assert.equal((await readChart('cc-moneyflow-canvas')).datasets[0].at(-1),100);
+ assert.ok(!(await page.$eval('#cc-consumos-list',el=>el.textContent)).includes('COMIDA-OCT'));
+ await page.click('#vista-cc .chart-filter-status button:last-child');
+
+ await page.click('#tab-btn-ahorro');
+ const savings={success:true,kpis:{arsTotal:150,usdTotal:0,consolidadoArs:150},subcuentas:[],transferencias:current.filter(m=>m.tipo_mov==='EGRESO').map(m=>({...m,id_transferencia:m.id_movimiento,tipo_mov:'DEPOSITO',subcuenta_nombre:m.categoria_nombre}))};
+ await page.evaluate(async data=>{const mod=await App.Modules.ahorro.load();mod._render(data);},savings);
+ await page.click('#aho-categories-legend [aria-label="Filtrar: Vivienda"]');
+ assert.equal((await readChart('aho-moneyflow-canvas')).datasets[0].at(-1),100);
+ assert.ok(!(await page.$eval('#aho-movimientos-list',el=>el.textContent)).includes('COMIDA-OCT'));
+ await page.keyboard.down('Control');await page.click('#aho-categories-legend [aria-label="Filtrar: Comida"]');await page.keyboard.up('Control');
+ assert.equal((await readChart('aho-moneyflow-canvas')).datasets[0].at(-1),150);
+ await page.click('#vista-ahorro .chart-filter-status button:last-child');
+ await page.click('#tab-btn-inversiones');
+ const investment={success:true,kpis:{valorActual:150,costoTotal:150,gananciaTotal:0,rendimientoPorc:0},portfolio:[{id_operacion:'BTC-OP',ticker:'BTC',fecha:'2026-10-05',tipo_op:'COMPRA',cantidad:1,precio:100},{id_operacion:'AAPL-OP',ticker:'AAPL',fecha:'2026-10-05',tipo_op:'COMPRA',cantidad:1,precio:50}],tenencias:[{ticker:'BTC',moneda:'ARS',cantidad:1,precioProm:100,costoTotalArs:100,valorActualArs:100,gananciaArs:0,rendPct:0},{ticker:'AAPL',moneda:'ARS',cantidad:1,precioProm:50,costoTotalArs:50,valorActualArs:50,gananciaArs:0,rendPct:0}]};
+ await page.evaluate(async data=>{const mod=await App.Modules.inversiones.load();mod._render(data);},investment);
+ await page.click('#inv-categories-legend [aria-label="Filtrar: Criptomonedas"]');
+ assert.equal((await readChart('inv-moneyflow-canvas')).datasets[0].at(-1),100);
+ assert.ok(!(await page.$eval('#inv-operaciones-list',el=>el.textContent)).includes('AAPL'));
+ await page.keyboard.down('Control');await page.click('#inv-categories-legend [aria-label="Filtrar: CEDEARs"]');await page.keyboard.up('Control');
+ assert.equal((await readChart('inv-moneyflow-canvas')).datasets[0].at(-1),150);
+ await page.click('#vista-inversiones .chart-filter-status button:last-child');
+ await page.screenshot({path:'.audit.local/ux-crossfilters.png',fullPage:true});
  await page.evaluate(()=>window.toggleAppTheme());
  assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark');
  assert.deepEqual(errors,[]);
- console.log('PASS: login, seven modules, six responsive views with visible charts, account module gating, card carousel, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
+ console.log('PASS: login, seven modules, six responsive views with visible charts, account module gating, card carousel, crossed chart filters in six modules, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
 }catch(error){if(browser){const pages=await browser.pages();await pages.at(-1).screenshot({path:'.audit.local/ux-failure.png'});}throw error;}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}

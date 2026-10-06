@@ -123,7 +123,14 @@ export default async function handler(req, res) {
     // Hasta fin de año en curso para proyecciones
     const endRange = `${yNum}-12-31`;
 
-    const histMovs=await readAll(()=>supabase.from('movimientos').select('fecha,tipo_mov,importe,id_categoria,descripcion,moneda').eq('id_cuenta_principal',resolvedCuenta).eq('user_id',userId).gte('fecha',startRange).lte('fecha',endRange).order('fecha').order('id_movimiento'));
+    const histMovs=await readAll(()=>supabase.from('movimientos').select('*, categorias(nombre)').eq('id_cuenta_principal',resolvedCuenta).eq('user_id',userId).gte('fecha',startRange).lte('fecha',endRange).order('fecha').order('id_movimiento'));
+
+    histMovs.forEach(m => {
+      m.categoria_nombre = m.categorias?.nombre || 'General';
+      m.pagado = !!pagosMap[m.id_movimiento]?.pagado;
+      m.fecha_pago = pagosMap[m.id_movimiento]?.fecha_pago || null;
+      m.is_pago_tc = m.id_categoria === 'CAT_PAGO_TC' || m.descripcion?.toLowerCase().startsWith('pago resumen:');
+    });
 
     // Identificar todos los meses desde startRange hasta fin de año en curso
     const mesesBuckets = {};
@@ -177,6 +184,7 @@ export default async function handler(req, res) {
       kpisPorMoneda,
       movimientos: movimientos || [],
       evolucionMensual,
+      movimientosHistoricos: histMovs,
       evolucionPorMoneda:{ARS:evolucionMensual,USD:Object.values(usdBuckets).map(b=>({...b,balance:b.ingresos-b.egresos}))}
     });
 

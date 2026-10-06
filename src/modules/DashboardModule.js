@@ -1,3 +1,4 @@
+import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
 /* ============================================================
@@ -9,6 +10,7 @@ import Chart from 'chart.js/auto';
 
 export class DashboardModule extends BaseModule {
 
+  #cross = new ChartFilters(() => { this.#renderMovimientos(); this.#renderMoneyFlowChart(); this.#renderTopCategoriesWidget(); this.#cross.status(document.getElementById(this.vistaId)); });
   get moduleId() { return 'dashboard'; }
   get vistaId()  { return 'vista-dashboard'; }
 
@@ -32,6 +34,7 @@ export class DashboardModule extends BaseModule {
   #topeTC = null;
   #tcConsumosSubtotal = 0;
   #evolucionMensual = [];
+  #historyMovs = [];
   #moneyFlowPeriod = '6M'; // '6M' | '12M' | 'YTD'
   #kpisData = {};
 
@@ -208,8 +211,8 @@ export class DashboardModule extends BaseModule {
     const cardAhorro = document.getElementById('dash-card-ahorro');
     const cardInversiones = document.getElementById('dash-card-inversiones');
 
-    const hasTarjetas = (cuentaObj?.modulo_tarjetas_activo ?? true) || (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
-    const hasAhorro = (cuentaObj?.modulo_ahorro_activo ?? true) || (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
+    const hasTarjetas = cuentaObj?.modulo_tarjetas_activo ?? (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
+    const hasAhorro = cuentaObj?.modulo_ahorro_activo ?? (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj?.id_cuenta_principal);
 
     if (cardTarjetas) cardTarjetas.style.display = hasTarjetas ? '' : 'none';
     if (cardCC) cardCC.style.display = (cuentaObj?.modulo_cc_activo ?? true) ? '' : 'none';
@@ -248,9 +251,13 @@ export class DashboardModule extends BaseModule {
   // --- SECCIÓN 2: RENDER PRINCIPAL ---
 
   _render(data) {
+    this.#cross.resetContext([App.Store.cuenta, App.Store.mes, App.Store.globalCurrency].join(':'));
+    this.#cross.status(document.getElementById(this.vistaId));
     if (!data?.success) return;
 
-    const { kpis, movimientos } = data;
+    const currency = App.Store.globalCurrency || 'ARS';
+    const { kpis } = data;
+    const movimientos = (data.movimientos || []).filter(m=>(m.moneda || 'ARS')===currency);
 
     const saldoValEl = document.getElementById('dash-saldo-val');
     const convValEl = document.getElementById('dash-conversion-val');
@@ -288,7 +295,8 @@ export class DashboardModule extends BaseModule {
     }
 
     this.#movData = movimientos || [];
-    this.#evolucionMensual = data?.evolucionMensual || [];
+    this.#historyMovs = (data.movimientosHistoricos || movimientos || []).filter(m=>(m.moneda || 'ARS')===currency);
+    this.#evolucionMensual = data.evolucionPorMoneda?.[currency] || (currency==='ARS' ? data.evolucionMensual || [] : []);
     this.#kpisData = kpis || {};
 
     // Calculate trends vs previous month from evolucionMensual
@@ -1518,10 +1526,13 @@ export class DashboardModule extends BaseModule {
 
   // --- SECCIÓN 8B-2: FINSET WIDGETS RENDERING ---
 
+  #formatChartMoney(value) { return App.Utils.formatearMonedaNativa(value, App.Store.globalCurrency || 'ARS'); }
+
   #renderMoneyFlowChart() {
     const canvas = document.getElementById('dash-moneyflow-canvas');
     if (!canvas) return;
-    const allHist = this.#evolucionMensual || [];
+    let allHist = this.#evolucionMensual || [];
+    if (this.#cross.active) allHist = filteredEvolution(this.#cross.apply(this.#historyMovs, movementDimensions, ['mes']), allHist);
     if (!allHist.length) return;
 
     const currentMes = App.Store.mes || new Date().toISOString().substring(0, 7);
@@ -1633,7 +1644,7 @@ export class DashboardModule extends BaseModule {
               label: (context) => {
                 const item = filtered[context.dataIndex];
                 const proyTag = item?.esProyectado ? ' (Proyectado)' : '';
-                return ` ${context.dataset.label || ''}${proyTag}: $ ${context.parsed.y.toLocaleString('es-AR')}`;
+                return ` ${context.dataset.label || ''}${proyTag}: ${this.#formatChartMoney(context.parsed.y)}`;
               }
             }
           }
@@ -1654,6 +1665,7 @@ export class DashboardModule extends BaseModule {
         }
       }
     });
+    this.#cross.chart(this.#moneyFlowChartInstance, {dimension:'mes', values:filtered.map(m=>m.mes), types:isIngVsGas ? ['INGRESO','EGRESO'] : null});
 
     // Update summary text
     const summaryEl = document.getElementById('dash-moneyflow-summary');
@@ -1663,7 +1675,7 @@ export class DashboardModule extends BaseModule {
       const avgIng = poolForAvg.reduce((a, b) => a + (b.ingresos || 0), 0) / poolForAvg.length;
       const avgGas = poolForAvg.reduce((a, b) => a + (b.egresos || 0), 0) / poolForAvg.length;
       let summaryHtml = `
-        <span>Promedio mensual: Ingresos <strong>${App.Utils.formatearMoneda(avgIng)}</strong> • Gastos <strong>${App.Utils.formatearMoneda(avgGas)}</strong></span>
+        <span>Promedio mensual: Ingresos <strong>${this.#formatChartMoney(avgIng)}</strong> • Gastos <strong>${this.#formatChartMoney(avgGas)}</strong></span>
       `;
       if (filtered.some(e => e.esProyectado)) {
         summaryHtml += `<span style="color:var(--texto-3); font-size:0.7rem; margin-left:auto;">* Meses proyectados</span>`;
@@ -1699,14 +1711,15 @@ export class DashboardModule extends BaseModule {
       (typeof m.categoria_nombre === 'string' && m.categoria_nombre.toLowerCase().includes('pago de tarjeta'))
     );
 
-    let pool = (this.#movData || []).filter(m => m.tipo_mov === targetType && !isTaxConsumo(m));
+    let pool = this.#cross.apply(this.#cross.has('mes') ? this.#historyMovs : this.#movData, movementDimensions, ['categoria']).filter(m => m.tipo_mov === targetType && !isTaxConsumo(m));
     if (targetType === 'EGRESO') {
       pool = pool.filter(m => !isPagoTC(m));
     }
     const totalMetric = pool.reduce((acc, m) => acc + Math.abs(Number(m.importe || 0)), 0);
 
     if (centerValEl) {
-      centerValEl.textContent = App.Utils.formatearMoneda(totalMetric);
+      centerValEl.textContent = this.#formatChartMoney(this.#cross.apply(pool, movementDimensions).reduce((sum,m)=>sum+Math.abs(Number(m.importe||0)),0));
+      if(this.#cross.active && centerLblEl) centerLblEl.textContent='Total filtrado';
       centerValEl.className = 'fintech-donut-center-val';
     }
 
@@ -1742,7 +1755,7 @@ export class DashboardModule extends BaseModule {
     ];
 
     if (legendEl) {
-      const top5 = sortedCats.slice(0, 5);
+      const top5 = sortedCats;
       legendEl.innerHTML = top5.map((cat, idx) => {
         const color = palette[idx % palette.length];
         return `
@@ -1753,7 +1766,7 @@ export class DashboardModule extends BaseModule {
             </div>
             <div class="fintech-legend-right">
               <span style="font-size:0.75rem;color:var(--texto-3);min-width:38px;text-align:right;">${cat.pct.toFixed(1)}%</span>
-              <span style="font-size:0.82rem;font-weight:600;color:var(--texto);">${App.Utils.formatearMoneda(cat.total)}</span>
+              <span style="font-size:0.82rem;font-weight:600;color:var(--texto);">${this.#formatChartMoney(cat.total)}</span>
             </div>
           </div>
         `;
@@ -1786,13 +1799,15 @@ export class DashboardModule extends BaseModule {
                 label: (context) => {
                   const val = context.parsed || 0;
                   const pct = ((val / totalMetric) * 100).toFixed(1);
-                  return ` ${context.label}: $ ${val.toLocaleString('es-AR')} (${pct}%)`;
+                  return ` ${context.label}: ${this.#formatChartMoney(val)} (${pct}%)`;
                 }
               }
             }
           }
         }
       });
+      this.#cross.chart(this.#categoriesDonutInstance, {dimension:'categoria', values:sortedCats.map(c=>c.name)});
+      this.#cross.legend(legendEl, sortedCats.map(c=>c.name), 'categoria');
     }
   }
 
@@ -1827,7 +1842,7 @@ export class DashboardModule extends BaseModule {
       (typeof m.categoria_nombre === 'string' && m.categoria_nombre.toLowerCase().includes('pago de tarjeta'))
     );
 
-    const cleanData = (this.#movData || []).filter(m => !isTaxConsumo(m));
+    const cleanData = this.#cross.apply(this.#cross.has('mes') ? this.#historyMovs : this.#movData, movementDimensions).filter(m => !isTaxConsumo(m));
 
     // 1. Populate category and payment method filter options from current data
     if (catFilterSelect) {
@@ -1954,7 +1969,7 @@ export class DashboardModule extends BaseModule {
     }
     if (summaryEl) {
       const countLabel = displayMovements.length === 1 ? '1 movimiento' : `${displayMovements.length} movimientos`;
-      summaryEl.textContent = `${countLabel} • Total: ${App.Utils.formatearMoneda(totalFiltered)}`;
+      summaryEl.textContent = `${countLabel} • Total: ${this.#formatChartMoney(totalFiltered)}`;
     }
 
     // Update active tab buttons
@@ -2101,7 +2116,7 @@ export class DashboardModule extends BaseModule {
             ${medio}
           </div>
           <div class="dh-col-amount ${valClass}">
-            ${sign} ${App.Utils.formatearMoneda(r.importe)}
+            ${sign} ${this.#formatChartMoney(r.importe)}
           </div>
           <div class="dh-col-action">
             <button class="btn-icon-sm dh-row-btn" title="Ver detalle">
@@ -2198,7 +2213,7 @@ export class DashboardModule extends BaseModule {
                 <span class="fca-count">${group.items.length} ${group.items.length === 1 ? 'ingreso' : 'ingresos'}</span>
               </div>
               <div class="fca-header-right">
-                <span class="fca-subtotal positivo">+ ${App.Utils.formatearMoneda(group.subtotal)}</span>
+                <span class="fca-subtotal positivo">+ ${this.#formatChartMoney(group.subtotal)}</span>
               </div>
             </div>
             <div class="fca-body">
@@ -2222,7 +2237,7 @@ export class DashboardModule extends BaseModule {
               <span class="fca-count">${ingresos.length} ${ingresos.length === 1 ? 'ingreso' : 'ingresos'}</span>
             </div>
             <div class="fca-header-right">
-              <span class="fca-subtotal positivo">+ ${App.Utils.formatearMoneda(subtotalIngresos)}</span>
+              <span class="fca-subtotal positivo">+ ${this.#formatChartMoney(subtotalIngresos)}</span>
             </div>
           </div>
           <div class="fca-body fca-body-nested">
@@ -2253,7 +2268,7 @@ export class DashboardModule extends BaseModule {
                 <span class="fca-count">${group.items.length} ${group.items.length === 1 ? 'gasto' : 'gastos'}</span>
               </div>
               <div class="fca-header-right">
-                <span class="fca-subtotal negativo">- ${App.Utils.formatearMoneda(group.subtotal)}</span>
+                <span class="fca-subtotal negativo">- ${this.#formatChartMoney(group.subtotal)}</span>
               </div>
             </div>
             <div class="fca-body">
@@ -2277,7 +2292,7 @@ export class DashboardModule extends BaseModule {
               <span class="fca-count">${egresos.length} ${egresos.length === 1 ? 'gasto' : 'gastos'}</span>
             </div>
             <div class="fca-header-right">
-              <span class="fca-subtotal negativo">- ${App.Utils.formatearMoneda(subtotalEgresos)}</span>
+              <span class="fca-subtotal negativo">- ${this.#formatChartMoney(subtotalEgresos)}</span>
             </div>
           </div>
           <div class="fca-body fca-body-nested">
