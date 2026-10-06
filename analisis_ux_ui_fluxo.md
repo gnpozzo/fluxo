@@ -182,3 +182,16 @@ Implementados: menú y título estables, sección Movimientos, gráficos despleg
 Diseño de escritorio principal, grillas adaptativas, menú móvil, formularios de una columna y controles accesibles a teclado. Se validaron seis secciones a 1440, 1024, 768 y 390 px; cinco formularios a 390 px; login, CSP, cambio de cuenta, tema, pago vacío y porcentajes ARS/USD con API simulada. También pasaron 16 pruebas y 19 comprobaciones PostgreSQL revertidas al finalizar. No se cargaron operaciones de prueba en producción para validar el rediseño.
 
 La revisión de importaciones conserva el flujo existente de revisión de filas. Los rediseños futuros de tablas como filas resumidas móviles, estudios de tareas con usuarios y certificación WCAG siguen siendo recomendaciones de evaluación, no resultados acreditados por esta entrega. La cobertura automatizada y capturas locales no equivalen a probar todos los modelos de celular/tablet.
+
+
+## Ajuste de navegación y gráficos — 6.3.2, 6 de octubre de 2026
+
+Las preferencias confirmadas por el usuario reemplazan la propuesta de gráficos plegados, menú independiente de la cuenta y selector adicional de tarjetas:
+
+- Los gráficos de Resumen, Movimientos, Tarjetas, Gastos compartidos, Ahorro e Inversiones vuelven a estar visibles directamente en su distribución original, con adaptación responsive.
+- El carrusel del plástico selecciona la tarjeta; se elimina el dropdown duplicado.
+- Vaciar consumos queda como botón directo, conservando el flujo de confirmación existente.
+- Menú lateral, accesos del resumen y acciones rápidas respetan los interruptores de habilitación de cada cuenta. Una configuración explícita deshabilitada prevalece sobre la existencia de tarjetas o alcancías. Para cuentas antiguas sin indicador, se conserva el criterio de tarjetas/subcuentas vinculadas.
+- Cambiar a una cuenta que deshabilita el módulo abierto regresa a Resumen. Los filtros compactos en modal y la corrección de getAhorros se mantienen.
+
+Validación: 18 pruebas unitarias, sintaxis de 99 archivos JavaScript, build de producción y navegador con API simulada: seis vistas a 1440/1024/768/390 px, gráficos visibles, carrusel, módulos deshabilitados, filtros y cinco formularios móviles. Sin escrituras ni cambios de configuración en Supabase en esta revisión.

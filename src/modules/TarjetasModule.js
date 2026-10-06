@@ -1314,17 +1314,13 @@ export class TarjetasModule extends BaseModule {
     const prevBtn = document.getElementById('tc-carousel-prev');
     const nextBtn = document.getElementById('tc-carousel-next');
     if (!visualEl) return;
-    let selector=document.getElementById('tc-card-select');
-    if(!selector){
-      const label=document.createElement('label');label.className='ux-card-selector';label.htmlFor='tc-card-select';label.textContent='Tarjeta';
-      selector=document.createElement('select');selector.id='tc-card-select';selector.className='input';
-      label.append(selector);document.getElementById('tc-widget-cards-panel').querySelector('.finset-card-header').after(label);
-      const note=document.createElement('p');note.id='tc-source-note';note.className='ux-source-note';label.after(note);
-      selector.addEventListener('change',()=>this.#navigateTc(Number(selector.value)-this.#tcIndex));
+    if (!document.getElementById('tc-source-note')) {
+      const note = document.createElement('p');
+      note.id = 'tc-source-note'; note.className = 'ux-source-note';
+      document.getElementById('tc-widget-cards-panel').querySelector('.finset-card-header').after(note);
     }
 
     if (this.#tarjetas.length === 0) {
-      selector.replaceChildren(new Option('Sin tarjetas vinculadas','0'));selector.disabled=true;
       const note=document.getElementById('tc-source-note');if(note){note.replaceChildren(document.createTextNode('Agregá una tarjeta en Configuración para comenzar. '));const configure=document.createElement('button');configure.type='button';configure.className='btn btn-outline btn-sm';configure.textContent='Configurar tarjetas';configure.onclick=()=>App.Modules.admin.cargar();note.append(configure);}
       visualEl.innerHTML = `<div style="color:var(--texto-3);text-align:center;padding:16px;">Sin tarjetas vinculadas</div>`;
       if (prevBtn) prevBtn.disabled = true;
@@ -1384,7 +1380,6 @@ export class TarjetasModule extends BaseModule {
       })
     ];
 
-    selector.replaceChildren(...this._tcList.map((tc,index)=>new Option(tc.nombre,String(index))));selector.disabled=false;
     if (this.#selectedTcId) {
       const idx = this._tcList.findIndex(t => t.id_tarjeta === this.#selectedTcId);
       this.#tcIndex = idx >= 0 ? idx : 0;
@@ -1440,7 +1435,6 @@ export class TarjetasModule extends BaseModule {
     const visualEl = document.getElementById('tc-carousel-visual');
     if (!visualEl) return;
     const tc = this._tcList?.[this.#tcIndex];
-    const selector=document.getElementById('tc-card-select');if(selector) selector.value=String(this.#tcIndex);
     if (!tc) return;
 
     const getBrandLogoHtml = (brandName) => {

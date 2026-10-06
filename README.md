@@ -4,7 +4,7 @@ Fluxo organiza movimientos, tarjetas, gastos compartidos, ahorro e inversiones e
 
 ## Estado de esta versión
 
-Versión **6.3.1**, revisión UX/UI y responsive del 5 de octubre de 2026, posterior a `c99402f`.
+Versión **6.3.2**, revisión UX/UI y responsive del 6 de octubre de 2026, posterior a `c99402f`.
 
 - Corregidos aislamiento por usuario, referencias cruzadas y permisos/RPC de Supabase.
 - Escrituras web transaccionales, rollback e idempotencia; cuotas y pagos separados por moneda.
@@ -21,9 +21,9 @@ La conexión restringida, CRON_SECRET y SUPABASE_URL están configurados como se
 
 ## Interfaz multiplataforma
 
-- Menú estable: Resumen, Movimientos, Tarjetas, Gastos compartidos, Ahorro e Inversiones. Título y contexto de cuenta/mes visibles.
-- Operaciones antes que gráficos: análisis desplegable, botón compacto de filtros con icono de embudo, modal con Aplicar/Cancelar y limpieza, acciones de vaciado en Más opciones.
-- Tarjetas con selector directo, origen del total explicado, pago interno explícito y sin indicador de salud cuando faltan ingresos.
+- Resumen y Movimientos siempre accesibles; los demás módulos y accesos rápidos respetan la habilitación de cada cuenta. Al cambiar a una cuenta que deshabilita la sección abierta, se vuelve a Resumen.
+- Gráficos visibles en su ubicación original. Botón compacto de filtros con icono de embudo y modal con Aplicar/Cancelar y limpieza. Vaciar consumos tiene un botón directo y conserva su confirmación.
+- Tarjetas seleccionadas desde el carrusel del plástico, sin dropdown duplicado; origen del total explicado, pago interno explícito y sin indicador de salud cuando faltan ingresos.
 - Movimientos ARS/USD separados, moneda explícita y distribución/compartidos desplegables en el formulario.
 - Escritorio como diseño principal; tablet y celular con columnas adaptativas, menú lateral y formularios contenidos en la pantalla.
 - Asociaciones de etiquetas, foco de teclado visible y menor movimiento cuando el sistema lo solicita. No implica certificación WCAG ni pruebas en dispositivos físicos.
@@ -116,6 +116,6 @@ Las pruebas no equivalen a un pentest, una certificación bancaria ni una restau
 
 ## Revisión de experiencia de uso
 
-Consultar [Análisis UX/UI](analisis_ux_ui_fluxo.md) para el inventario de controles, la propuesta de simplificación y criterios para preservar funcionalidades. El rediseño está propuesto; la corrección del reinicio de totales de tarjetas ya se aplicó en producción.
+Consultar [Análisis UX/UI](analisis_ux_ui_fluxo.md) para el inventario de controles, la propuesta de simplificación y criterios para preservar funcionalidades. El rediseño responsive está implementado, con ajustes del 6 de octubre a las preferencias de uso. La corrección del reinicio de totales de tarjetas ya se aplicó en producción.
 
 Corrección 6.3.1: getAhorros evita una relación opcional inexistente en PostgREST; resuelve nombres con subcuentas de la cuenta autenticada. Consulta real verificada con HTTP 200, sin cambios de datos ni permisos.

@@ -17,15 +17,6 @@ export function labelFields(root) {
   }
 }
 
-function disclosure(className, title) {
-  const details = document.createElement('details');
-  details.className = className;
-  const summary = document.createElement('summary');
-  summary.textContent = title;
-  details.append(summary);
-  return details;
-}
-
 function filters(root, ids) {
   const selects = ids.map(id => root.querySelector('#' + id)).filter(Boolean);
   if (!selects.length || selects[0].closest('.ux-filter-storage')) return;
@@ -83,37 +74,15 @@ function filters(root, ids) {
   update();
 }
 
-const charts = {
-  dashboard: ['dash-widget-moneyflow', 'dash-widget-categories'],
-  tarjetas: ['tc-widget-moneyflow', 'tc-widget-categories'],
-  cc: ['cc-widget-moneyflow', 'cc-widget-categories'],
-  ahorro: ['aho-widget-moneyflow', 'aho-widget-categories'],
-  inversiones: ['inv-widget-moneyflow', 'inv-widget-categories'],
-  movimientos: ['mov-donut-wrap', 'mov-evolucion-wrap']
-};
-
 export function enhanceView(root, moduleId) {
   if (!root) return;
   root.classList.add('ux-view');
-  const widgets = (charts[moduleId] || []).map(id => root.querySelector(`#${id}`)).filter(Boolean);
-  if (widgets.length && !root.querySelector('.ux-analysis')) {
-    const analysis = disclosure('ux-analysis', 'Análisis · evolución y distribución');
-    const grid = document.createElement('div'); grid.className = 'ux-analysis-grid'; analysis.append(grid);
-    for (const widget of widgets) {
-      const oldParent = widget.parentElement;
-      grid.append(widget);
-      if (oldParent !== root && !oldParent.children.length) oldParent.remove();
-    }
-    (moduleId==='dashboard'?root.querySelector('#dash-detail-view') || root:root).append(analysis);
-    analysis.addEventListener('toggle', () => { if (analysis.open) window.dispatchEvent(new Event('resize')); });
-  }
   filters(root, ['dash-mov-cat-filter', 'dash-mov-medio-filter']);
   filters(root, ['tc-cat-filter', 'tc-cuenta-filter']);
   const vaciar = root.querySelector('#tc-btn-vaciar-inline');
-  if (vaciar && !vaciar.closest('.ux-more')) {
-    const more = disclosure('ux-more', 'Más opciones');
-    vaciar.before(more); more.append(vaciar);
-    vaciar.textContent = 'Vaciar consumos…'; vaciar.className = 'btn btn-outline btn-sm ux-danger';
+  if (vaciar) {
+    vaciar.textContent = 'Vaciar consumos';
+    vaciar.className = 'btn btn-outline btn-sm ux-danger';
     root.querySelector('.tc-header-sep')?.remove();
   }
   for (const [id, text, primary] of [
@@ -145,7 +114,5 @@ export function installPresentation() {
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') document.querySelectorAll('.ux-more[open]').forEach(el => { el.open = false; });
-  });
+
 }

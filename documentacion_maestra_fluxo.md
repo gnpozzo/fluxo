@@ -522,3 +522,16 @@ Validación: 98 archivos JavaScript; 16 pruebas unitarias; build de producción;
 Filtros usa un botón de 34 px en escritorio (44 px táctil en celular), icono de embudo y contador. Abre un modal con campos etiquetados y selección temporal: Aplicar confirma, Cancelar/Escape descartan, Limpiar restablece el borrador. Se mantienen los IDs y listeners de los selects originales, ocultos en cada vista. Los modales se reutilizan por vista para conservar los eventos de la instancia original.
 
 El 500 de getAhorros era PGRST200: el esquema no tiene FK entre ahorros y ahorro_subcuentas. Se retiró ese join opcional y los nombres se resuelven desde las subcuentas ya filtradas por cuenta/usuario. La relación con movimientos y el filtro de propietario siguen vigentes. Dos pruebas cubren saldo histórico ARS/USD, nombres, referencia desconocida y cuenta vacía. La consulta real corregida devuelve HTTP 200; no se modificó el esquema ni se escribieron datos.
+
+
+## Ajuste de navegación y gráficos — 6.3.2, 6 de octubre de 2026
+
+Las preferencias confirmadas por el usuario reemplazan la propuesta de gráficos plegados, menú independiente de la cuenta y selector adicional de tarjetas:
+
+- Los gráficos de Resumen, Movimientos, Tarjetas, Gastos compartidos, Ahorro e Inversiones vuelven a estar visibles directamente en su distribución original, con adaptación responsive.
+- El carrusel del plástico selecciona la tarjeta; se elimina el dropdown duplicado.
+- Vaciar consumos queda como botón directo, conservando el flujo de confirmación existente.
+- Menú lateral, accesos del resumen y acciones rápidas respetan los interruptores de habilitación de cada cuenta. Una configuración explícita deshabilitada prevalece sobre la existencia de tarjetas o alcancías. Para cuentas antiguas sin indicador, se conserva el criterio de tarjetas/subcuentas vinculadas.
+- Cambiar a una cuenta que deshabilita el módulo abierto regresa a Resumen. Los filtros compactos en modal y la corrección de getAhorros se mantienen.
+
+Validación: 18 pruebas unitarias, sintaxis de 99 archivos JavaScript, build de producción y navegador con API simulada: seis vistas a 1440/1024/768/390 px, gráficos visibles, carrusel, módulos deshabilitados, filtros y cinco formularios móviles. Sin escrituras ni cambios de configuración en Supabase en esta revisión.

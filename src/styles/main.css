@@ -7671,21 +7671,11 @@ td.text-center {
 .ux-view .finset-card-header { flex-wrap: wrap; gap: 12px; }
 .ux-view .dh-search-box input { width: 180px !important; max-width: 100%; }
 .ux-view .finset-grid-2col { align-items: start; }
-.ux-analysis { order: 10; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); }
-.ux-analysis > summary, .ux-more > summary {
-  cursor: pointer; font-weight: 600; min-height: 44px; padding: 12px 16px; color: var(--texto);
-}
-.ux-analysis-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; padding: 0 16px 16px; }
-.ux-analysis-grid > * { min-width: 0; }
-.ux-more { position: relative; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
-.ux-more > button { margin: 4px 12px 12px; }
 .ux-danger { color: var(--rojo) !important; }
-.ux-card-selector { display: grid; gap: 8px; color: var(--texto-2); font-weight: 600; font-size: .85rem; margin: 0 0 16px; }
-.ux-card-selector select { width: 100%; min-height: 44px; }
 .ux-view #tc-widget-consumos, .ux-view #dash-widget-movimientos { min-height: 0 !important; }
 .ux-view .dh-drilldown-list:has(> .dh-empty-state), .ux-view #tc-consumos-list:not(:has(button)) { min-height: 140px !important; }
 .ux-view .finset-kpi-grid, .ux-view .kpi-grid { margin-bottom: 0 !important; }
-.ux-view .analytics-side-layout { display: block; }
+
 .ux-view .analytics-main-col { width: 100%; }
 .ux-view .analytics-side-col:empty { display: none; }
 .ux-view #inv-dolar-info { order: 9; }
@@ -7709,7 +7699,7 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
   .ux-view .finset-grid-2col { grid-template-columns: minmax(0, 1fr) !important; }
 }
 @media (max-width: 900px) {
-  .ux-view .finset-grid-2col, .ux-analysis-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .ux-view .finset-grid-2col { grid-template-columns: minmax(0, 1fr) !important; }
   .ux-view .finset-kpi-grid, .ux-view .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ux-view .finset-card { padding: 18px; }
   .ux-view .finset-card-actions, .ux-view .tc-filter-controls, .ux-view .tc-toolbar-row { flex-wrap: wrap; gap: 10px; }
@@ -7737,7 +7727,6 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
   .ux-view .dt-search { min-width: 0; width: 100%; }
   .ux-view #mov-search { min-width: 0 !important; width: 100%; }
   .ux-view .dt-table-wrap, .admin-content-area { overflow-x: auto; max-width: 100%; }
-  .ux-view .ux-analysis-grid { padding: 0 8px 8px; }
     .modal-overlay { padding: 12px !important; }
   .modal-dialog { width: 100% !important; max-width: 100% !important; max-height: calc(100dvh - 24px); }
   .modal-body { overflow: auto; padding: 16px !important; }

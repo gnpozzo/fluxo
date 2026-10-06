@@ -313,6 +313,8 @@ class AppInit {
       return;
     }
 
+    if (!this.#moduloDisponible(vistaId)) vistaId = 'vista-dashboard';
+
     // Ocultar todos los paneles de contenido
     document.querySelectorAll('.vista-container').forEach(v => v.classList.remove('active'));
 
@@ -410,7 +412,7 @@ class AppInit {
           this.#cargarNotificaciones(); // Refrescar notificaciones
 
           // Validar si la vista activa es compatible con la nueva cuenta seleccionada
-          const isTabValid = !!this.#tabMap[this.#tabActivo];
+          const isTabValid = this.#moduloDisponible(this.#tabActivo);
 
           if (!isTabValid) {
             this.#navegarTab('vista-dashboard');
@@ -508,8 +510,8 @@ class AppInit {
       });
     }
 
-    const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj.id_cuenta_principal);
-    const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj.id_cuenta_principal);
+    const hasTarjetas = this.#moduloDisponible('vista-tarjetas');
+    const hasAhorro = this.#moduloDisponible('vista-ahorro');
 
     if (hasTarjetas && vistaId !== 'vista-tarjetas') {
       modules.push({
@@ -522,7 +524,7 @@ class AppInit {
       });
     }
 
-    if (cuentaObj.modulo_cc_activo && vistaId !== 'vista-cc') {
+    if (this.#moduloDisponible('vista-cc') && vistaId !== 'vista-cc') {
       modules.push({
         id: 'cc',
         label: 'Gastos compartidos',
@@ -544,7 +546,7 @@ class AppInit {
       });
     }
 
-    if (cuentaObj.modulo_inversiones_activo && vistaId !== 'vista-inversiones') {
+    if (this.#moduloDisponible('vista-inversiones') && vistaId !== 'vista-inversiones') {
       modules.push({
         id: 'inversiones',
         label: 'Inversiones',
@@ -573,9 +575,31 @@ class AppInit {
 
   // --- SECCIÓN 4: TABS ---
 
+  #moduloDisponible(vistaId) {
+    const flags = {
+      'vista-tarjetas': 'modulo_tarjetas_activo',
+      'vista-cc': 'modulo_cc_activo',
+      'vista-ahorro': 'modulo_ahorro_activo',
+      'vista-inversiones': 'modulo_inversiones_activo'
+    };
+    if (!flags[vistaId]) return !!this.#tabMap[vistaId];
+    const cuenta = App.Store.cuentas.find(c => c.id_cuenta_principal === App.Store.cuenta);
+    if (!cuenta) return false;
+    // Explicit configuration takes priority over existing cards or savings buckets.
+    if (cuenta[flags[vistaId]] != null) return cuenta[flags[vistaId]] === true;
+    if (vistaId === 'vista-tarjetas') return (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuenta.id_cuenta_principal);
+    if (vistaId === 'vista-ahorro') return (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuenta.id_cuenta_principal);
+    return false;
+  }
+
   #actualizarVisibilidadTabs() {
-    // Empty accounts retain discoverable entry points to configure each module.
-    document.querySelectorAll('.nav-item[data-vista]').forEach(button=>{button.style.display='';});
+    document.querySelectorAll('.nav-item[data-vista]').forEach(button => {
+      button.hidden = !this.#moduloDisponible(button.dataset.vista);
+    });
+    const actions = { tarjeta: 'vista-tarjetas', cc: 'vista-cc', ahorro: 'vista-ahorro', inversion: 'vista-inversiones' };
+    document.querySelectorAll('.qa-menu-item').forEach(item => {
+      item.hidden = !!actions[item.dataset.qaAction] && !this.#moduloDisponible(actions[item.dataset.qaAction]);
+    });
   }
 
   // --- SECCIÓN 5: QUICK ADD (Universal) ---
@@ -623,6 +647,7 @@ class AppInit {
         e.stopPropagation();
         toggleMenu(false);
         const action = item.dataset.qaAction;
+        if (item.hidden) return;
         switch (action) {
           case 'egreso':
             App.Modules.movimientos?.abrirAlta('EGRESO');

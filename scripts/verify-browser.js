@@ -9,10 +9,10 @@ import puppeteer from 'puppeteer-core';
 const user={id:'11111111-1111-4111-8111-111111111111',email:'qa@example.test',aud:'authenticated',role:'authenticated',user_metadata:{full_name:'QA'}};
 const account={id_cuenta_principal:'QA',nombre:'QA',activa:true,es_predeterminada:true,modulo_tarjetas_activo:true,modulo_cc_activo:true,modulo_ahorro_activo:true,modulo_inversiones_activo:true};
 const card={id_tarjeta:'QA-CARD',id_cuenta_principal:'QA',nombre:'Visa QA',activa:true,banco:'QA',red:'VISA',total_resumen_ars:0,total_resumen_usd:0,fecha_vencimiento_actual:'2026-10-09'};
-const emptyAccount={...account,id_cuenta_principal:'EMPTY',nombre:'Sin configuración',es_predeterminada:false,modulo_cc_activo:false,modulo_inversiones_activo:false};
+const emptyAccount={...account,id_cuenta_principal:'EMPTY',nombre:'Sin configuración',es_predeterminada:false,modulo_tarjetas_activo:false,modulo_ahorro_activo:false,modulo_cc_activo:false,modulo_inversiones_activo:false};
 const fixtures={
  getConfig:{url:'https://qa.supabase.co',anonKey:'public-test-key'},
- getInitialData:{success:true,cuentas:[account,emptyAccount],meses:['2026-10'],categorias:[],tarjetas:[card],subcuentas:[],usuarios_cc:[],preferencias:{}},
+ getInitialData:{success:true,cuentas:[account,emptyAccount],meses:['2026-10'],categorias:[],tarjetas:[card,{...card,id_tarjeta:"DISABLED-CARD",id_cuenta_principal:"EMPTY"}],subcuentas:[{id_subcuenta:"DISABLED-SAVINGS",id_cuenta_principal:"EMPTY",nombre:"Deshabilitada"}],usuarios_cc:[],preferencias:{}},
  getUserInfo:{success:true,user_metadata:user.user_metadata,email:user.email},
  getDashboardData:{success:true,kpis:{ingresos:0,egresos:0,resultado:0,pctSaldado:0,pctPendiente:0},movimientos:[],evolucionMensual:[],kpisPorMoneda:{ARS:{},USD:{}}},
  getConsumosTC:{success:true,consumos:[],tarjetas:[],kpis:{}},
@@ -90,18 +90,22 @@ try {
    await openNavigation(width);
    await page.click('#'+id);
    await page.waitForFunction(name=>document.querySelector('#page-title')?.textContent===name,{},name);
-   await page.waitForFunction(()=>document.querySelector('.vista-container.active')?.querySelector('.ux-analysis'));
+   const chartIds = {Resumen:['dash-widget-moneyflow','dash-widget-categories'],Movimientos:['mov-donut-wrap','mov-evolucion-wrap'],Tarjetas:['tc-widget-moneyflow','tc-widget-categories'],'Gastos compartidos':['cc-widget-moneyflow','cc-widget-categories'],Ahorro:['aho-widget-moneyflow','aho-widget-categories'],Inversiones:['inv-widget-moneyflow','inv-widget-categories']};
+   await page.waitForFunction(ids=>ids.every(id=>{const el=document.getElementById(id);return el && el.getBoundingClientRect().height>0 && !el.closest('details:not([open])');}),{},chartIds[name]);
    if(width<=900) await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
    const overflow=await page.evaluate(()=>{const content=document.querySelector('.main-content');return document.documentElement.scrollWidth>innerWidth+2 || content.scrollWidth>content.clientWidth+2;});
    assert.equal(overflow,false,'page overflow in '+name+' at '+width);
   }
   await openNavigation(width);
   await page.click('#tab-btn-tarjetas');
-  await page.waitForSelector('#tc-card-select');
-  await page.select('#tc-card-select','1');
+  await page.waitForSelector('#tc-carousel-visual');
+  if (!(await page.$eval('#tc-carousel-visual',el=>el.textContent)).includes('Visa QA')) await page.click('#tc-carousel-next');
+  assert.equal(await page.$('#tc-card-select'),null);
+  assert.ok((await page.$eval('#tc-carousel-visual',el=>el.textContent)).includes('Visa QA'));
   assert.equal(await page.$eval('#tc-btn-pagar-resumen',el=>el.disabled),true,'empty statement cannot register payment');
   assert.equal(await page.$eval('#tc-tope-kpi-val',el=>el.textContent),'Sin base de ingresos');
-  assert.equal(await page.$eval('#tc-btn-vaciar-inline',el=>!!el.closest('.ux-more')),true);
+  assert.equal(await page.$eval('#tc-btn-vaciar-inline',el=>!!el.closest('details')),false);
+  assert.equal(await page.$eval('#tc-btn-vaciar-inline',el=>el.textContent),'Vaciar consumos');
   if(width<=900) await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
   await page.screenshot({path:'.audit.local/ux-tarjetas-'+width+'.png',fullPage:true});
   if(width===390){
@@ -138,7 +142,10 @@ try {
  assert.equal(await page.$eval('#tc-cuenta-filter',el=>el.value),'');
  await page.select('#selector-cuenta','EMPTY');
  await page.waitForFunction(()=>App.Store.cuenta==='EMPTY');
- assert.equal(await page.$eval('#tab-btn-tarjetas',el=>getComputedStyle(el).display==='none'),false,'empty account keeps navigation');
+ await page.waitForFunction(()=>document.querySelector('#page-title').textContent==='Resumen');
+ for(const id of ['tarjetas','cc','ahorro','inversiones']) assert.equal(await page.$eval('#tab-btn-'+id,el=>getComputedStyle(el).display==='none'),true,'disabled module stays hidden');
+ for(const action of ['tarjeta','cc','ahorro','inversion']) assert.equal(await page.$eval('[data-qa-action='+action+']',el=>el.hidden),true);
+ assert.equal(await page.$eval('#tab-btn-movimientos',el=>el.hidden),false);
  await page.select('#selector-cuenta','QA');
  await page.click('#tab-btn-ahorro');
  await page.waitForSelector('#aho-btn-ars');
@@ -195,5 +202,5 @@ try {
  await page.evaluate(()=>window.toggleAppTheme());
  assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark');
  assert.deepEqual(errors,[]);
- console.log('PASS: login, seven modules, six responsive views, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
+ console.log('PASS: login, seven modules, six responsive views with visible charts, account module gating, card carousel, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
 }catch(error){if(browser){const pages=await browser.pages();await pages.at(-1).screenshot({path:'.audit.local/ux-failure.png'});}throw error;}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
