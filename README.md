@@ -4,16 +4,16 @@ Fluxo organiza movimientos, tarjetas, gastos compartidos, ahorro e inversiones e
 
 ## Estado de esta versión
 
-Versión **6.4.0**, revisión UX/UI y responsive del 6 de octubre de 2026, posterior a `c99402f`.
+Versión **6.5.0**, revisión UX/UI y responsive del 6 de octubre de 2026, posterior a `c99402f`.
 
 - Corregidos aislamiento por usuario, referencias cruzadas y permisos/RPC de Supabase.
 - Escrituras web transaccionales, rollback e idempotencia; cuotas y pagos separados por moneda.
 - Eliminadas reparaciones automáticas al consultar datos y cotizaciones ficticias.
 - Caché y contexto de IA por usuario, HTML sanitizado y módulos cargados bajo demanda.
-- Migración **20261005192629** aplicada al proyecto Supabase de Fluxo.
-- 18 pruebas automatizadas y 19 verificaciones PostgreSQL aprobadas. Fixtures descartadas por rollback.
+- Migraciones **20261005192629** y **20261006120000** aplicadas a Supabase. La segunda agrega metadatos de cuotas y conserva descripciones/importes existentes.
+- 25 pruebas automatizadas y 28 verificaciones PostgreSQL aprobadas. Fixtures descartadas por rollback.
 - 10 comprobaciones HTTP en producción aprobadas: autenticación, alta, replay, conflicto, consulta y borrado. Cuenta QA y registros eliminados.
-- Navegador: login, siete módulos y CSP; seis secciones a 1440, 1024, 768 y 390 px; cinco formularios móviles; monedas y cálculo por porcentaje con API simulada.
+- Navegador: login, siete módulos y CSP; cinco secciones a 1440, 1024, 768 y 390 px; cinco formularios móviles; monedas y cálculo por porcentaje con API simulada.
 - Build correcto; JavaScript principal **153 kB**, antes 585 kB. Vendors y módulos se descargan por separado.
 - `npm audit`: **0 vulnerabilidades reportadas**. CI configurado para sintaxis, pruebas, build y audit; los runs de GitHub estaban en cola al verificar la entrega. Esos checks locales y el build Vercel aprobaron.
 
@@ -21,9 +21,11 @@ La conexión restringida, CRON_SECRET y SUPABASE_URL están configurados como se
 
 ## Interfaz multiplataforma
 
-- Resumen y Movimientos siempre accesibles; los demás módulos y accesos rápidos respetan la habilitación de cada cuenta. Al cambiar a una cuenta que deshabilita la sección abierta, se vuelve a Resumen.
-- Gráficos visibles en su ubicación original, con filtros cruzados: clic en dona, barra, etiqueta de mes o leyenda; Ctrl/Cmd+clic para sumar/quitar selecciones. Categorías, meses y tipos se combinan y actualizan las listas y gráficos del módulo. Limpiar selección restaura el contexto. Botón compacto de filtros con icono de embudo y modal con Aplicar/Cancelar y limpieza. Vaciar consumos tiene un botón directo y conserva su confirmación.
+- Resumen integra los movimientos: Ingresos/Gastos → categorías → registros. Nuevo movimiento y edición de series siguen disponibles; los demás módulos y accesos rápidos respetan la habilitación de cada cuenta. Al cambiar a una cuenta que deshabilita la sección abierta, se vuelve a Resumen.
+- Dona y evolución mensual junto a los movimientos en Resumen, con filtros cruzados: clic en dona, barra, etiqueta de mes o leyenda; Ctrl/Cmd+clic para sumar/quitar selecciones. Categorías, meses y tipos se combinan y actualizan las listas y gráficos del módulo. Limpiar selección restaura el contexto. Botón compacto de filtros con icono de embudo y modal con Aplicar/Cancelar y limpieza. Vaciar consumos tiene un botón directo y conserva su confirmación.
 - Tarjetas seleccionadas desde el carrusel del plástico, sin dropdown duplicado; origen del total explicado, pago interno explícito y sin indicador de salud cuando faltan ingresos.
+- Un único badge por modalidad: Simple, Recurrente, Cuota x/y o Última cuota. Las cuotas dejan de duplicarse en la descripción. Clic o Enter sobre una fila abre el detalle en toda la app.
+- Débito, transferencia y efectivo: tocar Pendiente/Pagado cambia el estado manualmente. Los consumos de TC y sus movimientos vinculados se saldan al registrar el pago del resumen; ese pago no cambia otros gastos.
 - Movimientos ARS/USD separados, moneda explícita y distribución/compartidos desplegables en el formulario.
 - Escritorio como diseño principal; tablet y celular con columnas adaptativas, menú lateral y formularios contenidos en la pantalla.
 - Asociaciones de etiquetas, foco de teclado visible y menor movimiento cuando el sistema lo solicita. No implica certificación WCAG ni pruebas en dispositivos físicos.

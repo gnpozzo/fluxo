@@ -1,3 +1,4 @@
+import { isCardPurchase } from '../shared/operation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { civilDate, monthBounds, todayArgentina, money } from '../shared/finance.js';
 import { inputError } from '../api_lib/validation.js';
@@ -18,14 +19,13 @@ export default async function handler(req, res) {
     const raw = body.idMovimiento || body.id || body.idConsumo;
     const ids = [...new Set(Array.isArray(raw)?raw:[raw])];
     if(!ids.length || ids.length>1000 || ids.some(id=>typeof id!=='string')) throw inputError('IDs inválidos.');
-    const {data:movs}=await db.from('movimientos').select('id_movimiento,id_consumo_tarjeta_origen').in('id_movimiento',ids).eq('user_id',userId);
+    const {data:movs}=await db.from('movimientos').select('id_movimiento,id_consumo_tarjeta_origen,medio_pago,id_categoria,descripcion').in('id_movimiento',ids).eq('user_id',userId);
     const {data:tcs}=await db.from('consumos_tc').select('id_consumo_tarjeta').in('id_consumo_tarjeta',ids).eq('user_id',userId);
     const owned=new Set([...movs.map(m=>m.id_movimiento),...tcs.map(c=>c.id_consumo_tarjeta)]);
     if(ids.some(id=>!owned.has(id))) throw inputError('La operación no pertenece al usuario.',403);
+    if(tcs.length || movs.some(isCardPurchase)) throw inputError('Los consumos con tarjeta se saldan al registrar el pago del resumen.');
+    if(movs.some(m=>m.id_categoria==='CAT_PAGO_TC' && m.descripcion?.toLowerCase().startsWith('pago resumen:'))) throw inputError('El pago del resumen se administra desde Tarjetas.');
     for(const id of ids) mark(id,pagado===undefined?!state[id]?.pagado:!!pagado);
-    const {data:linked}=await db.from('movimientos').select('id_movimiento,id_consumo_tarjeta_origen').in('id_consumo_tarjeta_origen',ids).eq('user_id',userId);
-    for(const m of linked) mark(m.id_movimiento,state[m.id_consumo_tarjeta_origen].pagado,'MOV_FROM_TC');
-    for(const m of movs) if(m.id_consumo_tarjeta_origen) mark(m.id_consumo_tarjeta_origen,state[m.id_movimiento].pagado,'TC_FROM_MOV');
   } else if(action === 'pagar_resumen') {
     const month=body.mes;
     const [start,end]=monthBounds(month);

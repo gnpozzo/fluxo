@@ -35,19 +35,18 @@ Pantalla de inicio que consolida el estado patrimonial del mes seleccionado:
   - **Gastos Totales**: Suma de egresos, desagregados visualmente en **Saldados** y **Pendientes**.
   - **Balance / Resultado Neto**: Diferencia entre ingresos y gastos (`Ingresos - Gastos`).
 - **Carrusel de Mercados en Vivo**: Cotizaciones instantáneas de Dólar MEP, CCL, Blue, Riesgo País e instrumentos financieros.
-- **Accesos Rápidos a Módulos**: Botones directos a Tarjetas, Movimientos, Gastos Compartidos, Ahorro e Inversiones.
+- **Accesos Rápidos a Módulos**: Botones a los módulos habilitados de la cuenta. Los movimientos se consultan y cargan desde Resumen.
 
 ---
 
-## 4. Módulo de Movimientos (Libro Diario)
+## 4. Movimientos dentro de Resumen
 
 Es el registro contable detallado de todos los ingresos y gastos de la cuenta activa.
 
-### 4.1 Barra de Control de Pagos
-En la parte superior se visualiza:
-- **Gastos Saldados (Abonados)**: Importe total y porcentaje (`X%`) en verde.
-- **Gastos Pendientes de Pago**: Importe total y porcentaje (`Y%`) en ámbar.
-- **Barra de Progreso Visual**: Representación proporcional de la liquidez ya comprometida vs. pendiente.
+### 4.1 Organización y estado
+Los registros se organizan en Ingresos y Gastos; dentro de cada grupo aparecen las categorías y sus movimientos. Usá búsqueda o Filtros para acotar la lista. Cada fila abre su detalle con clic o Enter, y Nuevo movimiento abre el formulario de alta.
+
+Para gastos por débito, transferencia o efectivo, presioná Pendiente para marcar Pagado, o Pagado para volver a Pendiente. Los consumos de tarjeta de crédito se saldan al registrar el pago de su resumen. El estado es un registro interno y no ejecuta pagos bancarios.
 
 ### 4.2 Carga de Movimientos (Modal de Alta)
 - **Tipo de Movimiento**:
@@ -66,18 +65,11 @@ En la parte superior se visualiza:
   - `En Cuotas`: Solicita número de cuota actual y cuotas totales (ej. 1/6), proyectando automáticamente los meses subsiguientes.
   - `Recurrente`: Gastos fijos continuos (servicios, alquiler, cuotas de colegios) que se replican mensualmente.
 
-### 4.3 Tabla de Movimientos y Acciones
-- **Columna "Estado Pago"**: Badge interactivo que permite alternar con un solo clic entre:
-  - `✓ Saldado`: Gasto ya cancelado o debitado.
-  - `⏳ Pendiente`: Gasto previsto pendiente de pago.
-- **Memoria de Navegación**: Al editar o eliminar un movimiento desde la página 2, 3 o posterior de la grilla, la tabla conserva la página activa y restaura el scroll exacto de la pantalla, resaltando suavemente la fila editada.
+### 4.3 Badges y detalle
+La modalidad aparece en un único badge: Simple, Recurrente, Cuota x/y o Última cuota. La descripción no repite el número de cuota. Abrí el detalle desde la fila para editar o eliminar, con los alcances disponibles para series y distribuciones.
 
-### 4.4 Vista "Análisis Gráfico" (No Invasiva)
-Mediante el selector `[ 📋 Movimientos | 📊 Análisis Gráfico ]`:
-- **Gráfico Doughnut (Chart.js)**: Distribución de gastos por categoría.
-- **Doble Métrica Analítica por Categoría**:
-  - **% sobre Gastos Totales**: Proporción que representa la categoría dentro del total de egresos.
-  - **% sobre Ingresos Percibidos**: Impacto de la categoría sobre el dinero total que ingresó en el mes (útil para evaluar reglas como 50/30/20).
+### 4.4 Gráficos con filtros cruzados
+La dona y las barras mensuales se ven junto a los movimientos. Clic en una categoría, mes o leyenda filtra los gráficos y la lista; Ctrl+clic (Cmd en Mac) suma/quita selecciones. Categorías y meses se combinan. Quitá chips o usá Limpiar selección para restaurar la vista.
 
 ---
 

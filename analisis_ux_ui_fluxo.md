@@ -206,3 +206,10 @@ Las donas mantienen alternativas de su propia dimensión para permitir ampliar u
 getDashboardData agrega movimientosHistoricos con categoría; getConsumosCC agrega consumosHistoricos para 12 meses; getAhorros agrega transferenciasHistoricas ya leídas para calcular los saldos. Todas las consultas conservan autenticación y alcance de cuenta/usuario. No se cambiaron datos ni permisos en Supabase.
 
 Verificación: 23 pruebas unitarias, sintaxis de 102 archivos, build y navegador con API simulada. Clics reales en donas, barras, ejes y leyendas; Vivienda/Comida en meses históricos; Ctrl para sumar; cascada hacia listas y barras en los seis módulos. Consultas de los tres controladores contra producción devolvieron HTTP 200 (lectura con cliente de servicio acotado al usuario para esta verificación).
+
+
+## Iteración 6.5.0 — Resumen con operaciones
+
+Movimientos se integra en Resumen para evitar duplicar la consulta. En PC el listado ocupa la columna principal y la dona/evolución la columna lateral; en tablet/celular se apilan. Ingresos y Gastos se agrupan por categorías, y TC incorpora grupos con subtotales por moneda. Búsqueda, filtros cruzados y formularios existentes siguen disponibles.
+
+El badge comunica la modalidad una sola vez: Simple, Recurrente, Cuota x/y o Última cuota; la descripción queda limpia. Se elimina la flecha de detalle y la fila completa admite clic o teclado. El botón Pendiente/Pagado es independiente del clic de fila para gastos por débito, transferencia o efectivo. TC muestra el estado de sólo lectura, asociado al pago del resumen. Se revisó el acomodo de descripción, estado e importe en móvil para evitar superposiciones.

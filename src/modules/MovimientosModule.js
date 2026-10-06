@@ -1,3 +1,4 @@
+import { operationInfo, operationBadge, paymentStatus } from '../core/OperationPresentation.js';
 import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
@@ -260,9 +261,7 @@ export class MovimientosModule extends BaseModule {
           { key: 'pagado',          label: 'Estado Pago',sortable: true, align: 'center',
             sortValue: (r) => r.pagado ? 1 : 0,
             render: (r) => {
-              if (r.tipo_mov !== 'EGRESO') return `<span style="color:var(--texto-3);font-size:0.75rem;">—</span>`;
-              const isPaid = !!r.pagado;
-              return `<button type="button" class="btn-toggle-pago ${isPaid ? 'pago-saldado' : 'pago-pendiente'}" data-toggle-pago="${r.id_movimiento}" title="${isPaid ? 'Saldado (Clic para marcar pendiente)' : 'Pendiente (Clic para marcar saldado)'}">${isPaid ? '✓ Saldado' : '⏳ Pendiente'}</button>`;
+              return paymentStatus(r);
             } }
         ],
         emptyMsg  : 'No hay movimientos para este período.',
@@ -1842,32 +1841,8 @@ export class MovimientosModule extends BaseModule {
   // --- SECCIÓN 7b: RENDER HELPERS ---
 
   #renderDescripcion(row) {
-    const badges = [];
-    const isRecurGroup = Boolean(row.recur_group_id?.startsWith('REC_'));
-    const isInstlGroup = Boolean(row.recur_group_id?.startsWith('INSTL_'));
-    const cuotaMatch = (row.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (row.descripcion || '').match(/\((\d+)\/(\d+)\)/);
-
-    let cleanDesc = row.descripcion || '';
-    if (isRecurGroup) {
-      cleanDesc = cleanDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
-      badges.push('<span class="badge badge-recur">Recurrente</span>');
-    } else if (isInstlGroup || cuotaMatch) {
-      if (cuotaMatch) {
-        const act = parseInt(cuotaMatch[1], 10);
-        const tot = parseInt(cuotaMatch[2], 10);
-        if (tot > 1 && act === tot) {
-          badges.push('<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px;">🏁 Última cuota</span>');
-        } else if (tot > 1) {
-          badges.push(`<span class="badge badge-recur" style="font-size:0.68rem; padding:2px 7px; border-radius:6px;">Cuota ${act}/${tot}</span>`);
-        }
-      } else {
-        badges.push('<span class="badge badge-recur">Cuotas</span>');
-      }
-    } else if (row.recur_group_id) {
-      badges.push('<span class="badge badge-recur">Recurrente</span>');
-    } else if (row.tipo_mov === 'EGRESO') {
-      badges.push('<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-weight:500; font-size:0.68rem; padding:2px 7px; border-radius:6px;">1️⃣ Única cuota</span>');
-    }
+    const badges = [operationBadge(row)];
+    const cleanDesc = operationInfo(row).description;
     if (row.split_group_id) {
       const label = row.split_rol === 'ORIGEN' ? 'Split Salida'
                   : row.split_rol === 'DESTINO' ? 'Split Entrada' : 'Dividido';

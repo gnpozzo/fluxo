@@ -1,3 +1,4 @@
+import { operationInfo, operationBadge, paymentStatus } from '../core/OperationPresentation.js';
 import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
@@ -675,7 +676,7 @@ export class TarjetasModule extends BaseModule {
         <div class="form-group full-width">
           <label>Descripción <span class="required-mark">*</span></label>
           <input class="input" type="text" name="descripcion"
-                 value="${App.Utils.escapeHtml(data?.descripcion || '')}" required>
+                 value="${App.Utils.escapeHtml(operationInfo(data).description)}" required>
         </div>
 
         <div class="form-group">
@@ -992,7 +993,7 @@ export class TarjetasModule extends BaseModule {
       const confirmModal = new App.Modal('modal-tc-del-confirm');
       confirmModal.open({
         titulo      : 'Confirmar eliminación',
-        body        : `<p>¿Eliminar el consumo <strong>${App.Utils.escapeHtml(row.descripcion)}</strong>?</p>`,
+        body        : `<p>¿Eliminar el consumo <strong>${App.Utils.escapeHtml(operationInfo(row).description)}</strong>?</p>`,
         confirmLabel: 'Eliminar',
         danger      : true,
         onConfirm   : async () => {
@@ -1186,20 +1187,7 @@ export class TarjetasModule extends BaseModule {
   // --- SECCIÓN 7: DETAIL MODAL & HELPERS ---
 
   #abrirModalDetalle(row) {
-    const badges = [];
-    const cuotaTotal = Number(row.cuota_total || 1);
-    const cuotaActual = Number(row.cuota_actual || 1);
-    if (row.tipo_consumo === 'CUOTAS' || cuotaTotal > 1) {
-      if (cuotaActual === cuotaTotal && cuotaTotal > 1) {
-        badges.push('<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px;">🏁 Última cuota</span>');
-      } else {
-        badges.push(`<span class="badge badge-recur">Cuota ${cuotaActual}/${cuotaTotal}</span>`);
-      }
-    } else if (row.tipo_consumo === 'RECURRENTE') {
-      badges.push('<span class="badge badge-recur">Recurrente</span>');
-    } else {
-      badges.push('<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-weight:500; font-size:0.68rem; padding:2px 7px; border-radius:6px;">1️⃣ Única cuota</span>');
-    }
+    const badges = [operationBadge(row)];
     if (row.imputado) badges.push('<span class="badge badge-tc">Imputado</span>');
 
     const isUSD = row.moneda === 'USD';
@@ -1209,7 +1197,7 @@ export class TarjetasModule extends BaseModule {
 
     const detailModal = new App.Modal('modal-tc-detail');
     detailModal.open({
-      titulo: `${App.Utils.escapeHtml(row.descripcion)} ${isUSD ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:var(--verde, #10b981); font-weight:700; font-size:0.75rem; margin-left:6px; vertical-align:middle; padding:2px 8px; border-radius:6px;">🇺🇸 USD</span>' : ''}`,
+      titulo: `${App.Utils.escapeHtml(operationInfo(row).description)} ${isUSD ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:var(--verde, #10b981); font-weight:700; font-size:0.75rem; margin-left:6px; vertical-align:middle; padding:2px 8px; border-radius:6px;">🇺🇸 USD</span>' : ''}`,
       icono: 'card',
       size: 'md',
       body: `
@@ -1249,7 +1237,7 @@ export class TarjetasModule extends BaseModule {
           ${row.descripcion ? `
           <div class="detail-item full-width">
             <span class="detail-label">Descripción</span>
-            <span class="detail-value" style="font-weight:500">${App.Utils.escapeHtml(row.descripcion)}</span>
+            <span class="detail-value" style="font-weight:500">${App.Utils.escapeHtml(operationInfo(row).description)}</span>
           </div>` : ''}
         </div>
         <div class="detail-actions">
@@ -1274,20 +1262,7 @@ export class TarjetasModule extends BaseModule {
   }
 
   #renderDescripcion(row) {
-    const badges = [];
-    const cuotaTotal = Number(row.cuota_total || 1);
-    const cuotaActual = Number(row.cuota_actual || 1);
-    if (row.tipo_consumo === 'CUOTAS' || cuotaTotal > 1) {
-      if (cuotaActual === cuotaTotal && cuotaTotal > 1) {
-        badges.push('<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px;">🏁 Última cuota</span>');
-      } else {
-        badges.push(`<span class="badge badge-recur" style="font-size:0.68rem; padding:2px 7px; border-radius:6px;">Cuota ${cuotaActual}/${cuotaTotal}</span>`);
-      }
-    } else if (row.tipo_consumo === 'RECURRENTE') {
-      badges.push('<span class="badge badge-recur">Recurrente</span>');
-    } else {
-      badges.push('<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-weight:500; font-size:0.68rem; padding:2px 7px; border-radius:6px;">1️⃣ Única cuota</span>');
-    }
+    const badges = [operationBadge(row)];
     if (row.imputado) {
       if (row.es_incidencia_externa) {
         badges.push(`<span class="badge badge-recur">🏛️ ${App.Utils.escapeHtml(row.cuenta_imputada_nombre || 'Externa')}</span>`);
@@ -1295,7 +1270,7 @@ export class TarjetasModule extends BaseModule {
         badges.push('<span class="badge badge-tc">Personal</span>');
       }
     }
-    return `${App.Utils.escapeHtml(row.descripcion)} ${badges.join(' ')}`;
+    return `${App.Utils.escapeHtml(operationInfo(row).description)} ${badges.join(' ')}`;
   }
 
   #mostrarKpiSkeletons() {
@@ -1951,35 +1926,19 @@ export class TarjetasModule extends BaseModule {
       return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
     };
 
-    const rowsHtml = items.map(r => {
+    const renderRow = r => {
       const catName = r.categoria_nombre || 'General';
-      const desc = r.descripcion || catName;
+      const desc = operationInfo(r).description || catName;
       const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
-      const isPaid = !!r.pagado;
       const id = r.id_consumo_tc || r.id_consumo_tarjeta;
       const tcName = r.tarjeta_nombre || 'TC';
 
-      let badgesHtml = '';
-      const cuotaActual = Number(r.cuota_actual || 1);
-      const cuotaTotal = Number(r.cuota_total || 1);
-      if (r.tipo_consumo === 'CUOTAS' || cuotaTotal > 1) {
-        if (cuotaActual === cuotaTotal && cuotaTotal > 1) {
-          badgesHtml += `<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-weight:600; font-size:0.68rem; padding:2px 7px; border-radius:6px; margin-left:4px;">🏁 Última cuota</span>`;
-        } else {
-          badgesHtml += `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Cuota ${cuotaActual}/${cuotaTotal}</span>`;
-        }
-      } else if (r.tipo_consumo === 'RECURRENTE') {
-        badgesHtml += `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Recurrente</span>`;
-      } else {
-        badgesHtml += `<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-weight:500; font-size:0.68rem; padding:2px 7px; border-radius:6px; margin-left:4px;">1️⃣ Única cuota</span>`;
-      }
+      let badgesHtml = operationBadge(r);
       if (r.imputado && r.cuenta_imputada_nombre && r.cuenta_imputada_nombre !== 'Propios') {
         badgesHtml += `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${App.Utils.escapeHtml(r.cuenta_imputada_nombre)}</span>`;
       }
 
-      const importeFmt = r.moneda === 'USD'
-        ? 'USD ' + Number(r.importe || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : App.Utils.formatearMoneda(r.importe);
+      const importeFmt = App.Utils.formatearMonedaNativa(r.importe, r.moneda || 'ARS');
 
       return `
         <div class="dh-drill-row" data-id="${id}">
@@ -1999,25 +1958,26 @@ export class TarjetasModule extends BaseModule {
             <span class="dh-cat-pill">${App.Utils.escapeHtml(catName)}</span>
           </div>
           <div class="dh-col-medio">
-            <button type="button" class="btn-toggle-pago ${isPaid ? 'pago-saldado' : 'pago-pendiente'}"
-                    data-toggle-pago-tc="${id}"
-                    title="${isPaid ? 'Saldado (Clic para marcar como pendiente)' : 'Pendiente (Clic para marcar como saldado)'}">
-              ${isPaid ? '✓ Saldado' : '⏳ Pendiente'}
-            </button>
+            ${paymentStatus(r)}
           </div>
           <div class="dh-col-amount negativo">
             ${importeFmt}
           </div>
-          <div class="dh-col-action">
-            <button class="btn-icon-sm dh-row-btn" title="Ver detalle">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-          </div>
         </div>
       `;
+    };
+    const groups = new Map();
+    for (const row of items) {
+      const name = row.categoria_nombre || 'General';
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(row);
+    }
+    listEl.innerHTML = [...groups].map(([name, rows]) => {
+      const totals = new Map();
+      for (const row of rows) totals.set(row.moneda || 'ARS', (totals.get(row.moneda || 'ARS') || 0) + Number(row.importe || 0));
+      const total = [...totals].map(([currency, value]) => App.Utils.formatearMonedaNativa(value, currency)).join(' · ');
+      return `<section class="tc-category-group"><h4 class="tc-category-heading"><span>${App.Utils.escapeHtml(name)} · ${rows.length}</span><span>${App.Utils.escapeHtml(total)}</span></h4><div class="dh-rows-list">${rows.map(renderRow).join('')}</div></section>`;
     }).join('');
-
-    listEl.innerHTML = `<div class="dh-rows-list">${rowsHtml}</div>`;
 
     // Row click listeners for detail modal
     listEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {

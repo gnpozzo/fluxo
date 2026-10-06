@@ -1,3 +1,4 @@
+import { operationInfo } from '../shared/operation.js';
 import { readAll, readInBatches } from '../api_lib/read-all.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
@@ -64,10 +65,10 @@ export default async function handler(req, res) {
         if (m.recur_group_id && recurCountsMap[m.recur_group_id]) {
           m.series_total = recurCountsMap[m.recur_group_id];
         }
-        // Sanitize any existing contaminated descriptions on recurring items or ingresos
-        if ((m.recur_group_id?.startsWith('REC_') || m.tipo_mov === 'INGRESO') && typeof m.descripcion === 'string') {
-          m.descripcion = m.descripcion.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
-        }
+        const info = operationInfo(m);
+        m.descripcion = info.description;
+        if (info.total > 1) { m.cuota_actual = info.current; m.cuota_total = info.total; }
+
       });
     }
 
@@ -127,6 +128,8 @@ export default async function handler(req, res) {
 
     histMovs.forEach(m => {
       m.categoria_nombre = m.categorias?.nombre || 'General';
+      const info = operationInfo(m); m.descripcion = info.description;
+      if (info.total > 1) { m.cuota_actual = info.current; m.cuota_total = info.total; }
       m.pagado = !!pagosMap[m.id_movimiento]?.pagado;
       m.fecha_pago = pagosMap[m.id_movimiento]?.fecha_pago || null;
       m.is_pago_tc = m.id_categoria === 'CAT_PAGO_TC' || m.descripcion?.toLowerCase().startsWith('pago resumen:');

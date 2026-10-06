@@ -77,6 +77,27 @@ function filters(root, ids) {
 export function enhanceView(root, moduleId) {
   if (!root) return;
   root.classList.add('ux-view');
+  if (moduleId === 'dashboard') {
+    const movements = root.querySelector('#dash-widget-movimientos');
+    const categories = root.querySelector('#dash-widget-categories');
+    const evolution = root.querySelector('#dash-widget-moneyflow');
+    if (movements && categories && evolution && !movements.closest('.ux-summary-operations')) {
+      const chartsParent = evolution.parentElement;
+      const modulesParent = movements.parentElement;
+      const layout = document.createElement('div'); layout.className = 'ux-summary-operations';
+      const aside = document.createElement('div'); aside.className = 'ux-summary-charts';
+      chartsParent.before(layout);
+      layout.append(movements, aside); aside.append(categories, evolution);
+      chartsParent.remove();
+      modulesParent.classList.add('ux-summary-modules');
+      const create = document.createElement('button');
+      create.id = 'dash-btn-nuevo-movimiento'; create.type = 'button'; create.className = 'btn btn-primary btn-sm';
+      create.textContent = 'Nuevo movimiento';
+      create.addEventListener('click', () => App.Modules.movimientos.abrirAlta('EGRESO'));
+      movements.querySelector('.finset-card-header').classList.add('ux-summary-mov-header');
+      movements.querySelector('.finset-card-header').append(create);
+    }
+  }
   filters(root, ['dash-mov-cat-filter', 'dash-mov-medio-filter']);
   filters(root, ['tc-cat-filter', 'tc-cuenta-filter']);
   const vaciar = root.querySelector('#tc-btn-vaciar-inline');
@@ -99,10 +120,14 @@ export function enhanceView(root, moduleId) {
 }
 
 function keyboardButtons(root) {
+  for (const row of [...(root.matches?.('.dh-drill-row') ? [root] : []), ...root.querySelectorAll('.dh-drill-row')]) {
+    row.setAttribute('role', 'button'); row.tabIndex = 0;
+    row.setAttribute('aria-label', 'Ver detalle: ' + (row.querySelector('.dh-row-desc')?.textContent || row.textContent.trim()).trim());
+  }
   for(const el of [...(root.matches?.('[role=button][tabindex="0"]') ? [root] : []), ...root.querySelectorAll('[role=button][tabindex="0"]')]){
     if(el.dataset.uxKeyboard) continue;
     el.dataset.uxKeyboard='true';
-    el.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();el.click();}});
+    el.addEventListener('keydown',event=>{if(event.target===el && (event.key==='Enter'||event.key===' ')){event.preventDefault();el.click();}});
   }
 }
 

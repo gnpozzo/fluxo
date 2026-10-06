@@ -1,3 +1,4 @@
+import { operationInfo } from '../shared/operation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 import { inputError } from '../api_lib/validation.js';
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
     return createMovimiento({ ...req, body: mov, seriesGroupId: scope === 'SERIES' ? existing.recur_group_id : null }, res);
   }
   const payload = {
-    fecha: mov.fecha, id_categoria: mov.idCategoria, descripcion: mov.descripcion,
+    fecha: mov.fecha, id_categoria: mov.idCategoria, descripcion: operationInfo(mov).description,
     importe: mov.importe, medio_pago: mov.medioPago,
     ...(mov.idCuenta ? { id_cuenta_principal: mov.idCuenta } : {}),
     ...(mov.tipo ? { tipo_mov: mov.tipo } : {}),
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
   };
   await db.from('movimientos').update(payload).eq('id_movimiento', id).eq('user_id', userId);
   if (existing.id_consumo_tarjeta_origen) {
-    await db.from('consumos_tc').update({ fecha: mov.fecha, id_categoria: mov.idCategoria, descripcion: mov.descripcion, importe: mov.importe, ...(mov.moneda ? { moneda: mov.moneda } : {}) }).eq('id_consumo_tarjeta', existing.id_consumo_tarjeta_origen).eq('user_id', userId);
+    await db.from('consumos_tc').update({ fecha: mov.fecha, id_categoria: mov.idCategoria, descripcion: operationInfo(mov).description, importe: mov.importe, ...(mov.moneda ? { moneda: mov.moneda } : {}) }).eq('id_consumo_tarjeta', existing.id_consumo_tarjeta_origen).eq('user_id', userId);
   }
   return res.status(200).json({ success: true, data: {} });
 }

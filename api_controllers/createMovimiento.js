@@ -1,3 +1,4 @@
+import { operationInfo } from '../shared/operation.js';
 import { addMonthsSafe, allocateMoney } from '../shared/finance.js';
 import createConsumoTC from './createConsumoTC.js';
 import { inputError } from '../api_lib/validation.js';
@@ -85,27 +86,20 @@ export default async function handler(req, res) {
     }
 
     if (periodos < 1) periodos = 1;
-    const isSeries = periodos > 1;
+    const isSeries = ['CUOTAS', 'RECURRENTE'].includes(mov.tipoConsumo);
     const seriesGroupId = isSeries ? (req.seriesGroupId || groupIdPrefix + crypto.randomUUID()) : null;
 
     // Store frequency metadata in the first row for later editing
     const metaFrequency = mov.tipoConsumo === 'RECURRENTE' ? (mov.frecuencia || 'MENSUAL') : null;
 
-    // Sanitize description to remove any residual cuota annotations
-    const baseDesc = (mov.descripcion || '')
-      .replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '')
-      .replace(/\s*\(\d+\/\d+\)/g, '')
-      .trim();
+    const baseDesc = operationInfo(mov).description.trim();
 
     for (let i = 0; i < periodos; i++) {
       const monthsToAdd = esCuotas ? i : (i * monthStep);
       const fechaISO = addMonthsSafe(fechaBase, monthsToAdd).toISOString().split('T')[0];
       
-      let desc = baseDesc;
-      if (esCuotas) {
-         const cuotaNro = (Number(mov.cuotaActual) || 1) + i;
-         desc = `${baseDesc} (Cuota ${cuotaNro}/${mov.cuotaTotal})`;
-      }
+      const desc = baseDesc;
+      const installment = esCuotas ? { cuota_actual: (Number(mov.cuotaActual) || 1) + i, cuota_total: Number(mov.cuotaTotal) || 2 } : {};
 
       if (mov.esSplit && destinos.length > 0) {
         const splitGroupId = 'SPLIT_' + crypto.randomUUID();
@@ -121,6 +115,7 @@ export default async function handler(req, res) {
             id_categoria: mov.idCategoria,
             tipo_mov: mov.tipo,
             descripcion: desc,
+            ...installment,
             importe: importeDestino,
             medio_pago: mov.medioPago,
             moneda: mov.moneda || 'ARS',
@@ -141,6 +136,7 @@ export default async function handler(req, res) {
             id_categoria: mov.idCategoria,
             tipo_mov: mov.tipo,
             descripcion: desc,
+            ...installment,
             importe: importeOrigen,
             medio_pago: mov.medioPago,
             moneda: mov.moneda || 'ARS',
@@ -159,6 +155,7 @@ export default async function handler(req, res) {
           id_categoria: mov.idCategoria,
           tipo_mov: mov.tipo,
           descripcion: desc,
+          ...installment,
           importe: mov.importe,
           medio_pago: mov.medioPago,
             moneda: mov.moneda || 'ARS',

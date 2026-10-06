@@ -1,3 +1,4 @@
+import { operationInfo } from '../shared/operation.js';
 import { addMonthsSafe, money } from '../shared/finance.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
@@ -542,7 +543,7 @@ export default async function handler(req, res) {
         });
 
         if (consumo.imputar && !isTaxItem) {
-          const descImputacion = consumo.descripcion + ' (Cuota ' + cuotaNumActual + '/' + consumo.cuotaTotal + ')';
+          const descImputacion = operationInfo(consumo).description;
           movRows.push({
             id_movimiento: crypto.randomUUID(),
             id_cuenta_principal: targetImputacion,
@@ -603,6 +604,14 @@ export default async function handler(req, res) {
     }
   }
 
+    const byPurchase = new Map(tcRows.map(row => [row.id_consumo_tarjeta, row]));
+    for (const row of [...tcRows, ...movRows]) {
+      row.descripcion = operationInfo(row).description;
+      const purchase = byPurchase.get(row.id_consumo_tarjeta_origen);
+      if (purchase?.cuota_total > 1) {
+        row.cuota_actual = purchase.cuota_actual; row.cuota_total = purchase.cuota_total;
+      }
+    }
     if (tcRows.length > 0) {
       const { error: tcError } = await supabase.from('consumos_tc').insert(tcRows);
       if (tcError) throw tcError;

@@ -963,11 +963,6 @@ export class CCModule extends BaseModule {
             <span style="display:block; font-size:0.9rem; font-weight:700;">${App.Utils.formatearMoneda(miParte)}</span>
             <span style="display:block; font-size:0.7rem; color:var(--texto-3); font-weight:500;">Mi parte</span>
           </div>
-          <div class="dh-col-action">
-            <button class="btn-icon-sm dh-row-btn" title="Ver detalle">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-          </div>
         </div>
       `;
     }).join('');
@@ -978,7 +973,7 @@ export class CCModule extends BaseModule {
     listEl.querySelectorAll('.dh-drill-row').forEach(rowEl => {
       rowEl.addEventListener('click', () => {
         const id = rowEl.dataset.id;
-        const row = this.#allConsumos.find(c => c.id_consumo_cc == id);
+        const row = [...this.#allConsumos, ...this.#historicos].find(c => c.id_consumo_cc == id);
         if (row) this.#abrirModalDetalle(row);
       });
     });

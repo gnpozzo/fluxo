@@ -308,6 +308,8 @@ class AppInit {
   // --- SECCIÓN 2: NAVEGACIÓN ---
 
   #navegarTab(vistaId) {
+    // Keep the internal movement editor; all visible operations live in Resumen.
+    if (vistaId === 'vista-movimientos') vistaId = 'vista-dashboard';
     if (vistaId === 'vista-admin') {
       App.Modules.admin?.cargar();
       return;

@@ -1,3 +1,4 @@
+import { operationInfo } from '../shared/operation.js';
 import { getSupabaseClient } from '../api_lib/supabase.js';
 import { resolveUserCuenta } from '../api_lib/auth.js';
 
@@ -135,7 +136,7 @@ export default async function handler(req, res) {
     if (cuenta) {
       const { data: movs, error: movsErr } = await supabase
         .from('movimientos')
-        .select('id_movimiento, fecha, descripcion, importe, tipo_mov, recur_group_id')
+        .select('id_movimiento, fecha, descripcion, importe, tipo_mov, recur_group_id, cuota_actual, cuota_total')
         .eq('id_cuenta_principal', cuenta)
         .in('tipo_mov', ['EGRESO', 'INGRESO'])
         .gte('fecha', dateStart)
@@ -157,13 +158,11 @@ export default async function handler(req, res) {
         const seenLastRecurMovs = new Set();
 
         movs.forEach(m => {
-          const desc = m.descripcion || '';
-          const matchCuota = desc.match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || desc.match(/\((\d+)\/(\d+)\)/);
+          const info = operationInfo(m);
+          const desc = info.description;
           const isIngreso = m.tipo_mov === 'INGRESO';
-
-          if (matchCuota) {
-            const act = parseInt(matchCuota[1], 10);
-            const tot = parseInt(matchCuota[2], 10);
+          if (info.total > 1 && !m.recur_group_id?.startsWith('REC_')) {
+            const act = info.current, tot = info.total;
             if (tot > 1 && act === tot) {
               notificaciones.push({
                 id: m.id_movimiento + (isIngreso ? '_fin_ingreso' : '_fin_gasto'),

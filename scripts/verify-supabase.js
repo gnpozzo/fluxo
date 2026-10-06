@@ -65,6 +65,37 @@ try {
   res=await run(togglePago,{action:'pagar_resumen',idTarjeta:cardId,mes:'2026-05',ids:[shared[1]]});assert.equal(res.code,200,JSON.stringify(res.body));
   const sharedLedger=(await client.query("SELECT tipo_mov,moneda,importe FROM public.movimientos WHERE user_id=$1 AND descripcion LIKE '%(2026-05)%' ORDER BY tipo_mov",[user])).rows;
   assert.deepEqual(sharedLedger.map(m=>({...m,importe:Number(m.importe)})),[{tipo_mov:'EGRESO',moneda:'USD',importe:12},{tipo_mov:'INGRESO',moneda:'USD',importe:12}]);assertions++;
+  // Mixed payment methods: card payment settles only the purchase and its explicit ledger link.
+  const manualCategory=(await client.query("SELECT id_categoria FROM public.categorias WHERE id_categoria<>'CAT_PAGO_TC' LIMIT 1")).rows[0].id_categoria;
+  const manualIds=[];
+  for(const method of ['Tarjeta de Débito','Transferencia','Efectivo']) {
+    res=await run(createMovimiento,{...mov,idCuenta:external,idCategoria:manualCategory,tipoConsumo:'COMUN',fecha:'2026-06-15',medioPago:method,descripcion:'QA manual '+method});
+    assert.equal(res.code,200,JSON.stringify(res.body));
+    manualIds.push((await client.query('SELECT id_movimiento FROM public.movimientos WHERE user_id=$1 AND descripcion=$2',[user,'QA manual '+method])).rows[0].id_movimiento);
+  }
+  res=await run(createConsumoTC,{idTarjeta:cardId,idCuenta:account,idCuentaImputar:external,imputar:true,fecha:'2026-06-15',idCategoria:manualCategory,tipoConsumo:'SIMPLE',descripcion:'QA linked June',importe:40,moneda:'ARS'});
+  assert.equal(res.code,200,JSON.stringify(res.body));
+  const june=(await client.query("SELECT id_consumo_tarjeta FROM public.consumos_tc WHERE user_id=$1 AND descripcion='QA linked June'",[user])).rows[0].id_consumo_tarjeta;
+  const linkedJune=(await client.query('SELECT id_movimiento FROM public.movimientos WHERE user_id=$1 AND id_consumo_tarjeta_origen=$2',[user,june])).rows[0].id_movimiento;
+  res=await run(togglePago,{action:'pagar_resumen',idTarjeta:cardId,mes:'2026-06'});assert.equal(res.code,200,JSON.stringify(res.body));
+  assert.equal(res.body.data[june].pagado,true);assert.equal(res.body.data[linkedJune].pagado,true);
+  for(const id of manualIds) assert.equal(Boolean(res.body.data[id]?.pagado),false);assertions++;
+  for(const id of [june,linkedJune]) {res=await run(togglePago,{id});assert.equal(res.code,400);assertions++;}
+  for(const id of manualIds) {
+    res=await run(togglePago,{id,pagado:true});assert.equal(res.code,200,JSON.stringify(res.body));assert.equal(res.body.data[id].pagado,true);
+    res=await run(togglePago,{id,pagado:false});assert.equal(res.code,200);assert.equal(res.body.data[id].pagado,false);assertions++;
+  }
+  res=await run(togglePago,{id:[manualIds[0],june],pagado:true});assert.equal(res.code,400);
+  res=await run(togglePago,{action:'get_state'});assert.equal(res.body.data[manualIds[0]].pagado,false);assert.equal(res.body.data[june].pagado,true);assertions++;
+
+  // Non-card installments retain position when descriptions are no longer annotated.
+  const installmentData={...mov,idCategoria:manualCategory,tipoConsumo:'CUOTAS',cuotaActual:2,cuotaTotal:3,fecha:'2026-07-31',descripcion:'QA clean installments',medioPago:'Transferencia'};
+  res=await run(createMovimiento,installmentData);assert.equal(res.code,200,JSON.stringify(res.body));
+  let clean=(await client.query("SELECT id_movimiento,descripcion,cuota_actual,cuota_total FROM public.movimientos WHERE user_id=$1 AND descripcion='QA clean installments' ORDER BY fecha",[user])).rows;
+  assert.deepEqual(clean.map(r=>[r.descripcion,r.cuota_actual,r.cuota_total]),[['QA clean installments',2,3],['QA clean installments',3,3]]);assertions++;
+  res=await run(updateMovimiento,{original:{id:clean[0].id_movimiento},scope:'SERIES',data:{...installmentData,descripcion:'QA clean edited'}});assert.equal(res.code,200,JSON.stringify(res.body));
+  clean=(await client.query("SELECT descripcion,cuota_actual,cuota_total FROM public.movimientos WHERE user_id=$1 AND descripcion='QA clean edited' ORDER BY fecha",[user])).rows;
+  assert.deepEqual(clean.map(r=>[r.descripcion,r.cuota_actual,r.cuota_total]),[['QA clean edited',2,3],['QA clean edited',3,3]]);assertions++;
   res=await run(createInversion,{idCuenta:account,ticker:'QA',fecha:'2026-01-01',tipoOp:'COMPRA',moneda:'USD',cantidad:10,precio:5,tipoCambio:1200});assert.equal(res.code,200,JSON.stringify(res.body));const investment=res.body.data.id_operacion;assertions++;
   res=await run(createInversion,{idCuenta:account,ticker:'QA',fecha:'2026-01-02',tipoOp:'VENTA',moneda:'USD',cantidad:11,precio:5,tipoCambio:1200});assert.equal(res.body.success,false);assert.equal(await count('inversiones_movimientos'),1);assertions++;
   res=await run(deleteInversion,investment);assert.equal(res.code,200,JSON.stringify(res.body));assert.equal(await count('inversiones_movimientos'),0);assertions++;

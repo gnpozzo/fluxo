@@ -1,6 +1,6 @@
 # Documentación maestra de Fluxo
 
-Actualizada el **5 de octubre de 2026**, Argentina. Versión **6.2.0**. Base de auditoría: `62007ea`. Esta edición registra las correcciones implementadas y conserva al final el diagnóstico original para trazabilidad.
+Actualizada el **6 de octubre de 2026**, Argentina. Versión **6.5.0**. Base de auditoría: `62007ea`. Esta edición registra las correcciones implementadas y conserva al final el diagnóstico original para trazabilidad.
 
 ## Estado y alcance actuales
 
@@ -12,7 +12,7 @@ Se inspeccionaron código, documentación, configuración local, esquema efectiv
 
 **GitHub/Vercel:** rama de implementación `codex/estabilizacion-fluxo`; integración con `gnpozzo/fluxo` y producción desde main en https://fluxo-delta.vercel.app. DATABASE_URL, CRON_SECRET y SUPABASE_URL configurados como Secret para producción y previews mediante sesión autenticada existente. Cada publicación debe confirmar READY y SHA. TELEGRAM_USER_LINKS configurado en producción para vincular al usuario de Telegram con la cuenta existente de Supabase. Compatibilidad con TELEGRAM_WEBHOOK_SECRET aplicada en ambas validaciones del webhook; recepción de /start y conversación con Gemini confirmadas por las capturas del usuario.
 
-**Evidencia:** 16 pruebas Node, 19 comprobaciones PostgreSQL y 10 aserciones HTTP autenticadas en producción, con limpieza de identidad QA y registros. Sintaxis de archivos activos, build y auditoría de dependencias. Navegador sobre assets productivos con API simulada: login, carga diferida, siete módulos, configuración, CSP, tema y navegación móvil. No se probó OAuth real, envío de mensajes ni una sesión productiva autenticada de extremo a extremo.
+**Evidencia actual:** 25 pruebas Node, 28 comprobaciones PostgreSQL y 10 aserciones HTTP autenticadas en producción, con limpieza de identidad QA y registros. Sintaxis de archivos activos, build y auditoría de dependencias. Navegador sobre assets productivos con API simulada: login, carga diferida, siete módulos, configuración, CSP, tema y navegación móvil. No se probó OAuth real, envío de mensajes ni una sesión productiva autenticada de extremo a extremo.
 
 ## Arquitectura y responsabilidades
 
@@ -546,3 +546,14 @@ Las donas mantienen alternativas de su propia dimensión para permitir ampliar u
 getDashboardData agrega movimientosHistoricos con categoría; getConsumosCC agrega consumosHistoricos para 12 meses; getAhorros agrega transferenciasHistoricas ya leídas para calcular los saldos. Todas las consultas conservan autenticación y alcance de cuenta/usuario. No se cambiaron datos ni permisos en Supabase.
 
 Verificación: 23 pruebas unitarias, sintaxis de 102 archivos, build y navegador con API simulada. Clics reales en donas, barras, ejes y leyendas; Vivienda/Comida en meses históricos; Ctrl para sumar; cascada hacia listas y barras en los seis módulos. Consultas de los tres controladores contra producción devolvieron HTTP 200 (lectura con cliente de servicio acotado al usuario para esta verificación).
+
+
+## Resumen unificado y estados de pago — 6.5.0, 6 de octubre de 2026
+
+La navegación conserva Resumen, Tarjetas, Gastos compartidos, Ahorro, Inversiones y Configuración. Movimientos se integra en Resumen, sin una segunda pestaña: Ingresos/Gastos → categorías → registros, búsqueda, filtros y acceso a alta/edición/series. El módulo interno de movimientos mantiene los formularios y CRUD. Las rutas anteriores redirigen a Resumen. Dona y evolución mensual permanecen visibles al lado del listado en PC; se apilan al reducir el ancho. Se mantienen filtros cruzados y Ctrl/Cmd+clic.
+
+Cada operación muestra Simple, Recurrente, Cuota x/y o Última cuota. shared/operation.js centraliza la lectura de metadatos y sufijos históricos. Las altas/ediciones dejan de agregar cuotas a la descripción; los formularios conservan la posición de la cuota y las notificaciones usan los nuevos campos. La migración 20261006120000 agrega movimientos.cuota_actual/cuota_total, recupera metadata de consumos vinculados y series antiguas, y no modifica descripciones ni importes. Se comprobó la huella de las filas financieras antes y después. Los sufijos antiguos se omiten al presentar los datos.
+
+Clic o Enter/Espacio sobre las filas abre el detalle, sin chevrons redundantes. Se preservan acciones específicas de edición y borrado. Débito, transferencia y efectivo muestran un botón Pendiente/Pagado; el clic no abre detalle y la escritura invalida la caché. TC presenta el estado de sólo lectura: pagar_resumen salda sus consumos y movimientos enlazados por id_consumo_tarjeta_origen. togglePago rechaza cambios manuales de consumos TC. No se modifican otros gastos del mismo mes/cuenta. Agrupación de TC por categorías con subtotales nativos separados ARS/USD.
+
+Verificación: 25 pruebas Node, 28 aserciones PostgreSQL con rollback incondicional, sintaxis, build y navegador con API simulada. Cobertura de pagos mixtos, lote rechazado sin cambios parciales, cuotas con descripción limpia y edición de series; navegación de cinco secciones a 1440/1024/768/390, filtros cruzados, cinco formularios móviles, detalle en cinco secciones, alternancia manual de pago y disposición de las celdas sin solapamiento. Las pruebas no envían pagos bancarios ni alteran movimientos reales.

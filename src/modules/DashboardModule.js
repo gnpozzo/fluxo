@@ -1,3 +1,4 @@
+import { operationInfo, operationBadge, paymentStatus, togglePayment } from '../core/OperationPresentation.js';
 import { ChartFilters, monthKey, movementDimensions, filteredEvolution } from '../core/ChartFilters.js';
 'use strict';
 import Chart from 'chart.js/auto';
@@ -2054,12 +2055,7 @@ export class DashboardModule extends BaseModule {
       const valClass = esIngreso ? 'positivo' : 'negativo';
       const isPago = isPagoTC(r);
       const catName = isPago ? 'Pago Tarjeta de Crédito' : (r.categoria_nombre || (esIngreso ? 'Ingreso' : 'General'));
-      const isRecur = Boolean(r.recur_group_id?.startsWith('REC_'));
-      let rawDesc = r.descripcion || catName;
-      if (isRecur) {
-        rawDesc = rawDesc.replace(/\s*\(Cuota\s+\d+\/\d+\)/gi, '').replace(/\s*\(\d+\/\d+\)/g, '').trim();
-      }
-      const desc = rawDesc;
+      const desc = operationInfo(r).description || catName;
       const fechaStr = App.Utils.formatearFecha(r.fecha?.value || r.fecha);
       const medioFmt = formatMedioPago(r.medio_pago);
       const medio = medioFmt ? `<span class="dh-pill-medio">${App.Utils.escapeHtml(medioFmt)}</span>` : '';
@@ -2067,23 +2063,7 @@ export class DashboardModule extends BaseModule {
       const badgeConsolidado = isConsolidado ? `<span class="badge badge-tc" style="font-size:0.68rem; margin-left:4px;">${r.items_agrupados?.length || 0} reintegros</span>` : '';
       const badgePagoTC = isPago ? `<span class="badge" style="background:rgba(37,99,235,0.12); color:#2563eb; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:6px; margin-left:4px;">💳 Flujo de Pago TC</span>` : '';
 
-      // Cuota badge logic
-      let badgeCuota = '';
-      const cuotaMatch = (r.descripcion || '').match(/\(Cuota\s+(\d+)\/(\d+)\)/i) || (r.descripcion || '').match(/\((\d+)\/(\d+)\)/);
-      if (isRecur) {
-        badgeCuota = '<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Recurrente</span>';
-      } else if (cuotaMatch) {
-        const act = parseInt(cuotaMatch[1], 10);
-        const tot = parseInt(cuotaMatch[2], 10);
-        if (tot > 1 && act === tot) {
-          badgeCuota = `<span class="badge" style="background:rgba(234,88,12,0.12); color:#ea580c; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:6px; margin-left:4px;">🏁 Última cuota</span>`;
-        } else if (tot > 1) {
-          badgeCuota = `<span class="badge badge-recur" style="font-size:0.68rem; margin-left:4px;">Cuota ${act}/${tot}</span>`;
-        }
-      } else if (!esIngreso && !isPago && !isConsolidado) {
-        badgeCuota = `<span class="badge" style="background:rgba(100,116,139,0.12); color:var(--texto-2); font-size:0.68rem; font-weight:500; padding:2px 7px; border-radius:6px; margin-left:4px;">1️⃣ Única cuota</span>`;
-      }
-
+      const badgeCuota = operationBadge(r);
       const iconMarkup = (opts.hideCatIcon && !isPago)
         ? `<div class="dh-item-dot" style="width:6px; height:6px; border-radius:50%; background:var(--texto-3); opacity:0.6; margin-right:10px; margin-left:4px; flex-shrink:0;"></div>`
         : `<div class="dh-item-icon ${iconClass}">
@@ -2114,14 +2094,10 @@ export class DashboardModule extends BaseModule {
           ${catColMarkup}
           <div class="dh-col-medio">
             ${medio}
+            ${paymentStatus(r)}
           </div>
           <div class="dh-col-amount ${valClass}">
             ${sign} ${this.#formatChartMoney(r.importe)}
-          </div>
-          <div class="dh-col-action">
-            <button class="btn-icon-sm dh-row-btn" title="Ver detalle">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
           </div>
         </div>
       `;
@@ -2330,18 +2306,24 @@ export class DashboardModule extends BaseModule {
       rowEl.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = rowEl.dataset.id;
+        const payment = e.target.closest('[data-toggle-pago]');
+        if (payment) {
+          const movement = displayMovements.find(m => (m.id_movimiento || m.id) == id);
+          if (movement) togglePayment(payment, movement);
+          return;
+        }
         if (id === 'consolidado_reintegros_tc' && consolidadoRefund) {
           this.#abrirModalDetalleMov(consolidadoRefund);
           return;
         }
-        const row = this.#movData.find(m => (m.id_movimiento || m.id) == id);
+        const row = displayMovements.find(m => (m.id_movimiento || m.id) == id);
         if (row) this.#abrirModalDetalleMov(row);
       });
     });
   }
 
   abrirModalDetalleMovById(id) {
-    const row = (this.#movData || []).find(m => (m.id_movimiento || m.id) == id);
+    const row = [...this.#movData, ...this.#historyMovs].find(m => (m.id_movimiento || m.id) == id);
     if (row) {
       this.#abrirModalDetalleMov(row);
       return true;
@@ -2420,8 +2402,7 @@ export class DashboardModule extends BaseModule {
       (typeof row.categoria_nombre === 'string' && row.categoria_nombre.toLowerCase().includes('pago de tarjeta'))
     );
     if (isPagoTarjeta) badges.push('<span class="badge" style="background:rgba(37,99,235,0.12); color:#2563eb; font-weight:600;">💳 Flujo de Pago TC</span>');
-    if (row.recur_group_id?.startsWith('INSTL_')) badges.push('<span class="badge badge-recur">Cuotas</span>');
-    else if (row.recur_group_id) badges.push('<span class="badge badge-recur">Recurrente</span>');
+    badges.push(operationBadge(row));
     if (row.split_group_id) badges.push('<span class="badge badge-split">Split</span>');
     if (row.id_consumo_tarjeta_origen) badges.push('<span class="badge badge-tc">Tarjeta</span>');
     if (row.id_transfer_ahorro) badges.push('<span class="badge badge-ahorro">Ahorro</span>');
@@ -2431,7 +2412,7 @@ export class DashboardModule extends BaseModule {
 
     const detailModal = new App.Modal('modal-dash-mov-detail');
     detailModal.open({
-      titulo: row.descripcion,
+      titulo: operationInfo(row).description,
       icono: esIngreso ? 'trending_up' : 'trending_down',
       size: 'md',
       body: `

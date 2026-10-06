@@ -24,8 +24,17 @@ const fixtures={
  getNotificaciones:{success:true,notificaciones:[]}
 };
 const csp=JSON.parse(fs.readFileSync('vercel.json')).headers[0].headers.find(h=>h.key==='Content-Security-Policy').value;
+const paymentRequests=[];
 const server=http.createServer((req,res)=>{
  res.setHeader('Content-Security-Policy',csp);
+ if(req.url==='/api/togglePago' && req.method==='POST') {
+  let body='';req.on('data',chunk=>{body+=chunk;});req.on('end',()=>{
+   const request=JSON.parse(body);paymentRequests.push(request);
+   const row=fixtures.getDashboardData.movimientos.find(row=>row.id_movimiento===request.id);
+   if(row)row.pagado=request.pagado;
+   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,pagado:row?.pagado,data:{}}));
+  });return;
+ }
  if(req.url.startsWith('/api/')){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(fixtures[req.url.split('?')[0].slice(5)]||{success:true,data:[]}));return;}
  const relative=req.url==='/'?'index.html':req.url.split('?')[0].slice(1);
  const file=path.resolve('dist',relative);
@@ -86,7 +95,7 @@ try {
  await page.setViewport({width:1440,height:960});
  for(const width of [1440,1024,768,390]){
   await page.setViewport({width,height:960});
-  for(const [name,id] of [['Resumen','nav-btn-dashboard'],['Movimientos','tab-btn-movimientos'],['Tarjetas','tab-btn-tarjetas'],['Gastos compartidos','tab-btn-cc'],['Ahorro','tab-btn-ahorro'],['Inversiones','tab-btn-inversiones']]){
+  for(const [name,id] of [['Resumen','nav-btn-dashboard'],['Tarjetas','tab-btn-tarjetas'],['Gastos compartidos','tab-btn-cc'],['Ahorro','tab-btn-ahorro'],['Inversiones','tab-btn-inversiones']]){
    await openNavigation(width);
    await page.click('#'+id);
    await page.waitForFunction(name=>document.querySelector('#page-title')?.textContent===name,{},name);
@@ -145,16 +154,16 @@ try {
  await page.waitForFunction(()=>document.querySelector('#page-title').textContent==='Resumen');
  for(const id of ['tarjetas','cc','ahorro','inversiones']) assert.equal(await page.$eval('#tab-btn-'+id,el=>getComputedStyle(el).display==='none'),true,'disabled module stays hidden');
  for(const action of ['tarjeta','cc','ahorro','inversion']) assert.equal(await page.$eval('[data-qa-action='+action+']',el=>el.hidden),true);
- assert.equal(await page.$eval('#tab-btn-movimientos',el=>el.hidden),false);
+ assert.equal(await page.$('#tab-btn-movimientos'),null);
  await page.select('#selector-cuenta','QA');
  await page.click('#tab-btn-ahorro');
  await page.waitForSelector('#aho-btn-ars');
  await page.click('#pill-usd');
  await page.waitForFunction(()=>App.Store.globalCurrency==='USD');
  assert.equal(await page.$eval('#aho-btn-ars',el=>getComputedStyle(el.parentElement).display),'none');
- await page.click('#tab-btn-movimientos');
- await page.waitForSelector('#mov-btn-nuevo');
- await page.click('#mov-btn-nuevo');
+ await page.click('#nav-btn-dashboard');
+ await page.waitForSelector('#dash-btn-nuevo-movimiento');
+ await page.click('#dash-btn-nuevo-movimiento');
  await page.waitForSelector('#modal-movimientos.modal-open');
  assert.equal(await page.$eval('#modal-movimientos select[name=moneda]',el=>el.value),'USD','new movement keeps explicit selected currency');
  await page.click('#modal-movimientos .modal-x');
@@ -165,7 +174,7 @@ try {
  await page.evaluate(async data=>{App.API.invalidateAll();const mod=await App.Modules.movimientos.load();mod._render(data);},fixtures.getDashboardData);
  const tableText=await page.$eval('#mov-tabla-wrap',el=>el.textContent);
  assert.ok(tableText.includes('INGRESO-USD')&&!tableText.includes('INGRESO-ARS'));
- await page.click('#mov-btn-nuevo');
+ await page.click('#dash-btn-nuevo-movimiento');
  await page.waitForSelector('#modal-movimientos.modal-open');
  await page.click('#btn-modo-monto-pct');
  await page.waitForFunction(()=>document.querySelector('#modal-movimientos input[name=importe]').value==='25.00');
@@ -189,7 +198,7 @@ try {
  fixtures.getConsumosTC = emptyConsumos;
  await page.evaluate(async data=>{const mod=await App.Modules.tarjetas.load();mod._render(data);},fixtures.getConsumosTC);
  await page.setViewport({width:390,height:844});
- for(const [nav,button] of [['tab-btn-movimientos','mov-btn-nuevo'],['tab-btn-tarjetas','tc-btn-nuevo-inline'],['tab-btn-cc','cc-btn-nuevo'],['tab-btn-ahorro','aho-btn-nuevo'],['tab-btn-inversiones','inv-btn-nuevo']]){
+ for(const [nav,button] of [['nav-btn-dashboard','dash-btn-nuevo-movimiento'],['tab-btn-tarjetas','tc-btn-nuevo-inline'],['tab-btn-cc','cc-btn-nuevo'],['tab-btn-ahorro','aho-btn-nuevo'],['tab-btn-inversiones','inv-btn-nuevo']]){
   await openNavigation(390);await page.click('#'+nav);
   await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
   await page.click('#'+button);await page.waitForSelector('.modal-open');
@@ -225,8 +234,8 @@ try {
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  };
  for(const [name,nav,legend,bar,list] of [
-  ['dashboard','nav-btn-dashboard','dash-categories-legend','dash-moneyflow-canvas','dash-mov-list'],
-  ['movimientos','tab-btn-movimientos','mov-donut-wrap .fintech-legend-list','mov-evolucion-canvas','mov-tabla-wrap']
+  ['dashboard','nav-btn-dashboard','dash-categories-legend','dash-moneyflow-canvas','dash-mov-list']
+
  ]){
   await page.click('#'+nav);await page.evaluate(async({name,data})=>{const mod=await App.Modules[name].load();await mod.cargar();mod._render(data);},{name,data:crossData});
   await page.waitForFunction(name=>document.querySelector('.vista-container.active')?.id==='vista-'+name && getComputedStyle(document.querySelector('.vista-container.active')).opacity==='1',{},name);
@@ -277,8 +286,59 @@ try {
  assert.equal((await readChart('inv-moneyflow-canvas')).datasets[0].at(-1),150);
  await page.click('#vista-inversiones .chart-filter-status button:last-child');
  await page.screenshot({path:'.audit.local/ux-crossfilters.png',fullPage:true});
+ // Row interaction, one installment badge, grouping, and manual payment without opening detail.
+ await page.click('#nav-btn-dashboard');
+ const manual=movement('MANUAL','Vivienda','2026-10',100);
+ manual.descripcion='Alquiler (Cuota 2/3)';manual.cuota_actual=2;manual.cuota_total=3;manual.medio_pago='Transferencia';
+ const cardMovement={...movement('CARD-LINK','Comida','2026-10',50),id_consumo_tarjeta_origen:'PURCHASE',medio_pago:'Tarjeta de Crédito'};
+ const operationData={...crossData,movimientos:[manual,cardMovement,current[2]],movimientosHistoricos:[manual,cardMovement,current[2]]};
+ fixtures.getDashboardData=operationData;
+ await page.evaluate(async data=>{const mod=await App.Modules.dashboard.load();await mod.cargar();mod._render(data);},operationData);
+ assert.equal(await page.$('#tab-btn-movimientos'),null);
+ assert.equal(await page.$eval('#dash-mov-list [data-id="MANUAL"] .dh-row-desc',el=>el.textContent),'Alquiler');
+ assert.equal(await page.$eval('#dash-mov-list [data-id="MANUAL"] .operation-badge',el=>el.textContent),'Cuota 2/3');
+ assert.equal(await page.$$eval('#dash-mov-list [data-cat-group="Ingresos"] [data-cat-group="Sueldo"]',els=>els.length),1);
+ assert.equal(await page.$$eval('#dash-mov-list [data-cat-group="Gastos"] [data-cat-group="Vivienda"]',els=>els.length),1);
+ assert.equal(await page.$$eval('.vista-container.active .dh-row-btn',els=>els.length),0);
+ assert.equal(await page.$$eval('#dash-mov-list [data-id="CARD-LINK"] button[data-toggle-pago]',els=>els.length),0);
+ await page.click('#dash-mov-list [data-id="MANUAL"] [data-toggle-pago]');
+ await page.waitForFunction(()=>document.querySelector('#dash-mov-list [data-id="MANUAL"] [data-toggle-pago]')?.textContent==='Pagado');
+ assert.equal(await page.$('.modal-open'),null,'payment click does not open detail');
+ await page.click('#dash-mov-list [data-id="MANUAL"] [data-toggle-pago]');
+ await page.waitForFunction(()=>document.querySelector('#dash-mov-list [data-id="MANUAL"] [data-toggle-pago]')?.textContent==='Pendiente');
+ assert.deepEqual(paymentRequests.map(r=>[r.id,r.pagado]),[['MANUAL',true],['MANUAL',false]]);
+ await page.focus('#dash-mov-list [data-id="MANUAL"]');await page.keyboard.press('Enter');
+ await page.waitForSelector('#modal-dash-mov-detail.modal-open');
+ assert.ok((await page.$eval('#modal-dash-mov-detail',el=>el.textContent)).includes('Cuota 2/3'));
+ await page.click('#modal-dash-mov-detail .modal-x');
+ await page.screenshot({path:'.audit.local/ux-summary-1440.png',fullPage:true});
+ for(const width of [1024,768,390]) {
+  await page.setViewport({width,height:960});
+  await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth+2);
+  const layout=await page.$eval('#dash-mov-list [data-id="MANUAL"]',el=>{
+   const a=el.querySelector('.dh-col-main').getBoundingClientRect(),b=el.querySelector('.dh-col-medio').getBoundingClientRect(),c=el.querySelector('.dh-col-amount').getBoundingClientRect();
+   const overlaps=(x,y)=>x.left<y.right&&x.right>y.left&&x.top<y.bottom&&x.bottom>y.top;
+   return !overlaps(a,b)&&!overlaps(a,c)&&!overlaps(b,c);
+  });assert.ok(layout,'row cells fit at '+width);
+  await page.$eval('#dash-widget-movimientos',el=>el.scrollIntoView({block:'start'}));
+  await page.screenshot({path:'.audit.local/ux-summary-'+width+'.png',fullPage:true});
+ }
+ await page.setViewport({width:1440,height:960});
+ await page.click('#tab-btn-tarjetas');
+ await page.evaluate(async data=>{const mod=await App.Modules.tarjetas.load();mod._render(data);},{...tcData,consumos:tcData.consumos.map((r,i)=>({...r,descripcion:i===0?'Compra (3/3)':r.descripcion,cuota_actual:i===0?3:null,cuota_total:i===0?3:null}))});
+ assert.equal(await page.$$eval('#tc-consumos-list button[data-toggle-pago-tc]',els=>els.length),0);
+ assert.equal(await page.$$eval('#tc-consumos-list .tc-category-group',els=>els.length),2);
+ assert.equal(await page.$eval('#tc-consumos-list [data-id="VIVIENDA-OCT"] .dh-row-desc',el=>el.textContent),'Compra');
+ assert.equal(await page.$eval('#tc-consumos-list [data-id="VIVIENDA-OCT"] .operation-badge',el=>el.textContent),'Última cuota');
+ await page.click('#tc-consumos-list [data-id="VIVIENDA-OCT"]');await page.waitForSelector('#modal-tc-detail.modal-open');await page.click('#modal-tc-detail .modal-x');
+ await page.click('#tab-btn-cc');await page.evaluate(async data=>{const mod=await App.Modules.cc.load();mod._render(data);},ccData);
+ await page.click('#cc-consumos-list .dh-drill-row');await page.waitForSelector('.modal-open');await page.click('.modal-open .modal-x');
+ await page.click('#tab-btn-ahorro');await page.evaluate(async data=>{const mod=await App.Modules.ahorro.load();mod._render(data);},{...savings,transferencias:savings.transferencias.map(r=>({...r,id_ahorro:r.id_transferencia}))});
+ await page.click('#aho-movimientos-list .dh-drill-row');await page.waitForSelector('#modal-aho-detalle.modal-open');await page.click('.modal-open .modal-x');
+ await page.click('#tab-btn-inversiones');await page.evaluate(async data=>{const mod=await App.Modules.inversiones.load();mod._render(data);},investment);
+ await page.click('#inv-operaciones-list .dh-drill-row');await page.waitForSelector('#modal-inv-detalle.modal-open');await page.click('.modal-open .modal-x');
  await page.evaluate(()=>window.toggleAppTheme());
  assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark');
  assert.deepEqual(errors,[]);
- console.log('PASS: login, seven modules, six responsive views with visible charts, account module gating, card carousel, crossed chart filters in six modules, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
+ console.log('PASS: login, seven modules, five responsive views with visible charts, account module gating, card carousel, crossed chart filters in five visible modules; grouped Resumen, badges, row detail and payment toggles, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
 }catch(error){if(browser){const pages=await browser.pages();await pages.at(-1).screenshot({path:'.audit.local/ux-failure.png'});}throw error;}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}

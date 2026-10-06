@@ -5,7 +5,7 @@
    Capa 1: Namespace global + Clase abstracta BaseModule
    ================================================================ */
 
-const APP_VERSION    = '6.4.0';
+const APP_VERSION    = '6.5.0';
 const APP_NAME       = 'Fluxo';
 const APP_DEBUG      = import.meta.env.DEV;   // false en producción
 
