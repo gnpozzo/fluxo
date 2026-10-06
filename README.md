@@ -4,14 +4,14 @@ Fluxo organiza movimientos, tarjetas, gastos compartidos, ahorro e inversiones e
 
 ## Estado de esta versión
 
-Versión **6.3.0**, revisión UX/UI y responsive del 5 de octubre de 2026, posterior a `c99402f`.
+Versión **6.3.1**, revisión UX/UI y responsive del 5 de octubre de 2026, posterior a `c99402f`.
 
 - Corregidos aislamiento por usuario, referencias cruzadas y permisos/RPC de Supabase.
 - Escrituras web transaccionales, rollback e idempotencia; cuotas y pagos separados por moneda.
 - Eliminadas reparaciones automáticas al consultar datos y cotizaciones ficticias.
 - Caché y contexto de IA por usuario, HTML sanitizado y módulos cargados bajo demanda.
 - Migración **20261005192629** aplicada al proyecto Supabase de Fluxo.
-- 16 pruebas automatizadas y 19 verificaciones PostgreSQL aprobadas. Fixtures descartadas por rollback.
+- 18 pruebas automatizadas y 19 verificaciones PostgreSQL aprobadas. Fixtures descartadas por rollback.
 - 10 comprobaciones HTTP en producción aprobadas: autenticación, alta, replay, conflicto, consulta y borrado. Cuenta QA y registros eliminados.
 - Navegador: login, siete módulos y CSP; seis secciones a 1440, 1024, 768 y 390 px; cinco formularios móviles; monedas y cálculo por porcentaje con API simulada.
 - Build correcto; JavaScript principal **153 kB**, antes 585 kB. Vendors y módulos se descargan por separado.
@@ -22,7 +22,7 @@ La conexión restringida, CRON_SECRET y SUPABASE_URL están configurados como se
 ## Interfaz multiplataforma
 
 - Menú estable: Resumen, Movimientos, Tarjetas, Gastos compartidos, Ahorro e Inversiones. Título y contexto de cuenta/mes visibles.
-- Operaciones antes que gráficos: análisis desplegable, filtros con contador y limpieza, acciones de vaciado en Más opciones.
+- Operaciones antes que gráficos: análisis desplegable, botón compacto de filtros con icono de embudo, modal con Aplicar/Cancelar y limpieza, acciones de vaciado en Más opciones.
 - Tarjetas con selector directo, origen del total explicado, pago interno explícito y sin indicador de salud cuando faltan ingresos.
 - Movimientos ARS/USD separados, moneda explícita y distribución/compartidos desplegables en el formulario.
 - Escritorio como diseño principal; tablet y celular con columnas adaptativas, menú lateral y formularios contenidos en la pantalla.
@@ -117,3 +117,5 @@ Las pruebas no equivalen a un pentest, una certificación bancaria ni una restau
 ## Revisión de experiencia de uso
 
 Consultar [Análisis UX/UI](analisis_ux_ui_fluxo.md) para el inventario de controles, la propuesta de simplificación y criterios para preservar funcionalidades. El rediseño está propuesto; la corrección del reinicio de totales de tarjetas ya se aplicó en producción.
+
+Corrección 6.3.1: getAhorros evita una relación opcional inexistente en PostgREST; resuelve nombres con subcuentas de la cuenta autenticada. Consulta real verificada con HTTP 200, sin cambios de datos ni permisos.

@@ -30,10 +30,11 @@ export default async function handler(req, res) {
 
     const {data:subcuentas,error:subError}=await supabase.from('ahorro_subcuentas').select('*').eq('id_cuenta_principal',cuenta).eq('user_id',userId);
     if(subError) throw subError;
-    const rows=await readAll(()=>supabase.from('ahorros').select('*, movimientos!inner(id_cuenta_principal), ahorro_subcuentas(nombre)').eq('user_id',userId).eq('movimientos.id_cuenta_principal',cuenta).lte('fecha',fechaFin).order('fecha').order('id_ahorro'));
+    const rows=await readAll(()=>supabase.from('ahorros').select('*, movimientos!inner(id_cuenta_principal)').eq('user_id',userId).eq('movimientos.id_cuenta_principal',cuenta).lte('fecha',fechaFin).order('fecha').order('id_ahorro'));
     let arsTotal=0,usdTotal=0;
     for(const row of rows){const value=Number(row.importe)*(row.tipo_transfer==='DEPOSITO'?1:-1);if(row.moneda==='USD')usdTotal+=value;else arsTotal+=value;}
-    const transferencias=rows.filter(a=>a.fecha>=fechaInicio).map(a=>({...a,subcuenta_nombre:a.ahorro_subcuentas?.nombre||'General',tipo_mov:a.tipo_transfer}));
+    const subcuentaNames=new Map((subcuentas || []).map(subcuenta=>[subcuenta.id_subcuenta,subcuenta.nombre]));
+    const transferencias=rows.filter(a=>a.fecha>=fechaInicio).map(a=>({...a,subcuenta_nombre:subcuentaNames.get(a.id_subcuenta)||'General',tipo_mov:a.tipo_transfer}));
     return res.status(200).json({success:true,kpis:{arsTotal,usdTotal,consolidadoArs:usdTotal===0?arsTotal:null},subcuentas:subcuentas||[],transferencias});
 
   } catch (err) {

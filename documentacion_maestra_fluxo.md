@@ -515,3 +515,10 @@ Movimientos filtra tabla, indicadores y gráficos por moneda. getDashboardData a
 El CSS mantiene dos columnas cuando hay espacio y apila contenido en tablet/celular. Formularios de una columna, controles mayores y desplazamiento interno preservan el acceso a los campos. Etiquetas asociadas, foco visible y teclado en encabezados interactivos refuerzan la accesibilidad. El ticker de inversiones respeta inicialmente la preferencia de movimiento reducido y limpia su temporizador al reconstruirse.
 
 Validación: 98 archivos JavaScript; 16 pruebas unitarias; build de producción; 19 verificaciones PostgreSQL con rollback; auditoría de dependencias de producción sin vulnerabilidades. Navegador con identidad/API sintéticas y CSP real: seis secciones en 1440/1024/768/390 px sin desborde horizontal de página, cinco formularios móviles, menú vacío estable, pago deshabilitado, moneda y porcentajes ARS/USD, login y tema. Capturas locales en .audit.local/ux-*.png. Estas pruebas no sustituyen validación en dispositivos físicos ni certificación de accesibilidad.
+
+
+## Ajuste 6.3.1 — filtros y consulta de Ahorro
+
+Filtros usa un botón de 34 px en escritorio (44 px táctil en celular), icono de embudo y contador. Abre un modal con campos etiquetados y selección temporal: Aplicar confirma, Cancelar/Escape descartan, Limpiar restablece el borrador. Se mantienen los IDs y listeners de los selects originales, ocultos en cada vista. Los modales se reutilizan por vista para conservar los eventos de la instancia original.
+
+El 500 de getAhorros era PGRST200: el esquema no tiene FK entre ahorros y ahorro_subcuentas. Se retiró ese join opcional y los nombres se resuelven desde las subcuentas ya filtradas por cuenta/usuario. La relación con movimientos y el filtro de propietario siguen vigentes. Dos pruebas cubren saldo histórico ARS/USD, nombres, referencia desconocida y cuenta vacía. La consulta real corregida devuelve HTTP 200; no se modificó el esquema ni se escribieron datos.

@@ -1,5 +1,6 @@
 // Presentation only: existing elements keep their IDs and operation listeners.
 let fieldSequence = 0;
+const filterModals = new Map();
 
 export function labelFields(root) {
   if (!root?.querySelectorAll) return;
@@ -26,29 +27,59 @@ function disclosure(className, title) {
 }
 
 function filters(root, ids) {
-  const selects = ids.map(id => root.querySelector(`#${id}`)).filter(Boolean);
-  if (!selects.length || selects[0].closest('.ux-filters')) return;
-  const details = disclosure('ux-filters', 'Filtros');
-  selects[0].before(details);
-  const body = document.createElement('div');
-  body.className = 'ux-filter-body';
-  details.append(body);
+  const selects = ids.map(id => root.querySelector('#' + id)).filter(Boolean);
+  if (!selects.length || selects[0].closest('.ux-filter-storage')) return;
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'btn btn-outline btn-sm ux-filter-trigger';
+  trigger.setAttribute('aria-haspopup', 'dialog');
+  trigger.innerHTML = App.Icons.get('filter', 'icon-sm') + '<span>Filtros</span><span class="ux-filter-count" hidden></span>';
+  selects[0].before(trigger);
+  const storage = document.createElement('div');
+  storage.className = 'ux-filter-storage'; storage.hidden = true;
+  trigger.after(storage);
   const defaults = selects.map(select => select.value);
-  for (const select of selects) { select.setAttribute('aria-label', select.title || 'Filtrar'); body.append(select); }
-  const reset = document.createElement('button');
-  reset.type = 'button'; reset.className = 'btn btn-outline btn-sm'; reset.textContent = 'Limpiar filtros';
-  body.append(reset);
+  selects.forEach(select => storage.append(select));
+  const badge = trigger.querySelector('.ux-filter-count');
   const update = () => {
     const count = selects.filter((select, i) => select.value !== defaults[i]).length;
-    details.querySelector('summary').textContent = count ? `Filtros · ${count} activos` : 'Filtros';
-    reset.disabled = count === 0;
+    badge.hidden = count === 0; badge.textContent = String(count);
+    trigger.setAttribute('aria-label', count ? 'Filtros, ' + count + ' activos' : 'Filtros');
   };
   selects.forEach(select => select.addEventListener('change', update));
-  reset.addEventListener('click', () => {
-    selects.forEach((select, i) => { select.value = defaults[i]; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  trigger.addEventListener('click', () => {
     update();
+    const modalId = 'modal-filtros-' + root.id;
+    let modal = filterModals.get(modalId);
+    if (!modal) { modal = new App.Modal(modalId); filterModals.set(modalId, modal); }
+    const drafts = selects.map(select => {
+      const draft = select.cloneNode(true);
+      draft.id = select.id + '-draft'; draft.className = 'input'; draft.value = select.value;
+      return draft;
+    });
+    modal.open({
+      titulo: 'Filtros', icono: 'filter', size: 'sm', confirmLabel: 'Aplicar filtros',
+      body: '<div class="ux-filter-modal-fields"></div>',
+      onConfirm: () => {
+        selects.forEach((select, i) => {
+          select.value = drafts[i].value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        update(); modal.close();
+      }
+    });
+    const fields = modal.el.querySelector('.ux-filter-modal-fields');
+    drafts.forEach((draft, i) => {
+      const group = document.createElement('div'); group.className = 'form-group';
+      const label = document.createElement('label'); label.htmlFor = draft.id;
+      label.textContent = selects[i].title || 'Filtro';
+      group.append(label, draft); fields.append(group);
+    });
+    const reset = document.createElement('button');
+    reset.type = 'button'; reset.className = 'btn btn-ghost btn-sm'; reset.textContent = 'Limpiar filtros';
+    reset.addEventListener('click', () => drafts.forEach((draft, i) => { draft.value = defaults[i]; }));
+    fields.append(reset); drafts[0]?.focus();
   });
-  details.addEventListener('toggle', update);
   update();
 }
 
@@ -115,6 +146,6 @@ export function installPresentation() {
   });
   observer.observe(document.body, { childList: true, subtree: true });
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') document.querySelectorAll('.ux-filters[open],.ux-more[open]').forEach(el => { el.open = false; });
+    if (event.key === 'Escape') document.querySelectorAll('.ux-more[open]').forEach(el => { el.open = false; });
   });
 }

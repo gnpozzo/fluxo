@@ -7672,14 +7672,12 @@ td.text-center {
 .ux-view .dh-search-box input { width: 180px !important; max-width: 100%; }
 .ux-view .finset-grid-2col { align-items: start; }
 .ux-analysis { order: 10; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); }
-.ux-analysis > summary, .ux-filters > summary, .ux-more > summary {
+.ux-analysis > summary, .ux-more > summary {
   cursor: pointer; font-weight: 600; min-height: 44px; padding: 12px 16px; color: var(--texto);
 }
 .ux-analysis-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; padding: 0 16px 16px; }
 .ux-analysis-grid > * { min-width: 0; }
-.ux-filters, .ux-more { position: relative; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
-.ux-filter-body { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px; }
-.ux-filters .finset-select-sm { min-height: 44px; max-width: 100%; }
+.ux-more { position: relative; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
 .ux-more > button { margin: 4px 12px 12px; }
 .ux-danger { color: var(--rojo) !important; }
 .ux-card-selector { display: grid; gap: 8px; color: var(--texto-2); font-weight: 600; font-size: .85rem; margin: 0 0 16px; }
@@ -7740,9 +7738,7 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
   .ux-view #mov-search { min-width: 0 !important; width: 100%; }
   .ux-view .dt-table-wrap, .admin-content-area { overflow-x: auto; max-width: 100%; }
   .ux-view .ux-analysis-grid { padding: 0 8px 8px; }
-  .ux-filter-body { flex-direction: column; }
-  .ux-filter-body > * { width: 100%; }
-  .modal-overlay { padding: 12px !important; }
+    .modal-overlay { padding: 12px !important; }
   .modal-dialog { width: 100% !important; max-width: 100% !important; max-height: calc(100dvh - 24px); }
   .modal-body { overflow: auto; padding: 16px !important; }
   .modal-body .form-grid, .modal-body .form-row { grid-template-columns: minmax(0, 1fr) !important; }
@@ -7763,3 +7759,11 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
 .ux-form-options { border: 1px solid var(--borde); border-radius: 10px; padding: 12px; }
 .ux-form-options > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: list-item; padding: 10px 0; }
 .ux-form-options > .form-grid { margin-top: 12px; }
+
+.ux-view .ux-filter-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; height: 34px; padding: 0 10px; font-size: .8rem; border-radius: 8px; white-space: nowrap; flex: 0 0 auto; }
+.ux-filter-trigger .icon { width: 16px; height: 16px; }
+.ux-filter-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; font-size: .7rem; background: var(--primary); color: white; }
+.ux-filter-modal-fields { display: grid; gap: 16px; }
+.ux-filter-modal-fields select { width: 100%; min-height: 44px; }
+.ux-filter-modal-fields > .btn { justify-self: start; }
+@media (max-width: 600px) { .ux-view .ux-filter-trigger { min-height: 44px; height: 44px; } }

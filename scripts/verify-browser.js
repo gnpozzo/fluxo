@@ -104,9 +104,37 @@ try {
   assert.equal(await page.$eval('#tc-btn-vaciar-inline',el=>!!el.closest('.ux-more')),true);
   if(width<=900) await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
   await page.screenshot({path:'.audit.local/ux-tarjetas-'+width+'.png',fullPage:true});
+  if(width===390){
+   await page.click('#vista-tarjetas .ux-filter-trigger');
+   await page.waitForSelector('#modal-filtros-vista-tarjetas.modal-open');
+   await page.waitForFunction(()=>getComputedStyle(document.querySelector('#modal-filtros-vista-tarjetas')).opacity==='1');
+   assert.ok(await page.$eval('#modal-filtros-vista-tarjetas .modal-dialog',el=>el.getBoundingClientRect().right<=innerWidth));
+   await page.screenshot({path:'.audit.local/ux-filtros-modal-390.png'});
+   await page.keyboard.press('Escape');
+   assert.equal(await page.$eval('#modal-filtros-vista-tarjetas',el=>el.classList.contains('modal-open')),false);
+  }
  }
  await page.setViewport({width:1440,height:960});
  await openNavigation(1440);
+ // Filters are staged in a compact modal; cancel and Escape keep the active selection.
+ await page.click('#tab-btn-tarjetas');
+ await page.click('#vista-tarjetas .ux-filter-trigger');
+ await page.waitForSelector('#modal-filtros-vista-tarjetas.modal-open');
+ assert.equal(await page.$eval('#vista-tarjetas .ux-filter-trigger svg',el=>!!el.querySelector('polygon')),true);
+ await page.select('#tc-cuenta-filter-draft','personal');
+ await page.click('#modal-filtros-vista-tarjetas .modal-cancel');
+ assert.equal(await page.$eval('#tc-cuenta-filter',el=>el.value),'');
+ await page.click('#vista-tarjetas .ux-filter-trigger');
+ await page.select('#tc-cuenta-filter-draft','personal');
+ await page.click('#modal-filtros-vista-tarjetas .modal-confirm');
+ assert.equal(await page.$eval('#tc-cuenta-filter',el=>el.value),'personal');
+ assert.equal(await page.$eval('#vista-tarjetas .ux-filter-count',el=>el.textContent),'1');
+ await page.click('#vista-tarjetas .ux-filter-trigger');
+ await page.waitForFunction(()=>getComputedStyle(document.querySelector('#modal-filtros-vista-tarjetas')).opacity==='1');
+ await page.screenshot({path:'.audit.local/ux-filtros-modal-1440.png'});
+ await page.click('#modal-filtros-vista-tarjetas .ux-filter-modal-fields > button');
+ await page.click('#modal-filtros-vista-tarjetas .modal-confirm');
+ assert.equal(await page.$eval('#tc-cuenta-filter',el=>el.value),'');
  await page.select('#selector-cuenta','EMPTY');
  await page.waitForFunction(()=>App.Store.cuenta==='EMPTY');
  assert.equal(await page.$eval('#tab-btn-tarjetas',el=>getComputedStyle(el).display==='none'),false,'empty account keeps navigation');
