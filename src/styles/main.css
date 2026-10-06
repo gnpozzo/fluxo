@@ -7760,10 +7760,10 @@ button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:
 .ux-form-options > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: list-item; padding: 10px 0; }
 .ux-form-options > .form-grid { margin-top: 12px; }
 
-.ux-view .ux-filter-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; height: 34px; padding: 0 10px; font-size: .8rem; border-radius: 8px; white-space: nowrap; flex: 0 0 auto; }
+.ux-view button.ux-filter-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; height: 34px; padding: 0 10px; font-size: .8rem; border-radius: 8px; white-space: nowrap; flex: 0 0 auto; }
 .ux-filter-trigger .icon { width: 16px; height: 16px; }
 .ux-filter-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; font-size: .7rem; background: var(--primary); color: white; }
 .ux-filter-modal-fields { display: grid; gap: 16px; }
 .ux-filter-modal-fields select { width: 100%; min-height: 44px; }
 .ux-filter-modal-fields > .btn { justify-self: start; }
-@media (max-width: 600px) { .ux-view .ux-filter-trigger { min-height: 44px; height: 44px; } }
+@media (max-width: 600px) { .ux-view button.ux-filter-trigger { min-height: 44px; height: 44px; } }

@@ -121,6 +121,7 @@ try {
  await page.click('#vista-tarjetas .ux-filter-trigger');
  await page.waitForSelector('#modal-filtros-vista-tarjetas.modal-open');
  assert.equal(await page.$eval('#vista-tarjetas .ux-filter-trigger svg',el=>!!el.querySelector('polygon')),true);
+ assert.equal(await page.$eval('#vista-tarjetas .ux-filter-trigger',el=>el.getBoundingClientRect().height),34);
  await page.select('#tc-cuenta-filter-draft','personal');
  await page.click('#modal-filtros-vista-tarjetas .modal-cancel');
  assert.equal(await page.$eval('#tc-cuenta-filter',el=>el.value),'');
