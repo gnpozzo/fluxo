@@ -499,4 +499,19 @@ Mantener fecha/commit y hallazgos resueltos con pruebas; versionar decisiones co
 
 Se completó el reinicio administrativo restableciendo total_resumen_ars y total_resumen_usd en las tres tarjetas, con respaldo local y verificación transaccional de que movimientos/consumos seguían vacíos. La interfaz confirmó plásticos, indicadores y proyección en cero. No se modificaron límites ni fechas.
 
-El [análisis UX/UI](analisis_ux_ui_fluxo.md) evalúa navegación, acciones, filtros, formularios, estados, accesibilidad y cada sección. Incluye una matriz para mantener funciones y simplificar su presentación. Las propuestas de rediseño todavía no se implementaron.
+El [análisis UX/UI](analisis_ux_ui_fluxo.md) evalúa navegación, acciones, filtros, formularios, estados, accesibilidad y cada sección. Incluye una matriz para mantener funciones y simplificar su presentación. La versión 6.3.0 implementa la reorganización y adaptación responsive detallada a continuación.
+
+
+## Implementación UX/UI y responsive — versión 6.3.0
+
+La navegación mantiene seis secciones visibles al cambiar de cuenta y agrega acceso propio a Movimientos reutilizando el módulo existente. El título identifica la vista activa. Configuración conserva su entrada al pie y elimina su acceso duplicado del encabezado.
+
+Presentation.js reorganiza los elementos existentes sin cambiar sus IDs ni sus listeners: operaciones antes que análisis; gráficos en detalles desplegables; filtros secundarios con contador, limpieza y cierre con Escape; vaciar consumos dentro de Más opciones. LazyModule aplica esta presentación al construir o reconstruir cada vista. Las altas, ediciones, series, cuotas, importación, pagos, ahorro, compartidos, inversiones y chat conservan sus flujos.
+
+Tarjetas agrega selección directa y mantiene las flechas y plásticos. Explica la diferencia entre consumos registrados y total bancario guardado. Registrar pago aclara que es una anotación interna, muestra ARS y USD por separado y se deshabilita sin consumos pendientes. La confirmación sólo incluye tarjetas con consumos del período. Sin ingresos, Resumen y Tarjetas indican Sin base de ingresos en vez de evaluar una salud ficticia. Ahorro elimina barras decorativas y usa el selector global de moneda.
+
+Movimientos filtra tabla, indicadores y gráficos por moneda. getDashboardData agrega evolucionPorMoneda manteniendo evolucionMensual ARS para compatibilidad. El formulario conserva explícitamente la moneda al editar/cambiar tipo y calcular porcentajes; ingresos base, categorías y caché se separan por ARS/USD. Distribución y gastos compartidos quedan en un bloque secundario desplegable.
+
+El CSS mantiene dos columnas cuando hay espacio y apila contenido en tablet/celular. Formularios de una columna, controles mayores y desplazamiento interno preservan el acceso a los campos. Etiquetas asociadas, foco visible y teclado en encabezados interactivos refuerzan la accesibilidad. El ticker de inversiones respeta inicialmente la preferencia de movimiento reducido y limpia su temporizador al reconstruirse.
+
+Validación: 98 archivos JavaScript; 16 pruebas unitarias; build de producción; 19 verificaciones PostgreSQL con rollback; auditoría de dependencias de producción sin vulnerabilidades. Navegador con identidad/API sintéticas y CSP real: seis secciones en 1440/1024/768/390 px sin desborde horizontal de página, cinco formularios móviles, menú vacío estable, pago deshabilitado, moneda y porcentajes ARS/USD, login y tema. Capturas locales en .audit.local/ux-*.png. Estas pruebas no sustituyen validación en dispositivos físicos ni certificación de accesibilidad.

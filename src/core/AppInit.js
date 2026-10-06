@@ -18,6 +18,7 @@ class AppInit {
   /** Mapa de tabs: vistaId → módulo en App.Modules */
   #tabMap = {
     'vista-dashboard'   : 'dashboard',
+    'vista-movimientos' : 'movimientos',
     'vista-tarjetas'    : 'tarjetas',
     'vista-cc'          : 'cc',
     'vista-ahorro'      : 'ahorro',
@@ -333,6 +334,9 @@ class AppInit {
     }
 
     this.#tabActivo = vistaId;
+    const titles={'vista-dashboard':'Resumen','vista-movimientos':'Movimientos','vista-tarjetas':'Tarjetas','vista-cc':'Gastos compartidos','vista-ahorro':'Ahorro','vista-inversiones':'Inversiones'};
+    const title=document.getElementById('page-title');
+    if(title) title.textContent=titles[vistaId] || 'Configuración';
 
     // Renderizar botonera adaptativa de módulos
     this.#renderModulesNav(vistaId);
@@ -406,15 +410,7 @@ class AppInit {
           this.#cargarNotificaciones(); // Refrescar notificaciones
 
           // Validar si la vista activa es compatible con la nueva cuenta seleccionada
-          const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj.id_cuenta_principal);
-          const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj.id_cuenta_principal);
-
-          const isTabValid = 
-            this.#tabActivo === 'vista-dashboard' ||
-            (this.#tabActivo === 'vista-tarjetas' && hasTarjetas) ||
-            (this.#tabActivo === 'vista-cc' && cuentaObj.modulo_cc_activo) ||
-            (this.#tabActivo === 'vista-ahorro' && hasAhorro) ||
-            (this.#tabActivo === 'vista-inversiones' && cuentaObj.modulo_inversiones_activo);
+          const isTabValid = !!this.#tabMap[this.#tabActivo];
 
           if (!isTabValid) {
             this.#navegarTab('vista-dashboard');
@@ -577,21 +573,9 @@ class AppInit {
 
   // --- SECCIÓN 4: TABS ---
 
-  #actualizarVisibilidadTabs(cuentaObj) {
-    if (!cuentaObj) return;
-    const hasTarjetas = (window._appTarjetas || []).some(t => t.id_cuenta_principal === cuentaObj.id_cuenta_principal);
-    const hasAhorro = (window._appSubcuentas || []).some(s => s.id_cuenta_principal === cuentaObj.id_cuenta_principal);
-
-    const modulos = [
-      { tab: 'tab-btn-tarjetas',   active: hasTarjetas },
-      { tab: 'tab-btn-cc',         active: cuentaObj.modulo_cc_activo },
-      { tab: 'tab-btn-ahorro',     active: hasAhorro },
-      { tab: 'tab-btn-inversiones',active: cuentaObj.modulo_inversiones_activo }
-    ];
-    modulos.forEach(({ tab, active }) => {
-      const btn = document.getElementById(tab);
-      if (btn) btn.style.display = active ? '' : 'none';
-    });
+  #actualizarVisibilidadTabs() {
+    // Empty accounts retain discoverable entry points to configure each module.
+    document.querySelectorAll('.nav-item[data-vista]').forEach(button=>{button.style.display='';});
   }
 
   // --- SECCIÓN 5: QUICK ADD (Universal) ---

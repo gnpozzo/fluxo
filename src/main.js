@@ -48,3 +48,5 @@ window.App.Modules.admin=lazyModule('admin',()=>import('./modules/AdminModule.js
 
 // 5. Init Application (binds sidebar buttons, auth, and data fetching)
 import './core/AppInit.js';
+import { installPresentation } from './core/Presentation.js';
+installPresentation();

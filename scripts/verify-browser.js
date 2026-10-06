@@ -8,9 +8,11 @@ import puppeteer from 'puppeteer-core';
 
 const user={id:'11111111-1111-4111-8111-111111111111',email:'qa@example.test',aud:'authenticated',role:'authenticated',user_metadata:{full_name:'QA'}};
 const account={id_cuenta_principal:'QA',nombre:'QA',activa:true,es_predeterminada:true,modulo_tarjetas_activo:true,modulo_cc_activo:true,modulo_ahorro_activo:true,modulo_inversiones_activo:true};
+const card={id_tarjeta:'QA-CARD',id_cuenta_principal:'QA',nombre:'Visa QA',activa:true,banco:'QA',red:'VISA',total_resumen_ars:0,total_resumen_usd:0,fecha_vencimiento_actual:'2026-10-09'};
+const emptyAccount={...account,id_cuenta_principal:'EMPTY',nombre:'Sin configuración',es_predeterminada:false,modulo_cc_activo:false,modulo_inversiones_activo:false};
 const fixtures={
  getConfig:{url:'https://qa.supabase.co',anonKey:'public-test-key'},
- getInitialData:{success:true,cuentas:[account],meses:['2026-10'],categorias:[],tarjetas:[],subcuentas:[],usuarios_cc:[],preferencias:{}},
+ getInitialData:{success:true,cuentas:[account,emptyAccount],meses:['2026-10'],categorias:[],tarjetas:[card],subcuentas:[],usuarios_cc:[],preferencias:{}},
  getUserInfo:{success:true,user_metadata:user.user_metadata,email:user.email},
  getDashboardData:{success:true,kpis:{ingresos:0,egresos:0,resultado:0,pctSaldado:0,pctPendiente:0},movimientos:[],evolucionMensual:[],kpisPorMoneda:{ARS:{},USD:{}}},
  getConsumosTC:{success:true,consumos:[],tarjetas:[],kpis:{}},
@@ -73,8 +75,82 @@ try {
  await page.click('#sidebar-backdrop',{offset:{x:385,y:400}});
  assert.equal(await page.$eval('#app-sidebar',el=>el.classList.contains('sidebar-open')),false);
  await page.screenshot({path:'.audit.local/browser-mobile.png',fullPage:true});
+ const openNavigation = async width => {
+  if(width<=900){
+   await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
+   await page.click('#sidebar-toggle');
+  }
+  await page.waitForFunction(()=>Math.abs(document.querySelector('#app-sidebar').getBoundingClientRect().left)<1);
+ };
+ // Exercise the real sidebar and every responsive layout without remote writes.
+ await page.setViewport({width:1440,height:960});
+ for(const width of [1440,1024,768,390]){
+  await page.setViewport({width,height:960});
+  for(const [name,id] of [['Resumen','nav-btn-dashboard'],['Movimientos','tab-btn-movimientos'],['Tarjetas','tab-btn-tarjetas'],['Gastos compartidos','tab-btn-cc'],['Ahorro','tab-btn-ahorro'],['Inversiones','tab-btn-inversiones']]){
+   await openNavigation(width);
+   await page.click('#'+id);
+   await page.waitForFunction(name=>document.querySelector('#page-title')?.textContent===name,{},name);
+   await page.waitForFunction(()=>document.querySelector('.vista-container.active')?.querySelector('.ux-analysis'));
+   if(width<=900) await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
+   const overflow=await page.evaluate(()=>{const content=document.querySelector('.main-content');return document.documentElement.scrollWidth>innerWidth+2 || content.scrollWidth>content.clientWidth+2;});
+   assert.equal(overflow,false,'page overflow in '+name+' at '+width);
+  }
+  await openNavigation(width);
+  await page.click('#tab-btn-tarjetas');
+  await page.waitForSelector('#tc-card-select');
+  await page.select('#tc-card-select','1');
+  assert.equal(await page.$eval('#tc-btn-pagar-resumen',el=>el.disabled),true,'empty statement cannot register payment');
+  assert.equal(await page.$eval('#tc-tope-kpi-val',el=>el.textContent),'Sin base de ingresos');
+  assert.equal(await page.$eval('#tc-btn-vaciar-inline',el=>!!el.closest('.ux-more')),true);
+  if(width<=900) await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
+  await page.screenshot({path:'.audit.local/ux-tarjetas-'+width+'.png',fullPage:true});
+ }
+ await page.setViewport({width:1440,height:960});
+ await openNavigation(1440);
+ await page.select('#selector-cuenta','EMPTY');
+ await page.waitForFunction(()=>App.Store.cuenta==='EMPTY');
+ assert.equal(await page.$eval('#tab-btn-tarjetas',el=>getComputedStyle(el).display==='none'),false,'empty account keeps navigation');
+ await page.select('#selector-cuenta','QA');
+ await page.click('#tab-btn-ahorro');
+ await page.waitForSelector('#aho-btn-ars');
+ await page.click('#pill-usd');
+ await page.waitForFunction(()=>App.Store.globalCurrency==='USD');
+ assert.equal(await page.$eval('#aho-btn-ars',el=>getComputedStyle(el.parentElement).display),'none');
+ await page.click('#tab-btn-movimientos');
+ await page.waitForSelector('#mov-btn-nuevo');
+ await page.click('#mov-btn-nuevo');
+ await page.waitForSelector('#modal-movimientos.modal-open');
+ assert.equal(await page.$eval('#modal-movimientos select[name=moneda]',el=>el.value),'USD','new movement keeps explicit selected currency');
+ await page.click('#modal-movimientos .modal-x');
+
+ // Filled fixtures verify currency separation and percentage-based amounts.
+ const income = (id,moneda,importe)=>({id_movimiento:id,id_cuenta_principal:'QA',tipo_mov:'INGRESO',fecha:'2026-10-05',descripcion:id,moneda,importe});
+ fixtures.getDashboardData={success:true,kpis:{ingresos:700,egresos:0,resultado:700},kpisPorMoneda:{ARS:{ingresos:700,egresos:0,resultado:700},USD:{ingresos:100,egresos:0,resultado:100}},movimientos:[income('INGRESO-ARS','ARS',700),income('INGRESO-USD','USD',100)],evolucionPorMoneda:{ARS:[],USD:[]}};
+ await page.evaluate(async data=>{App.API.invalidateAll();const mod=await App.Modules.movimientos.load();mod._render(data);},fixtures.getDashboardData);
+ const tableText=await page.$eval('#mov-tabla-wrap',el=>el.textContent);
+ assert.ok(tableText.includes('INGRESO-USD')&&!tableText.includes('INGRESO-ARS'));
+ await page.click('#mov-btn-nuevo');
+ await page.waitForSelector('#modal-movimientos.modal-open');
+ await page.click('#btn-modo-monto-pct');
+ await page.waitForFunction(()=>document.querySelector('#modal-movimientos input[name=importe]').value==='25.00');
+ await page.select('#modal-movimientos select[name=moneda]','ARS');
+ await page.waitForFunction(()=>document.querySelector('#modal-movimientos input[name=importe]').value==='175.00');
+ assert.equal(await page.$eval('#modal-movimientos select[name=moneda]',el=>!!el.labels.length),true);
+ await page.screenshot({path:'.audit.local/ux-movimiento-form-1440.png'});
+ await page.click('#modal-movimientos .modal-x');
+ await page.setViewport({width:390,height:844});
+ for(const [nav,button] of [['tab-btn-movimientos','mov-btn-nuevo'],['tab-btn-tarjetas','tc-btn-nuevo-inline'],['tab-btn-cc','cc-btn-nuevo'],['tab-btn-ahorro','aho-btn-nuevo'],['tab-btn-inversiones','inv-btn-nuevo']]){
+  await openNavigation(390);await page.click('#'+nav);
+  await page.waitForFunction(()=>document.querySelector('#app-sidebar').getBoundingClientRect().right<=0);
+  await page.click('#'+button);await page.waitForSelector('.modal-open');
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector('.modal-open')).opacity==='1' && getComputedStyle(document.querySelector('.modal-open .modal-content')).transform==='matrix(1, 0, 0, 1, 0, 0)');
+  const fit=await page.$eval('.modal-open .modal-dialog',el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&el.scrollWidth<=el.clientWidth+2;});
+  assert.ok(fit,'mobile form fits: '+button);
+  await page.screenshot({path:'.audit.local/ux-form-'+button+'-390.png'});
+  await page.click('.modal-open .modal-x');
+ }
  await page.evaluate(()=>window.toggleAppTheme());
  assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark');
  assert.deepEqual(errors,[]);
- console.log('PASS: login, lazy loading, seven modules and modal under production CSP (mocked API).');
-}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
+ console.log('PASS: login, seven modules, six responsive views, five mobile forms, currency percentages, empty payment, theme and production CSP (mocked API).');
+}catch(error){if(browser){const pages=await browser.pages();await pages.at(-1).screenshot({path:'.audit.local/ux-failure.png'});}throw error;}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}

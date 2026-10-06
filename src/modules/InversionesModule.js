@@ -10,6 +10,7 @@ import Chart from 'chart.js/auto';
 // --- SECCIÓN 0: CLASE InversionesModule ---
 
 export class InversionesModule extends BaseModule {
+  #tickerTimer = null;
 
   get moduleId() { return 'inversiones'; }
   get vistaId()  { return 'vista-inversiones'; }
@@ -38,6 +39,7 @@ export class InversionesModule extends BaseModule {
   }
 
   destruir() {
+    clearInterval(this.#tickerTimer);
     if (this.#chartInstance) {
       this.#chartInstance.destroy();
       this.#chartInstance = null;
@@ -123,7 +125,7 @@ export class InversionesModule extends BaseModule {
       sideRendEl.style.color = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
     }
     if (sideFillRendEl) {
-      const pctWidth = Math.min(100, Math.max(10, Math.abs(rend) * 2));
+      const pctWidth = Math.min(100, Math.abs(rend));
       sideFillRendEl.style.width = `${pctWidth}%`;
       sideFillRendEl.style.background = rend >= 0 ? 'var(--verde)' : 'var(--rojo)';
     }
@@ -162,6 +164,7 @@ export class InversionesModule extends BaseModule {
   }
 
   _renderTickerCarousel(md, dl) {
+    clearInterval(this.#tickerTimer);
     const infoDiv = document.getElementById('inv-dolar-info');
     if (!infoDiv) return;
 
@@ -261,7 +264,7 @@ export class InversionesModule extends BaseModule {
         });
       });
 
-      let isPaused = false;
+      let isPaused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const scrollStep = () => {
         if (!isPaused && wrapper) {
           if (wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 3) {
@@ -272,7 +275,11 @@ export class InversionesModule extends BaseModule {
         }
       };
 
-      const timer = setInterval(scrollStep, 35);
+      this.#tickerTimer = setInterval(() => {
+        if (!wrapper.isConnected) { clearInterval(this.#tickerTimer); return; }
+        scrollStep();
+      }, 35);
+      if (isPaused && btnPause) btnPause.textContent = '▶';
       wrapper.addEventListener('mouseenter', () => { isPaused = true; });
       wrapper.addEventListener('mouseleave', () => { if (btnPause?.textContent !== '▶') isPaused = false; });
 
@@ -561,7 +568,7 @@ export class InversionesModule extends BaseModule {
 
       </div>
 
-      <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Evolución + Asset Allocation) ═══ -->
+      <!-- ═══ ROW 2: ANALYTICS & INSIGHTS (Evolución + Distribución de cartera) ═══ -->
       <div class="finset-grid-2col" style="margin-bottom: 24px;">
         
         <!-- Left (60%): Evolución Mensual del Portfolio -->
@@ -585,11 +592,11 @@ export class InversionesModule extends BaseModule {
           <div class="finset-chart-summary" id="inv-moneyflow-summary"></div>
         </div>
 
-        <!-- Right (40%): Asset Allocation (FinSet Side-by-Side) -->
+        <!-- Right (40%): Distribución de cartera (FinSet Side-by-Side) -->
         <div class="finset-card" id="inv-widget-categories">
           <div class="finset-card-header">
             <div class="finset-card-title-wrap">
-              <h3 class="finset-card-title">Asset Allocation</h3>
+              <h3 class="finset-card-title">Distribución de cartera</h3>
               <span class="finset-card-subtitle">Distribución por activo</span>
             </div>
           </div>
@@ -627,7 +634,7 @@ export class InversionesModule extends BaseModule {
             <div class="finset-card-actions" style="margin-left:auto; gap:8px; align-items:center; flex-wrap:wrap;">
               <!-- Switch Portfolio vs Monitor -->
               <div class="currency-pills" id="inv-view-switch" style="display:flex;">
-                <button class="currency-pill active" id="inv-btn-portfolio" data-view="portfolio">Mi Portfolio</button>
+                <button class="currency-pill active" id="inv-btn-portfolio" data-view="portfolio">Mi cartera</button>
                 <button class="currency-pill" id="inv-btn-mercados" data-view="mercados">Monitor Global</button>
               </div>
 
@@ -648,7 +655,7 @@ export class InversionesModule extends BaseModule {
                 <!-- Botón Contextual Primario -->
                 <button class="btn btn-primary btn-sm" id="inv-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  <span>+ Operación</span>
+                  <span>Nueva operación</span>
                 </button>
               </div>
             </div>
@@ -664,11 +671,11 @@ export class InversionesModule extends BaseModule {
           </div>
         </div>
 
-        <!-- Right (40%): Estrategia & Cartera (Activos de la cartera filtrables por la dona) -->
+        <!-- Right (40%): Cartera (Activos de la cartera filtrables por la dona) -->
         <div class="finset-card" id="inv-widget-side-panel">
           <div class="finset-card-header" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <div class="finset-card-title-wrap">
-              <h3 class="finset-card-title">Estrategia & Cartera</h3>
+              <h3 class="finset-card-title">Cartera</h3>
               <span class="finset-card-subtitle" id="inv-cartera-subtitle">Activos y tenencias en cartera</span>
             </div>
             <span class="finset-trend-pill trend-neutral" id="inv-cartera-count-pill"><span>0 activos</span></span>

@@ -142,14 +142,15 @@ export default async function handler(req, res) {
       dIter.setUTCMonth(dIter.getUTCMonth() + 1);
     }
 
+    const usdBuckets=Object.fromEntries(Object.entries(mesesBuckets).map(([key,b])=>[key,{...b,ingresos:0,egresos:0}]));
     (histMovs || []).forEach(hm => {
-      if(hm.moneda==='USD') return;
+      const buckets=hm.moneda==='USD'?usdBuckets:mesesBuckets;
       const mKey = (hm.fecha || '').substring(0, 7);
-      if (mesesBuckets[mKey]) {
+      if (buckets[mKey]) {
         const isPagoTC = hm.id_categoria === 'CAT_PAGO_TC' || (typeof hm.descripcion === 'string' && hm.descripcion.toLowerCase().startsWith('pago resumen:'));
         const amt = Math.abs(Number(hm.importe || 0));
-        if (hm.tipo_mov === 'INGRESO') mesesBuckets[mKey].ingresos += amt;
-        if (hm.tipo_mov === 'EGRESO' && !isPagoTC) mesesBuckets[mKey].egresos += amt;
+        if (hm.tipo_mov === 'INGRESO') buckets[mKey].ingresos += amt;
+        if (hm.tipo_mov === 'EGRESO' && !isPagoTC) buckets[mKey].egresos += amt;
       }
     });
 
@@ -175,7 +176,8 @@ export default async function handler(req, res) {
       monedaKpis: 'ARS',
       kpisPorMoneda,
       movimientos: movimientos || [],
-      evolucionMensual
+      evolucionMensual,
+      evolucionPorMoneda:{ARS:evolucionMensual,USD:Object.values(usdBuckets).map(b=>({...b,balance:b.ingresos-b.egresos}))}
     });
 
 

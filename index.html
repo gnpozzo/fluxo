@@ -95,13 +95,14 @@
 
       <!-- Navigation -->
       <nav class="sidebar-nav" id="sidebar-nav" role="tablist">
-        <button class="nav-item active" data-vista="vista-dashboard" role="tab" aria-selected="true" id="nav-btn-dashboard" title="Dashboard">
+        <button class="nav-item active" data-vista="vista-dashboard" role="tab" aria-selected="true" id="nav-btn-dashboard" title="Resumen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
           </svg>
-          <span class="nav-text">Dashboard</span>
+          <span class="nav-text">Resumen</span>
         </button>
 
+        <button class="nav-item" data-vista="vista-movimientos" role="tab" id="tab-btn-movimientos" aria-selected="false" title="Movimientos"><svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span class="nav-text">Movimientos</span></button>
         <button class="nav-item" data-vista="vista-tarjetas" role="tab" id="tab-btn-tarjetas" title="Tarjetas">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
@@ -161,8 +162,8 @@
             </svg>
           </button>
           <div class="topbar-greeting" id="topbar-greeting">
-            <h2 class="topbar-greeting-title">¡Hola, <span id="topbar-user-name">Usuario</span>!</h2>
-            <span class="topbar-greeting-sub">Gestión financiera inteligente & patrimonio</span>
+            <h2 class="topbar-greeting-title"><span id="page-title">Resumen</span><span id="topbar-user-name" hidden>Usuario</span></h2>
+            <span class="topbar-greeting-sub">Tu actividad financiera</span>
           </div>
         </div>
 
@@ -293,7 +294,7 @@
           </div>
 
           <!-- Configuración / Panel de Control (Header) -->
-          <button id="btn-admin-header" class="btn-icon-sm" title="Panel de configuración" aria-label="Panel de configuración">
+          <button id="btn-admin-header" hidden class="btn-icon-sm" title="Panel de configuración" aria-label="Panel de configuración">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
@@ -355,6 +356,7 @@
         <!-- Paneles de contenido (módulos) -->
         <div id="vista-dashboard"     class="vista-container active" role="tabpanel"></div>
 
+        <div id="vista-movimientos" class="vista-container" role="tabpanel"></div>
         <div id="vista-tarjetas"     class="vista-container"        role="tabpanel"></div>
         <div id="vista-cc"           class="vista-container"        role="tabpanel"></div>
         <div id="vista-ahorro"       class="vista-container"        role="tabpanel"></div>

@@ -518,7 +518,7 @@ export class TarjetasModule extends BaseModule {
                       <div class="fsc-title">Impuestos Resumen</div>
                       <span id="tc-taxes-badge" class="badge" style="font-size:0.68rem; padding:1px 6px; border-radius:10px; background:rgba(239,68,68,0.1); color:var(--rojo); font-weight:700; display:none;">0 ítems</span>
                     </div>
-                    <div class="fsc-sub">PAIS, Ganancias, Sellos</div>
+                    <div class="fsc-sub">Conceptos detectados en el resumen</div>
                   </div>
                 </div>
                 <div class="fsc-right-block" style="display:flex; align-items:center; gap:8px;">
@@ -1314,8 +1314,18 @@ export class TarjetasModule extends BaseModule {
     const prevBtn = document.getElementById('tc-carousel-prev');
     const nextBtn = document.getElementById('tc-carousel-next');
     if (!visualEl) return;
+    let selector=document.getElementById('tc-card-select');
+    if(!selector){
+      const label=document.createElement('label');label.className='ux-card-selector';label.htmlFor='tc-card-select';label.textContent='Tarjeta';
+      selector=document.createElement('select');selector.id='tc-card-select';selector.className='input';
+      label.append(selector);document.getElementById('tc-widget-cards-panel').querySelector('.finset-card-header').after(label);
+      const note=document.createElement('p');note.id='tc-source-note';note.className='ux-source-note';label.after(note);
+      selector.addEventListener('change',()=>this.#navigateTc(Number(selector.value)-this.#tcIndex));
+    }
 
     if (this.#tarjetas.length === 0) {
+      selector.replaceChildren(new Option('Sin tarjetas vinculadas','0'));selector.disabled=true;
+      const note=document.getElementById('tc-source-note');if(note){note.replaceChildren(document.createTextNode('Agregá una tarjeta en Configuración para comenzar. '));const configure=document.createElement('button');configure.type='button';configure.className='btn btn-outline btn-sm';configure.textContent='Configurar tarjetas';configure.onclick=()=>App.Modules.admin.cargar();note.append(configure);}
       visualEl.innerHTML = `<div style="color:var(--texto-3);text-align:center;padding:16px;">Sin tarjetas vinculadas</div>`;
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
@@ -1374,6 +1384,7 @@ export class TarjetasModule extends BaseModule {
       })
     ];
 
+    selector.replaceChildren(...this._tcList.map((tc,index)=>new Option(tc.nombre,String(index))));selector.disabled=false;
     if (this.#selectedTcId) {
       const idx = this._tcList.findIndex(t => t.id_tarjeta === this.#selectedTcId);
       this.#tcIndex = idx >= 0 ? idx : 0;
@@ -1429,6 +1440,7 @@ export class TarjetasModule extends BaseModule {
     const visualEl = document.getElementById('tc-carousel-visual');
     if (!visualEl) return;
     const tc = this._tcList?.[this.#tcIndex];
+    const selector=document.getElementById('tc-card-select');if(selector) selector.value=String(this.#tcIndex);
     if (!tc) return;
 
     const getBrandLogoHtml = (brandName) => {
@@ -1582,6 +1594,15 @@ export class TarjetasModule extends BaseModule {
     const elTot = document.getElementById('tc-subcard-total');
     const elTotSub = document.getElementById('tc-subcard-total-sub');
     const elTax = document.getElementById('tc-subcard-impuestos');
+    const note=document.getElementById('tc-source-note');
+    if(note){
+      const selected=(this.#allConsumos||[]).filter(c=>!activeCard || c.id_tarjeta===activeCard.id_tarjeta);
+      const ars=selected.filter(c=>c.moneda!=='USD').reduce((n,c)=>n+Number(c.importe||0),0);
+      const usd=selected.filter(c=>c.moneda==='USD').reduce((n,c)=>n+Number(c.importe||0),0);
+      const cards=activeCard?[activeCard]:this.#tarjetas;
+      const official=cards.some(c=>(c.fecha_vencimiento_actual?.slice(0,7)===App.Store.mes || c.fecha_cierre_actual?.slice(0,7)===App.Store.mes) && (Number(c.total_resumen_ars)>0 || Number(c.total_resumen_usd)>0));
+      note.textContent='Consumos registrados: '+App.Utils.formatearMoneda(ars)+' · '+App.Utils.formatearMonedaUSD(usd)+(official?'. El plástico muestra el total del resumen bancario guardado; puede diferir del detalle.':'. El plástico muestra la suma de consumos registrados.');
+    }
     const btnPagar = document.getElementById('tc-btn-pagar-resumen');
 
     if (elPers) elPers.textContent = App.Utils.formatearMoneda(personales);
@@ -1599,11 +1620,13 @@ export class TarjetasModule extends BaseModule {
     }
 
     if (btnPagar) {
+      const pending=(this.#allConsumos || []).filter(c=>(!activeCard || c.id_tarjeta===activeCard.id_tarjeta) && !c.pagado);
+      btnPagar.disabled=pending.length===0;
       if (activeCard) {
-        btnPagar.innerHTML = `💳 Pagar (${App.Utils.escapeHtml(activeCard.nombre)})`;
+        btnPagar.innerHTML = `Registrar pago · ${App.Utils.escapeHtml(activeCard.nombre)}`;
         btnPagar.title = `Liquidar resumen de ${App.Utils.escapeHtml(activeCard.nombre)}`;
       } else {
-        btnPagar.innerHTML = `💳 Pagar Resumen`;
+        btnPagar.innerHTML = `Registrar pago de resumen`;
         btnPagar.title = `Liquidar resumen consolidado de tarjetas`;
       }
     }
@@ -2400,10 +2423,10 @@ export class TarjetasModule extends BaseModule {
     const statusPill = document.getElementById('tc-tope-status-pill');
 
     if (incomeBase <= 0) {
-      if (valEl) valEl.textContent = 'En rango';
-      if (fillEl) fillEl.style.width = '15%';
+      if (valEl) valEl.textContent = 'Sin base de ingresos';
+      if (fillEl) fillEl.style.width = '0%';
       if (subEl) subEl.textContent = 'Configurá tus ingresos';
-      if (statusPill) statusPill.innerHTML = '<span>Salud OK</span>';
+      if (statusPill) {statusPill.className='finset-trend-pill trend-neutral';statusPill.innerHTML='<span>Sin evaluar</span>';}
       return;
     }
 
@@ -2583,19 +2606,19 @@ export class TarjetasModule extends BaseModule {
       ? (this.#allConsumos || []).filter(c => c.id_tarjeta === this.#selectedTcId)
       : (this.#allConsumos || []);
 
-    let totalAPagar = 0;
-    if (activeCard) {
-      totalAPagar = (activeCard.total_resumen_ars && Number(activeCard.total_resumen_ars) > 0)
-        ? Number(activeCard.total_resumen_ars)
-        : consumosAPagar.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
-    } else {
-      this.#tarjetas.forEach(tc => {
-        const cardConsumos = (this.#allConsumos || []).filter(c => c.id_tarjeta === tc.id_tarjeta);
-        const cardSum = cardConsumos.reduce((acc, c) => acc + (c.moneda === 'USD' ? 0 : Number(c.importe || 0)), 0);
-        totalAPagar += (tc.total_resumen_ars && Number(tc.total_resumen_ars) > 0) ? Number(tc.total_resumen_ars) : cardSum;
-      });
+    let totalAPagar=0;
+    if(!consumosAPagar.some(c=>!c.pagado)){App.Toast.info('No hay consumos pendientes en este período.');return;}
+    let totalUsd=0;
+    const paymentCards=activeCard?[activeCard]:this.#tarjetas;
+    totalAPagar=0;
+    for(const card of paymentCards){
+      const own=consumosAPagar.filter(c=>c.id_tarjeta===card.id_tarjeta);
+      if(!own.length) continue;
+      const current=card.fecha_vencimiento_actual?.slice(0,7)===App.Store.mes;
+      const sum=currency=>own.filter(c=>(c.moneda||'ARS')===currency).reduce((n,c)=>n+Number(c.importe||0),0);
+      totalAPagar+=current && Number(card.total_resumen_ars)>0?Number(card.total_resumen_ars):sum('ARS');
+      totalUsd+=current && Number(card.total_resumen_usd)>0?Number(card.total_resumen_usd):sum('USD');
     }
-
     const modal = new App.Modal('modal-tc-pagar-resumen');
     modal.open({
       titulo: activeCard ? `Confirmar Pago: ${activeCard.nombre}` : 'Confirmar Pago de Resumen (Consolidado)',
@@ -2603,17 +2626,17 @@ export class TarjetasModule extends BaseModule {
       body: `
         <div style="text-align:center;padding:12px 0;">
           <p style="margin:0 0 10px 0;font-size:0.95rem;color:var(--texto);">
-            ¿Confirmás el pago del resumen de <strong>${App.Utils.escapeHtml(nombreTc)}</strong>?
+            ¿Registrás el pago del resumen de <strong>${App.Utils.escapeHtml(nombreTc)}</strong>?
           </p>
           <div style="font-size:1.4rem;font-weight:800;color:var(--verde);margin-bottom:12px;">
-            ${App.Utils.formatearMoneda(totalAPagar)}
+            ${App.Utils.formatearMoneda(totalAPagar)}${totalUsd>0?`<br>${App.Utils.formatearMonedaUSD(totalUsd)}`:''}
           </div>
           <p style="font-size:0.82rem;color:var(--texto-2);line-height:1.4;margin:0;">
-            Se marcarán como <strong>Saldados</strong> los ${consumosAPagar.length} consumos del período actual${activeCard ? ' de ' + App.Utils.escapeHtml(activeCard.nombre) : ' de todas las tarjetas'}.
+            Esta acción registra el pago en Fluxo; no realiza una transferencia bancaria. Se registra el total del resumen y se marcarán como <strong>Saldados</strong> los ${consumosAPagar.length} consumos del período actual${activeCard ? ' de ' + App.Utils.escapeHtml(activeCard.nombre) : ' de todas las tarjetas'}.
           </p>
         </div>
       `,
-      confirmLabel: 'Confirmar Pago',
+      confirmLabel: 'Registrar pago',
       onConfirm: async (m) => {
         m.setLoading(true);
         try {

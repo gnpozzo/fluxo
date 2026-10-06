@@ -7662,3 +7662,104 @@ td.text-center {
   #month-select-ui, #account-select-ui { min-width: 0; flex: 1 1 100px; }
   #selector-cuenta { max-width: 100%; }
 }
+
+/* Shared operational layout: PC first, tablet and phone retain every action. */
+[hidden] { display: none !important; }
+.ux-view.active { display: flex; flex-direction: column; gap: 20px; }
+.ux-view > * { min-width: 0; }
+.ux-view .finset-card, .ux-view .table-card { box-shadow: none; }
+.ux-view .finset-card-header { flex-wrap: wrap; gap: 12px; }
+.ux-view .dh-search-box input { width: 180px !important; max-width: 100%; }
+.ux-view .finset-grid-2col { align-items: start; }
+.ux-analysis { order: 10; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); }
+.ux-analysis > summary, .ux-filters > summary, .ux-more > summary {
+  cursor: pointer; font-weight: 600; min-height: 44px; padding: 12px 16px; color: var(--texto);
+}
+.ux-analysis-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; padding: 0 16px 16px; }
+.ux-analysis-grid > * { min-width: 0; }
+.ux-filters, .ux-more { position: relative; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
+.ux-filter-body { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px; }
+.ux-filters .finset-select-sm { min-height: 44px; max-width: 100%; }
+.ux-more > button { margin: 4px 12px 12px; }
+.ux-danger { color: var(--rojo) !important; }
+.ux-card-selector { display: grid; gap: 8px; color: var(--texto-2); font-weight: 600; font-size: .85rem; margin: 0 0 16px; }
+.ux-card-selector select { width: 100%; min-height: 44px; }
+.ux-view #tc-widget-consumos, .ux-view #dash-widget-movimientos { min-height: 0 !important; }
+.ux-view .dh-drilldown-list:has(> .dh-empty-state), .ux-view #tc-consumos-list:not(:has(button)) { min-height: 140px !important; }
+.ux-view .finset-kpi-grid, .ux-view .kpi-grid { margin-bottom: 0 !important; }
+.ux-view .analytics-side-layout { display: block; }
+.ux-view .analytics-main-col { width: 100%; }
+.ux-view .analytics-side-col:empty { display: none; }
+.ux-view #inv-dolar-info { order: 9; }
+.ux-view .tc-header-actions { flex-wrap: wrap; }
+.ux-view button:not(.ticker-card), .ux-view summary { min-height: 40px; }
+.ux-view button:disabled { cursor: not-allowed; opacity: .55; }
+.ux-view select, .ux-view input, .modal-open input, .modal-open select { min-height: 44px; }
+button:focus-visible, summary:focus-visible, [role=button]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--primary); outline-offset: 3px;
+}
+.ux-view .finset-card-subtitle, .ux-view .dh-drilldown-summary { color: var(--texto-2); }
+.ux-view .dh-drilldown-list { max-height: none !important; }
+.topbar-greeting-title { font-size: 1.1rem; }
+.topbar-greeting-sub { display: none; }
+.tc-card-pill { transform: none; }
+
+@media (min-width: 901px) and (max-width: 1200px) {
+  .app-header { flex-wrap: wrap; height: auto !important; padding-block: 12px; gap: 12px; }
+  .app-header-center { order: 3; flex: 0 0 100%; }
+  .topbar-selectors-group { justify-content: flex-start; }
+  .ux-view .finset-grid-2col { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (max-width: 900px) {
+  .ux-view .finset-grid-2col, .ux-analysis-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .ux-view .finset-kpi-grid, .ux-view .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ux-view .finset-card { padding: 18px; }
+  .ux-view .finset-card-actions, .ux-view .tc-filter-controls, .ux-view .tc-toolbar-row { flex-wrap: wrap; gap: 10px; }
+  .ux-view .tc-header-actions { margin-left: 0 !important; width: 100%; }
+  .modal-dialog { max-width: calc(100vw - 32px) !important; }
+  .admin-layout-container { min-width: 0; }
+  .admin-sidebar { flex: 0 0 170px; }
+}
+@media (max-width: 600px) {
+  .main-content { padding: 16px 12px !important; }
+  .topbar-greeting { display: block !important; }
+  .app-header-left { flex: 1 1 auto; }
+  .topbar-greeting-title { font-size: 1rem; }
+  .app-header-actions { gap: 6px; }
+  #btn-header-gemini { display: inline-flex !important; }
+  #btn-header-gemini .btn-gemini-text { display: none; }
+  .ux-view { gap: 14px !important; }
+  .ux-view .finset-kpi-grid, .ux-view .kpi-grid { grid-template-columns: minmax(0, 1fr); }
+  .ux-view .finset-grid-2col { margin-bottom: 0 !important; }
+  .ux-view .finset-card { padding: 16px; }
+  .ux-view .finset-card-actions, .ux-view .tc-filter-controls { margin-left: 0 !important; width: 100%; }
+  .ux-view .dh-search-box { width: 100%; }
+  .ux-view .dh-search-box input { width: 100% !important; }
+  .ux-view .section-header { align-items: stretch !important; }
+  .ux-view .dt-search { min-width: 0; width: 100%; }
+  .ux-view #mov-search { min-width: 0 !important; width: 100%; }
+  .ux-view .dt-table-wrap, .admin-content-area { overflow-x: auto; max-width: 100%; }
+  .ux-view .ux-analysis-grid { padding: 0 8px 8px; }
+  .ux-filter-body { flex-direction: column; }
+  .ux-filter-body > * { width: 100%; }
+  .modal-overlay { padding: 12px !important; }
+  .modal-dialog { width: 100% !important; max-width: 100% !important; max-height: calc(100dvh - 24px); }
+  .modal-body { overflow: auto; padding: 16px !important; }
+  .modal-body .form-grid, .modal-body .form-row { grid-template-columns: minmax(0, 1fr) !important; }
+  .modal-footer { flex-wrap: wrap; }
+  .modal-footer button { min-height: 44px; }
+  .admin-layout-container { display: flex; flex-direction: column; min-height: 0 !important; }
+  .admin-sidebar { display: flex; flex-wrap: wrap; flex-basis: auto; width: 100%; gap: 6px; }
+  .admin-sidebar > div { display: none; }
+  .admin-nav-btn { width: auto; min-height: 44px; }
+  .admin-content-area { padding: 12px 0; min-width: 0; }
+  .gemini-panel { width: 100vw; height: 100dvh; max-height: 100dvh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+  .broker-ticker-track { animation: none !important; }
+}
+
+.ux-form-options { border: 1px solid var(--borde); border-radius: 10px; padding: 12px; }
+.ux-form-options > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: list-item; padding: 10px 0; }
+.ux-form-options > .form-grid { margin-top: 12px; }

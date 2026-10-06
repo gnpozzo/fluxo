@@ -83,6 +83,7 @@ export class AhorroModule extends BaseModule {
       return;
     }
 
+    this.#vistaActual = App.Store.globalCurrency || 'ARS';
     this.#dataCompleta = data;
     this.#cotizacion   = data.cotizacion;
 
@@ -134,7 +135,7 @@ export class AhorroModule extends BaseModule {
         : 'Sin depósitos este mes';
     }
     if (fillMetaEl) {
-      fillMetaEl.style.width = depositosMes > 0 ? '75%' : '20%';
+      fillMetaEl.hidden = true; // Deposits do not measure goal completion.
       fillMetaEl.style.background = depositosMes > 0 ? 'var(--verde)' : 'var(--amarillo-text)';
     }
 
@@ -299,7 +300,7 @@ export class AhorroModule extends BaseModule {
               <!-- Único Botón Contextual Primario -->
               <button class="btn btn-primary btn-sm" id="aho-btn-nuevo" style="display:inline-flex;align-items:center;gap:6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span>Nuevo Movimiento</span>
+                <span>Nueva transferencia</span>
               </button>
             </div>
           </div>
@@ -1054,6 +1055,7 @@ export class AhorroModule extends BaseModule {
     const filterUsd = document.getElementById('aho-btn-filter-usd');
 
     const switchCurrency = (moneda) => {
+      App.Store.setGlobalCurrency(moneda);
       this.#vistaActual = moneda;
       this.#subcuentaFiltro = null;
       document.getElementById('aho-alcancia-filter-badge')?.classList.add('hidden');

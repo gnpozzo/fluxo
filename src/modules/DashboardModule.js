@@ -380,14 +380,14 @@ export class DashboardModule extends BaseModule {
           <!-- ═══ ROW 1: 4 TOP KPI CARDS ═══ -->
           <div class="finset-kpi-row" id="dash-kpi-grid">
             
-            <!-- Card 1: Balance Total -->
+            <!-- Card 1: Neto del mes -->
             <div class="finset-kpi-card" id="dash-saldo-card">
               <div class="finset-kpi-header">
                 <div class="finset-kpi-title-wrap">
                   <div class="finset-kpi-icon icon-navy">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>
                   </div>
-                  <span class="finset-kpi-title">Balance Total</span>
+                  <span class="finset-kpi-title">Neto del mes</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;">
                   <button class="fhc-visibility-btn" id="btn-toggle-privacy" title="Ocultar/Mostrar saldo" aria-label="Alternar privacidad">
@@ -1347,7 +1347,7 @@ export class DashboardModule extends BaseModule {
         <div class="form-group">
           <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Objetivo mensual de margen libre / ahorro (ARS)</label>
           <input class="input" type="number" name="margenLibreMensual" step="1000" min="0" value="${meta.margenLibreMensual || ''}" placeholder="Ej: 500000 (dejar vacío para calcular el 20% de tus ingresos)">
-          <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Progreso mensual visualizado en la tarjeta de Balance Total.</span>
+          <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Progreso mensual visualizado en la tarjeta de Neto del mes.</span>
         </div>
         <div class="form-group">
           <label style="font-size:0.85rem; font-weight:600; color:var(--texto-2);">Fecha límite acumulada (opcional)</label>
@@ -1355,7 +1355,7 @@ export class DashboardModule extends BaseModule {
           <span style="font-size:0.75rem; color:var(--texto-3); margin-top:4px;">Dejar vacío si no tiene fecha de vencimiento (objetivo definitivo).</span>
         </div>
         <div style="background:var(--card-bg, #f8fafc); border:1px solid var(--borde); border-radius:10px; padding:12px; font-size:0.82rem; color:var(--texto-2);">
-          💡 <em>El progreso del Balance Total mide cuánto te queda libre respecto a tu meta mensual. También puedes configurar metas reductoras por categoría interactuando con <strong>FluxoAI</strong>.</em>
+          💡 <em>El progreso del Neto del mes mide cuánto te queda libre respecto a tu meta mensual. También puedes configurar metas reductoras por categoría interactuando con <strong>FluxoAI</strong>.</em>
         </div>
       </form>
     `;
@@ -1419,8 +1419,6 @@ export class DashboardModule extends BaseModule {
     if (ingresos > 0) {
       actualPct = (tcTotal / ingresos) * 100;
       ratio = actualPct / topePct;
-    } else if (tcTotal > 0) {
-      ratio = 1.0;
     }
 
     const fillWidth = Math.min(Math.round(ratio * 100), 100);
@@ -1428,8 +1426,8 @@ export class DashboardModule extends BaseModule {
 
     barEl.classList.remove('status-ok', 'status-warn', 'status-danger');
 
-    if (ingresos === 0 && tcTotal > 0) {
-      statusEl.textContent = `Sin ingresos reg.`;
+    if (ingresos <= 0) {
+      statusEl.textContent = `Sin base de ingresos`;
       statusEl.style.color = 'var(--amarillo, #f59e0b)';
       barEl.classList.add('status-warn');
     } else if (ratio <= 0.8) {

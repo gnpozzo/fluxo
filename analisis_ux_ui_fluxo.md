@@ -158,7 +158,7 @@ Conservar colores de marca y plásticos; reducir pastillas, sombras y bordes red
 | P2 | Accesibilidad y móvil | Operación con teclado, foco visible, campos etiquetados; pruebas a 390 px y escritorio |
 | P3 | Coherencia visual | Espaciado, nombres, tamaños y tonos compartidos sin alterar cálculos |
 
-Secuencia: primero consistencia y navegación; después tarjetas y movimientos; luego compartidos, ahorro e inversiones; finalmente configuración y chat. Los rediseños descritos son propuestas, no cambios ya publicados.
+Secuencia: primero consistencia y navegación; después tarjetas y movimientos; luego compartidos, ahorro e inversiones; finalmente configuración y chat. La implementación 6.3.0 aplica esta secuencia a la navegación y presentación; el cierre siguiente distingue lo realizado de las evaluaciones futuras.
 
 ## Verificación para preservar funcionalidades
 
@@ -173,3 +173,12 @@ Comparar antes/después con tareas concretas: localizar tarjeta, encontrar una o
 - [W3C — Target Size Minimum, WCAG 2.2](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html): referencia para tamaños de interacción y excepciones.
 
 Las decisiones específicas sobre Fluxo son recomendaciones basadas en la inspección del producto; las referencias no implican que estas fuentes hayan evaluado Fluxo.
+
+
+## Cierre de implementación — 6.3.0
+
+Implementados: menú y título estables, sección Movimientos, gráficos desplegables en los seis módulos, filtros secundarios y limpieza, acción principal textual, vaciado separado, selector directo de tarjeta y explicación del saldo. Pago interno con importes por moneda y sin acción habilitada cuando no hay pendientes. Corregidos indicadores sin base de ingresos y barras decorativas; moneda global en Ahorro. Movimientos incorpora moneda explícita y distribución/compartidos desplegables sin eliminar campos ni la lógica de series/cuotas. Configuración y chat mantienen sus funciones y reciben reglas responsive compartidas.
+
+Diseño de escritorio principal, grillas adaptativas, menú móvil, formularios de una columna y controles accesibles a teclado. Se validaron seis secciones a 1440, 1024, 768 y 390 px; cinco formularios a 390 px; login, CSP, cambio de cuenta, tema, pago vacío y porcentajes ARS/USD con API simulada. También pasaron 16 pruebas y 19 comprobaciones PostgreSQL revertidas al finalizar. No se cargaron operaciones de prueba en producción para validar el rediseño.
+
+La revisión de importaciones conserva el flujo existente de revisión de filas. Los rediseños futuros de tablas como filas resumidas móviles, estudios de tareas con usuarios y certificación WCAG siguen siendo recomendaciones de evaluación, no resultados acreditados por esta entrega. La cobertura automatizada y capturas locales no equivalen a probar todos los modelos de celular/tablet.

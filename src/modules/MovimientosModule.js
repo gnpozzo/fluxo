@@ -106,7 +106,12 @@ export class MovimientosModule extends BaseModule {
       return;
     }
 
-    const { kpis, movimientos } = data;
+    const currency=App.Store.globalCurrency || 'ARS';
+    const movimientos=(data.movimientos || []).filter(m=>(m.moneda||'ARS')===currency);
+    const native=data.kpisPorMoneda?.[currency];
+    const kpis={...data.kpis,...native};
+    kpis.egresosSaldados=movimientos.filter(m=>m.tipo_mov==='EGRESO'&&m.pagado).reduce((n,m)=>n+Number(m.importe||0),0);
+    kpis.egresosPendientes=movimientos.filter(m=>m.tipo_mov==='EGRESO'&&!m.pagado).reduce((n,m)=>n+Number(m.importe||0),0);
 
     // Categorías y cuentas desde el estado global
     this.#categorias = (window._appCategorias && window._appCategorias.length > 0) ? window._appCategorias : this.#categorias;
@@ -134,7 +139,7 @@ export class MovimientosModule extends BaseModule {
 
     // Renderizado de analítica lateral continua (side-by-side)
     this.#renderDonutChart(movimientos || [], kpis);
-    this.#renderEvolucionChart(data?.evolucionMensual || []);
+    this.#renderEvolucionChart(data.evolucionPorMoneda?.[currency] || (currency==='ARS'?data.evolucionMensual || []:[]));
 
     App.log('MovimientosModule', '_render', `${(movimientos || []).length} movimientos`);
 
@@ -209,19 +214,19 @@ export class MovimientosModule extends BaseModule {
       titulo    : 'Ingresos',
       icono     : 'trending_up',
       colorClass: 'kpi-green',
-      onFormat  : App.Utils.formatearMoneda
+      onFormat  : value => this.#formatAmount(value)
     });
     this.#kpiEgresos  = new App.KpiCard(grid, {
       titulo    : 'Gastos',
       icono     : 'trending_down',
       colorClass: 'kpi-red',
-      onFormat  : (v) => App.Utils.formatearMoneda(Math.abs(v))
+      onFormat  : (v) => this.#formatAmount(Math.abs(v))
     });
     this.#kpiResult   = new App.KpiCard(grid, {
-      titulo    : 'Balance',
+      titulo    : 'Neto del mes',
       icono     : 'scale',
       colorClass: 'kpi-blue',
-      onFormat  : App.Utils.formatearMoneda
+      onFormat  : value => this.#formatAmount(value)
     });
 
     // DataTable
@@ -490,7 +495,7 @@ export class MovimientosModule extends BaseModule {
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
             <span style="font-size:0.8rem;font-weight:600;color:var(--texto-2);text-transform:uppercase;letter-spacing:0.04em">Modalidad de Importe</span>
             <div class="pill-group" style="display:inline-flex;background:var(--fondo);border:1px solid var(--borde);border-radius:var(--r-sm);padding:2px">
-              <button type="button" class="btn-pill-mode active" id="btn-modo-monto-fijo" style="padding:4px 12px;font-size:0.75rem;font-weight:600;border:none;background:var(--primary);color:#fff;border-radius:calc(var(--r-sm) - 2px);cursor:pointer;transition:all 0.15s ease">Monto Fijo ($)</button>
+              <button type="button" class="btn-pill-mode active" id="btn-modo-monto-fijo" style="padding:4px 12px;font-size:0.75rem;font-weight:600;border:none;background:var(--primary);color:#fff;border-radius:calc(var(--r-sm) - 2px);cursor:pointer;transition:all 0.15s ease">Monto fijo</button>
               <button type="button" class="btn-pill-mode" id="btn-modo-monto-pct" style="padding:4px 12px;font-size:0.75rem;font-weight:600;border:none;background:transparent;color:var(--texto-2);border-radius:calc(var(--r-sm) - 2px);cursor:pointer;transition:all 0.15s ease">% sobre Ingresos</button>
             </div>
           </div>
@@ -528,6 +533,7 @@ export class MovimientosModule extends BaseModule {
           </div>
         </div>` : ''}
 
+<div class="form-group"><label>Moneda</label><select class="input" name="moneda"><option value="ARS" ${(data?.moneda || App.Store.globalCurrency)!=='USD'?'selected':''}>ARS</option><option value="USD" ${(data?.moneda || App.Store.globalCurrency)==='USD'?'selected':''}>USD</option></select></div>
         <!-- Fila 1: Monto + Fecha -->
         <div class="form-group ${colorClass}">
           <label>Monto <span class="required-mark">*</span></label>
@@ -642,11 +648,14 @@ export class MovimientosModule extends BaseModule {
           </div>` : ''}
         </div>
 
+        <details class="ux-form-options full-width" ${isSplit ? 'open' : ''}>
+          <summary>Distribución y gastos compartidos</summary>
+          <div class="form-grid">
         <!-- Split -->
         <div class="form-group full-width">
           <label class="form-switch">
             <input type="checkbox" class="toggle-switch" name="es_split" id="chk-split" ${isSplit ? 'checked' : ''}>
-            <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Dividir entre cuentas (Split)</span>
+            <span style="font-size:.85rem;font-weight:500;color:var(--texto);text-transform:none;letter-spacing:0">Dividir entre cuentas</span>
           </label>
         </div>
         <div id="split-opts" class="form-group full-width ${!isSplit ? 'hidden' : ''}">
@@ -683,6 +692,8 @@ export class MovimientosModule extends BaseModule {
            </div>
            <p style="font-size:0.8rem;color:var(--texto-3);margin-top:4px;margin-bottom:0">Se descontará el porcentaje restante como deuda a cobrar en Gastos Compartidos.</p>
         </div>` : ''}
+          </div>
+        </details>
       </form>
     `;
   }
@@ -700,6 +711,7 @@ export class MovimientosModule extends BaseModule {
             ...(this.#editData || {}),
             id_movimiento: fd.get('id_movimiento') || '',
             importe: fd.get('importe') || '',
+            moneda: fd.get('moneda') || this.#editData?.moneda || 'ARS',
             fecha: fd.get('fecha') || '',
             descripcion: fd.get('descripcion') || '',
             id_cuenta_principal: fd.get('id_cuenta_destino') || App.Store?.cuenta,
@@ -836,8 +848,18 @@ export class MovimientosModule extends BaseModule {
     const inputImporte = document.querySelector('input[name="importe"]');
     const selCuentaDest = document.querySelector('select[name="id_cuenta_destino"]');
     const inputFecha = document.querySelector('input[name="fecha"]');
+    const inputMoneda = document.querySelector('select[name="moneda"]');
+    const formatIncome = value => inputMoneda?.value === 'USD' ? App.Utils.formatearMonedaUSD(value) : App.Utils.formatearMoneda(value);
 
+    const syncCurrency = () => {
+      const amountGroup = inputImporte?.closest('.form-group');
+      const symbol = amountGroup?.querySelector('.form-monto-icon');
+      if (symbol) symbol.textContent = inputMoneda?.value === 'USD' ? 'US$' : '$';
+    };
+    syncCurrency();
+    inputMoneda?.addEventListener('change', syncCurrency);
     let modoPctActivo = false;
+    let calculationVersion = 0;
     let lastLoadedCacheKey = null;
 
     const actualizarOpcionesCategorias = (ingresosData) => {
@@ -846,9 +868,9 @@ export class MovimientosModule extends BaseModule {
       const cats = ingresosData?.categorias || [];
       const totalIng = Number(ingresosData?.total || 0);
 
-      let html = `<option value="__ALL__">Todos los ingresos (${App.Utils.formatearMoneda(totalIng)})</option>`;
+      let html = `<option value="__ALL__">Todos los ingresos (${formatIncome(totalIng)})</option>`;
       cats.forEach(c => {
-        html += `<option value="${App.Utils.escapeHtml(c.id)}">${App.Utils.escapeHtml(c.nombre)} (${App.Utils.formatearMoneda(c.total)})</option>`;
+        html += `<option value="${App.Utils.escapeHtml(c.id)}">${App.Utils.escapeHtml(c.nombre)} (${formatIncome(c.total)})</option>`;
       });
       selCatPct.innerHTML = html;
       if (prevVal && (prevVal === '__ALL__' || cats.some(c => c.id === prevVal))) {
@@ -860,6 +882,8 @@ export class MovimientosModule extends BaseModule {
 
     const recalcularMontoPct = async () => {
       if (!modoPctActivo || !inputPct || !infoPct || !inputImporte) return;
+      const version = ++calculationVersion;
+      inputImporte.value = '';
       const pct = parseFloat(inputPct.value);
       if (isNaN(pct) || pct <= 0) {
         infoPct.innerHTML = '<span style="color:var(--texto-3)">Ingresá un porcentaje mayor a 0%</span>';
@@ -871,12 +895,14 @@ export class MovimientosModule extends BaseModule {
       const cuentaObj = allCuentas.find(c => c.id_cuenta_principal === idCuenta);
       const nombreCuenta = cuentaObj?.nombre || 'la cuenta';
 
-      const cacheKey = `${idCuenta}_${fecha.substring(0, 7)}`;
+      const moneda = inputMoneda?.value || 'ARS';
+      const cacheKey = `${idCuenta}_${fecha.substring(0, 7)}_${moneda}`;
       if (lastLoadedCacheKey !== cacheKey) {
         infoPct.innerHTML = '<span style="color:var(--texto-3)">Consultando ingresos de la cuenta...</span>';
       }
 
-      const ingresosData = await this.#obtenerIngresosPeriodo(idCuenta, fecha);
+      const ingresosData = await this.#obtenerIngresosPeriodo(idCuenta, fecha, moneda);
+      if (version !== calculationVersion || !modoPctActivo) return;
 
       if (lastLoadedCacheKey !== cacheKey) {
         lastLoadedCacheKey = cacheKey;
@@ -908,7 +934,7 @@ export class MovimientosModule extends BaseModule {
         const montoFinal = Math.round(montoCalculado * 100) / 100;
         inputImporte.value = montoFinal.toFixed(2);
         inputImporte.dispatchEvent(new Event('input', { bubbles: true }));
-        infoPct.innerHTML = `<strong>Base ${labelBase}:</strong> ${App.Utils.formatearMoneda(baseCalculo)} <br><strong>${pct}% =</strong> <span style="color:var(--rojo);font-weight:700">${App.Utils.formatearMoneda(montoFinal)}</span>`;
+        infoPct.innerHTML = `<strong>Base ${labelBase}:</strong> ${formatIncome(baseCalculo)} <br><strong>${pct}% =</strong> <span style="color:var(--rojo);font-weight:700">${formatIncome(montoFinal)}</span>`;
       } else {
         infoPct.innerHTML = `<span style="color:var(--amarillo-text)">La opción seleccionada no tiene ingresos registrados en este período.</span>`;
       }
@@ -917,6 +943,7 @@ export class MovimientosModule extends BaseModule {
     if (btnFijo && btnPct && wrapPct) {
       btnFijo.addEventListener('click', () => {
         modoPctActivo = false;
+        calculationVersion++;
         btnFijo.style.background = 'var(--primary)';
         btnFijo.style.color = '#fff';
         btnPct.style.background = 'transparent';
@@ -953,6 +980,11 @@ export class MovimientosModule extends BaseModule {
       });
 
       selCuentaDest?.addEventListener('change', () => {
+        lastLoadedCacheKey = null;
+        if (modoPctActivo) recalcularMontoPct();
+      });
+
+      inputMoneda?.addEventListener('change', () => {
         lastLoadedCacheKey = null;
         if (modoPctActivo) recalcularMontoPct();
       });
@@ -1023,6 +1055,7 @@ export class MovimientosModule extends BaseModule {
       idCategoria       : datos.id_categoria,
       descripcion       : cleanDesc,
       importe           : importeCalculado,
+      moneda            : datos.moneda || this.#editData?.moneda || 'ARS',
       medioPago         : 'transferencia',
       tipoConsumo       : tipoConsumo,
       frecuencia        : tipoConsumo === 'RECURRENTE' ? (datos.frecuencia || 'MENSUAL') : 'MENSUAL',
@@ -1352,6 +1385,8 @@ export class MovimientosModule extends BaseModule {
 
   // --- SECCIÓN 5b: RENDER HELPERS PAGOS Y GRÁFICOS ---
 
+  #formatAmount(value) {return (App.Store.globalCurrency==='USD'?App.Utils.formatearMonedaUSD:App.Utils.formatearMoneda)(value);}
+
   #renderBarraPagos(kpis) {
     const wrap = document.getElementById('mov-pagos-bar-wrap');
     if (!wrap) return;
@@ -1377,9 +1412,9 @@ export class MovimientosModule extends BaseModule {
           <div>
             <span style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--texto-3);font-weight:700;display:block;">Control de Pagos del Mes</span>
             <div style="font-size:0.85rem;color:var(--texto);font-weight:600;display:flex;align-items:center;gap:8px;margin-top:2px;">
-              <span style="color:var(--verde, #10B981);">Saldado: <strong>${App.Utils.formatearMoneda(saldados)}</strong> (${pctSaldado}%)</span>
+              <span style="color:var(--verde, #10B981);">Saldado: <strong>${this.#formatAmount(saldados)}</strong> (${pctSaldado}%)</span>
               <span style="color:var(--texto-3);">•</span>
-              <span style="color:var(--kpi-amber, #F59E0B);">Pendiente: <strong>${App.Utils.formatearMoneda(pendientes)}</strong> (${pctPendiente}%)</span>
+              <span style="color:var(--kpi-amber, #F59E0B);">Pendiente: <strong>${this.#formatAmount(pendientes)}</strong> (${pctPendiente}%)</span>
             </div>
           </div>
         </div>
@@ -1458,7 +1493,7 @@ export class MovimientosModule extends BaseModule {
         <canvas id="mov-donut-canvas"></canvas>
         <div class="fintech-donut-center">
           <span class="fintech-donut-center-label">Total Gastos</span>
-          <span class="fintech-donut-center-val">${App.Utils.formatearMoneda(totalGastos)}</span>
+          <span class="fintech-donut-center-val">${this.#formatAmount(totalGastos)}</span>
         </div>
       </div>
 
@@ -1474,7 +1509,7 @@ export class MovimientosModule extends BaseModule {
               </div>
               <div class="fintech-legend-right">
                 <span style="font-size:0.75rem;color:var(--texto-3);">${pct.toFixed(1)}%</span>
-                <span style="font-size:0.82rem;font-weight:600;color:var(--texto);">${App.Utils.formatearMoneda(cat.total)}</span>
+                <span style="font-size:0.82rem;font-weight:600;color:var(--texto);">${this.#formatAmount(cat.total)}</span>
               </div>
             </div>
           `;
@@ -1853,10 +1888,10 @@ export class MovimientosModule extends BaseModule {
     };
   }
 
-  async #obtenerIngresosPeriodo(idCuenta, fechaStr) {
+  async #obtenerIngresosPeriodo(idCuenta, fechaStr, moneda = 'ARS') {
     if (!idCuenta || !fechaStr) return { total: 0, categorias: [] };
     const ym = fechaStr.substring(0, 7);
-    const cacheKey = `${idCuenta}_${ym}`;
+    const cacheKey = `${idCuenta}_${ym}_${moneda}`;
     if (this.#cacheIngresos[cacheKey] !== undefined) {
       return this.#cacheIngresos[cacheKey];
     }
@@ -1864,7 +1899,7 @@ export class MovimientosModule extends BaseModule {
     try {
       const respObj = await App.API.swr('api_getDashboardData', [idCuenta, fechaInicio, fechaFin, false], App.API.defaultTtl);
       const resp = respObj?.data || respObj;
-      const kpis = resp?.kpis || resp?.data?.kpis || {};
+      const kpis = resp?.kpisPorMoneda?.[moneda] || resp?.data?.kpisPorMoneda?.[moneda] || (moneda === 'ARS' ? resp?.kpis || resp?.data?.kpis : {}) || {};
       const totalIngresos = Number(kpis.ingresos || 0);
       const movs = resp?.movimientos || resp?.data?.movimientos || [];
 
@@ -1872,6 +1907,7 @@ export class MovimientosModule extends BaseModule {
       const catMap = {};
       const allCats = this.#categorias.length ? this.#categorias : (window._appCategorias || []);
       movs.forEach(m => {
+        if ((m.moneda || 'ARS') !== moneda) return;
         const isIngreso = m.tipo_mov === 'INGRESO' || (m.tipo_mov === 'TRANSFERENCIA' && m.id_cuenta_destino === idCuenta);
         if (isIngreso) {
           const catId = m.id_categoria || 'CAT_GENERAL';
