@@ -42,12 +42,15 @@ App.Utils = (() => {
     return mostrarSimbolo ? `${signo}${sim}${formatted}` : `${signo}${formatted}`;
   }
 
-  /**
-   * Formatea un número como moneda nativa USD. Soporta conversión bimonetaria global.
-   * Si globalCurrency === 'ARS', lo convierte a ARS en tiempo real.
-   * @param {number} valor (en USD)
-   * @param {boolean} [mostrarSimbolo=true]
-   */
+  /** Formatea el importe original sin convertirlo según la moneda global. */
+  function formatearMonedaNativa(valor, moneda = 'ARS') {
+    if (valor === null || valor === undefined || !Number.isFinite(Number(valor))) return '—';
+    const num = Number(valor);
+    const amount = Math.abs(num).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (num < 0 ? '-' : '') + (moneda === 'USD' ? 'US$ ' : '$ ') + amount;
+  }
+
+  /** Formatea USD con la conversión global histórica a ARS, si se seleccionó. */
   function formatearMonedaUSD(valor, mostrarSimbolo = true) {
     if (valor === null || valor === undefined || isNaN(valor)) return '—';
     let num = Number(valor);
@@ -293,6 +296,7 @@ App.Utils = (() => {
     // Formateo
     formatearMoneda,
     formatearMonedaUSD,
+    formatearMonedaNativa,
     formatearPorcentaje,
     formatearFecha,
     formatearMes,

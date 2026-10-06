@@ -136,8 +136,18 @@ try {
  await page.select('#modal-movimientos select[name=moneda]','ARS');
  await page.waitForFunction(()=>document.querySelector('#modal-movimientos input[name=importe]').value==='175.00');
  assert.equal(await page.$eval('#modal-movimientos select[name=moneda]',el=>!!el.labels.length),true);
+ assert.ok((await page.$eval('#info-gasto-pct',el=>el.textContent)).includes('$ 700,00'),'ARS base stays native with global USD');
+ assert.equal(await page.evaluate(()=>App.Utils.formatearMonedaNativa(100,'USD')),'US$ 100,00');
  await page.screenshot({path:'.audit.local/ux-movimiento-form-1440.png'});
  await page.click('#modal-movimientos .modal-x');
+ await page.click('#tab-btn-tarjetas');
+ await page.evaluate(async data=>{const mod=await App.Modules.tarjetas.load();mod._render(data);},{success:true,kpis:{},consumos:[{id_consumo_tarjeta:'ARS-TC',id_tarjeta:'QA-CARD',fecha:'2026-10-05',importe:20,moneda:'ARS',descripcion:'Consumo ARS',pagado:false},{id_consumo_tarjeta:'USD-TC',id_tarjeta:'QA-CARD',fecha:'2026-10-05',importe:10,moneda:'USD',descripcion:'Consumo USD',pagado:false}]});
+ await page.click('#tc-btn-pagar-resumen');
+ await page.waitForSelector('#modal-tc-pagar-resumen.modal-open');
+ const paymentText=await page.$eval('#modal-tc-pagar-resumen .modal-body',el=>el.textContent);
+ assert.ok(paymentText.includes('$ 20,00') && paymentText.includes('US$ 10,00'),'payment confirmation keeps both native currencies under global USD');
+ await page.click('#modal-tc-pagar-resumen .modal-x');
+ await page.evaluate(async data=>{const mod=await App.Modules.tarjetas.load();mod._render(data);},fixtures.getConsumosTC);
  await page.setViewport({width:390,height:844});
  for(const [nav,button] of [['tab-btn-movimientos','mov-btn-nuevo'],['tab-btn-tarjetas','tc-btn-nuevo-inline'],['tab-btn-cc','cc-btn-nuevo'],['tab-btn-ahorro','aho-btn-nuevo'],['tab-btn-inversiones','inv-btn-nuevo']]){
   await openNavigation(390);await page.click('#'+nav);

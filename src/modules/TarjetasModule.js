@@ -1601,7 +1601,7 @@ export class TarjetasModule extends BaseModule {
       const usd=selected.filter(c=>c.moneda==='USD').reduce((n,c)=>n+Number(c.importe||0),0);
       const cards=activeCard?[activeCard]:this.#tarjetas;
       const official=cards.some(c=>(c.fecha_vencimiento_actual?.slice(0,7)===App.Store.mes || c.fecha_cierre_actual?.slice(0,7)===App.Store.mes) && (Number(c.total_resumen_ars)>0 || Number(c.total_resumen_usd)>0));
-      note.textContent='Consumos registrados: '+App.Utils.formatearMoneda(ars)+' · '+App.Utils.formatearMonedaUSD(usd)+(official?'. El plástico muestra el total del resumen bancario guardado; puede diferir del detalle.':'. El plástico muestra la suma de consumos registrados.');
+      note.textContent='Consumos registrados: '+App.Utils.formatearMonedaNativa(ars,'ARS')+' · '+App.Utils.formatearMonedaNativa(usd,'USD')+(official?'. El plástico muestra el total del resumen bancario guardado; puede diferir del detalle.':'. El plástico muestra la suma de consumos registrados.');
     }
     const btnPagar = document.getElementById('tc-btn-pagar-resumen');
 
@@ -2629,7 +2629,7 @@ export class TarjetasModule extends BaseModule {
             ¿Registrás el pago del resumen de <strong>${App.Utils.escapeHtml(nombreTc)}</strong>?
           </p>
           <div style="font-size:1.4rem;font-weight:800;color:var(--verde);margin-bottom:12px;">
-            ${App.Utils.formatearMoneda(totalAPagar)}${totalUsd>0?`<br>${App.Utils.formatearMonedaUSD(totalUsd)}`:''}
+            ${App.Utils.formatearMonedaNativa(totalAPagar,'ARS')}${totalUsd>0?`<br>${App.Utils.formatearMonedaNativa(totalUsd,'USD')}`:''}
           </div>
           <p style="font-size:0.82rem;color:var(--texto-2);line-height:1.4;margin:0;">
             Esta acción registra el pago en Fluxo; no realiza una transferencia bancaria. Se registra el total del resumen y se marcarán como <strong>Saldados</strong> los ${consumosAPagar.length} consumos del período actual${activeCard ? ' de ' + App.Utils.escapeHtml(activeCard.nombre) : ' de todas las tarjetas'}.

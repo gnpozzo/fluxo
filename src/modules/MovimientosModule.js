@@ -849,7 +849,7 @@ export class MovimientosModule extends BaseModule {
     const selCuentaDest = document.querySelector('select[name="id_cuenta_destino"]');
     const inputFecha = document.querySelector('input[name="fecha"]');
     const inputMoneda = document.querySelector('select[name="moneda"]');
-    const formatIncome = value => inputMoneda?.value === 'USD' ? App.Utils.formatearMonedaUSD(value) : App.Utils.formatearMoneda(value);
+    const formatIncome = value => App.Utils.formatearMonedaNativa(value, inputMoneda?.value || 'ARS');
 
     const syncCurrency = () => {
       const amountGroup = inputImporte?.closest('.form-group');
